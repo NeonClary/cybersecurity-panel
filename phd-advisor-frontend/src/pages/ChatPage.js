@@ -9,6 +9,7 @@ const ChatPage = ({ onNavigateToHome }) => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingAdvisors, setThinkingAdvisors] = useState([]);
+  const [collectedInfo, setCollectedInfo] = useState({});
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -20,17 +21,16 @@ const ChatPage = ({ onNavigateToHome }) => {
   }, [messages, thinkingAdvisors]);
 
   const handleSendMessage = async (inputMessage) => {
+    // Add user message immediately
     const userMessage = {
       type: 'user',
       content: inputMessage,
       timestamp: new Date()
     };
-
     setMessages(prev => [...prev, userMessage]);
-    setIsLoading(true);
     
-    // Show thinking indicators for all advisors
-    setThinkingAdvisors(['methodist', 'theorist', 'pragmatist']);
+    setIsLoading(true);
+    setThinkingAdvisors(['system']); // Show thinking indicator for orchestrator/system
 
     try {
       const response = await fetch('http://localhost:8000/chat', {
@@ -39,8 +39,7 @@ const ChatPage = ({ onNavigateToHome }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_input: inputMessage,
-          active_personas: ['methodist', 'theorist', 'pragmatist']
+          user_input: inputMessage
         }),
       });
 
@@ -49,34 +48,64 @@ const ChatPage = ({ onNavigateToHome }) => {
       }
 
       const data = await response.json();
-      
-      // Clear thinking indicators
       setThinkingAdvisors([]);
       
-      // Add advisor responses with staggered timing for better UX
-      data.forEach((advisorResponse, index) => {
+      // Update collected info if provided
+      if (data.collected_info) {
+        setCollectedInfo(data.collected_info);
+      }
+
+      if (data.type === 'orchestrator_question') {
+        // Orchestrator is asking for clarification
+        const orchestratorMessage = {
+          type: 'orchestrator',
+          content: data.responses[0].response,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, orchestratorMessage]);
+        
+      } else if (data.type === 'advisor_responses') {
+        // Show thinking indicators for advisors before their responses
+        setThinkingAdvisors(['methodist', 'theorist', 'pragmatist']);
+        
+        // Add a small delay then show advisor responses
         setTimeout(() => {
-          // Map the API persona names to our advisor IDs
-          let advisorId = 'methodist'; // default fallback
+          setThinkingAdvisors([]);
           
-          if (advisorResponse.persona.toLowerCase().includes('methodist')) {
-            advisorId = 'methodist';
-          } else if (advisorResponse.persona.toLowerCase().includes('theorist')) {
-            advisorId = 'theorist';
-          } else if (advisorResponse.persona.toLowerCase().includes('pragmatist')) {
-            advisorId = 'pragmatist';
-          }
-          
-          const message = {
-            type: 'advisor',
-            advisorId,
-            content: advisorResponse.response,
-            timestamp: new Date()
-          };
-          
-          setMessages(prev => [...prev, message]);
-        }, index * 800); // Stagger responses by 800ms
-      });
+          // Add advisor responses with staggered timing
+          data.responses.forEach((advisorResponse, index) => {
+            setTimeout(() => {
+              let advisorId = 'methodist';
+              
+              if (advisorResponse.persona.toLowerCase().includes('methodist')) {
+                advisorId = 'methodist';
+              } else if (advisorResponse.persona.toLowerCase().includes('theorist')) {
+                advisorId = 'theorist';
+              } else if (advisorResponse.persona.toLowerCase().includes('pragmatist')) {
+                advisorId = 'pragmatist';
+              }
+              
+              const message = {
+                type: 'advisor',
+                advisorId,
+                content: advisorResponse.response,
+                timestamp: new Date()
+              };
+              
+              setMessages(prev => [...prev, message]);
+            }, index * 800);
+          });
+        }, 1000); // Small delay to show advisor thinking
+        
+      } else if (data.type === 'error') {
+        // Handle error response
+        const errorMessage = {
+          type: 'error',
+          content: data.responses[0].response,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
       
     } catch (error) {
       console.error('Error sending message:', error);
@@ -105,7 +134,12 @@ const ChatPage = ({ onNavigateToHome }) => {
             </button>
             <div>
               <h1 className="chat-title">Advisory Panel Chat</h1>
-              <p className="chat-subtitle">Consulting with your three advisors</p>
+              <p className="chat-subtitle">
+                {Object.keys(collectedInfo).length > 0 
+                  ? `Context: ${Object.entries(collectedInfo).map(([k,v]) => `${k}: ${v}`).join(', ')}`
+                  : 'Consulting with your three advisors'
+                }
+              </p>
             </div>
           </div>
           <div className="advisor-indicators">
@@ -142,12 +176,56 @@ const ChatPage = ({ onNavigateToHome }) => {
               </div>
             )}
             
-            {messages.map((message, index) => (
-              <MessageBubble key={index} message={message} />
-            ))}
+            {messages.map((message, index) => {
+              if (message.type === 'orchestrator') {
+                return (
+                  <div key={index} className="advisor-message-container">
+                    <div className="advisor-avatar" style={{ backgroundColor: '#F3F4F6' }}>
+                      <MessageCircle style={{ color: '#6B7280' }} />
+                    </div>
+                    <div className="advisor-message-bubble">
+                      <div className="advisor-message-header">
+                        <h4 className="advisor-message-name" style={{ color: '#6B7280' }}>
+                          PhD Assistant
+                        </h4>
+                        <span className="message-time">
+                          {message.timestamp.toLocaleTimeString([], {
+                            hour: '2-digit', 
+                            minute: '2-digit'
+                          })}
+                        </span>
+                      </div>
+                      <p className="advisor-message-text">{message.content}</p>
+                    </div>
+                  </div>
+                );
+              }
+              return <MessageBubble key={index} message={message} />;
+            })}
             
             {/* Thinking Indicators */}
-            {thinkingAdvisors.map(advisorId => (
+            {thinkingAdvisors.includes('system') && (
+              <div className="thinking-container">
+                <div className="advisor-avatar" style={{ backgroundColor: '#F3F4F6' }}>
+                  <MessageCircle style={{ color: '#6B7280' }} />
+                </div>
+                <div className="thinking-bubble">
+                  <div className="thinking-header">
+                    <h4 className="advisor-name" style={{ color: '#6B7280' }}>
+                      Processing...
+                    </h4>
+                  </div>
+                  <div className="thinking-dots">
+                    <div className="thinking-dot" style={{ backgroundColor: '#6B7280', animationDelay: '0ms' }}></div>
+                    <div className="thinking-dot" style={{ backgroundColor: '#6B7280', animationDelay: '150ms' }}></div>
+                    <div className="thinking-dot" style={{ backgroundColor: '#6B7280', animationDelay: '300ms' }}></div>
+                  </div>
+                  <p className="thinking-text">analyzing your question...</p>
+                </div>
+              </div>
+            )}
+            
+            {thinkingAdvisors.filter(id => id !== 'system').map(advisorId => (
               <ThinkingIndicator key={advisorId} advisorId={advisorId} />
             ))}
             

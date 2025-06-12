@@ -12,6 +12,13 @@ function App() {
 
   const navigateToHome = () => {
     setCurrentView('home');
+    // Reset session when going home
+    fetch('http://localhost:8000/reset-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    }).catch(console.error);
   };
 
   return (

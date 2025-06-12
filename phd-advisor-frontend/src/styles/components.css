@@ -231,6 +231,234 @@
   line-height: 1.6;
 }
 
+/* Clarification Flow Styles */
+.clarification-flow {
+  background-color: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  margin: 24px auto;
+  max-width: 600px;
+  border: 1px solid #E5E7EB;
+}
+
+.clarification-header {
+  text-align: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #F3F4F6;
+}
+
+.clarification-icon {
+  width: 48px;
+  height: 48px;
+  background-color: #EFF6FF;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px auto;
+}
+
+.clarification-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.clarification-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.clarification-subtitle {
+  font-size: 14px;
+  color: #6B7280;
+  margin: 0;
+}
+
+.clarification-conversation {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.clarification-message {
+  margin-bottom: 12px;
+}
+
+.user-clarification-message {
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  color: #FFFFFF;
+  border-radius: 12px;
+  padding: 10px 16px;
+  margin-left: auto;
+  max-width: 80%;
+  width: fit-content;
+}
+
+.user-clarification-message p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.system-clarification-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background-color: #F9FAFB;
+  border-radius: 12px;
+  padding: 12px 16px;
+  max-width: 90%;
+}
+
+.system-clarification-message p {
+  margin: 0;
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.5;
+}
+
+.current-question {
+  margin-bottom: 16px;
+  padding: 16px;
+  background-color: #EFF6FF;
+  border-radius: 12px;
+  border-left: 4px solid #6366F1;
+}
+
+.collected-info {
+  background-color: #F0FDF4;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border-left: 4px solid #10B981;
+}
+
+.collected-info h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #065F46;
+}
+
+.info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.info-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #DCFCE7;
+  color: #166534;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.info-tag svg {
+  width: 14px;
+  height: 14px;
+}
+
+.clarification-input-area {
+  border-top: 1px solid #F3F4F6;
+  padding-top: 16px;
+}
+
+.clarification-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.clarification-input {
+  width: 100%;
+  resize: none;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.clarification-input:focus {
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.clarification-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.clarification-submit-btn {
+  background: linear-gradient(135deg, #6366F1, #8B5CF6);
+  color: #FFFFFF;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.clarification-submit-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.clarification-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.clarification-skip-btn {
+  background-color: #F3F4F6;
+  color: #6B7280;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.clarification-skip-btn:hover {
+  background-color: #E5E7EB;
+  color: #374151;
+}
+
+.clarification-cancel-btn {
+  background-color: transparent;
+  color: #DC2626;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #FCA5A5;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.clarification-cancel-btn:hover {
+  background-color: #FEF2F2;
+}
+
 /* Chat Page Styles */
 .chat-page {
   min-height: 100vh;
