@@ -1,6 +1,7 @@
 import React from 'react';
 import { MessageCircle, Users, Target, Brain, ArrowRight } from 'lucide-react';
 import AdvisorCard from '../components/AdvisorCard';
+import ThemeToggle from '../components/ThemeToggle';
 import { advisors } from '../data/advisors';
 
 const HomePage = ({ onNavigateToChat }) => {
@@ -18,6 +19,9 @@ const HomePage = ({ onNavigateToChat }) => {
               <p className="logo-subtitle">Your AI-powered academic advisors</p>
             </div>
           </div>
+          <div className="header-right">
+            <ThemeToggle />
+          </div>
         </div>
       </header>
 
@@ -25,7 +29,7 @@ const HomePage = ({ onNavigateToChat }) => {
       <main className="main">
         <div className="hero-section">
           <h2 className="hero-title">
-            Get Guidance from <span className="hero-highlight">Three Expert Advisors</span>
+            Get Guidance from <span className="hero-highlight">Advisor Personas</span>
           </h2>
           <p className="hero-subtitle">
             Receive diverse perspectives on your PhD journey from our specialized AI advisors, 
@@ -44,7 +48,7 @@ const HomePage = ({ onNavigateToChat }) => {
         {/* Advisors Grid */}
         <div className="advisors-grid">
           {Object.entries(advisors).map(([id, advisor]) => (
-            <AdvisorCard key={id} advisor={advisor} />
+            <AdvisorCard key={id} advisor={advisor} advisorId={id} />
           ))}
         </div>
 

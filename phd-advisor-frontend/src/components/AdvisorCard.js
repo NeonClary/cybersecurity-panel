@@ -1,20 +1,24 @@
 import React from 'react';
+import { getAdvisorColors } from '../data/advisors';
+import { useTheme } from '../contexts/ThemeContext';
 
-const AdvisorCard = ({ advisor }) => {
+const AdvisorCard = ({ advisor, advisorId }) => {
   const Icon = advisor.icon;
+  const { isDark } = useTheme();
+  const colors = getAdvisorColors(advisorId, isDark);
 
   return (
     <div className="advisor-card">
       <div 
         className="advisor-card-icon" 
-        style={{ backgroundColor: advisor.bgColor }}
+        style={{ backgroundColor: colors.bgColor }}
       >
-        <Icon style={{ color: advisor.color }} />
+        <Icon style={{ color: colors.color }} />
       </div>
       <h3 className="advisor-card-title">{advisor.name}</h3>
       <p 
         className="advisor-card-role" 
-        style={{ color: advisor.color }}
+        style={{ color: colors.color }}
       >
         {advisor.role}
       </p>

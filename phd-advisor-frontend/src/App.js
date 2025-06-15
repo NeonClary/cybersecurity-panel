@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ThemeProvider } from './contexts/ThemeContext';
 import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
 import './styles/components.css';
@@ -22,13 +23,15 @@ function App() {
   };
 
   return (
-    <div className="App">
-      {currentView === 'home' ? (
-        <HomePage onNavigateToChat={navigateToChat} />
-      ) : (
-        <ChatPage onNavigateToHome={navigateToHome} />
-      )}
-    </div>
+    <ThemeProvider>
+      <div className="App">
+        {currentView === 'home' ? (
+          <HomePage onNavigateToChat={navigateToChat} />
+        ) : (
+          <ChatPage onNavigateToHome={navigateToHome} />
+        )}
+      </div>
+    </ThemeProvider>
   );
 }
 

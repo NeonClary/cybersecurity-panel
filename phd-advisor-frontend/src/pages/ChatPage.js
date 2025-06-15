@@ -3,7 +3,10 @@ import { Home, MessageCircle } from 'lucide-react';
 import ChatInput from '../components/ChatInput';
 import MessageBubble from '../components/MessageBubble';
 import ThinkingIndicator from '../components/ThinkingIndicator';
-import { advisors } from '../data/advisors';
+import SuggestionsPanel from '../components/SuggestionsPanel';
+import ThemeToggle from '../components/ThemeToggle';
+import { advisors, getAdvisorColors } from '../data/advisors';
+import { useTheme } from '../contexts/ThemeContext';
 
 const ChatPage = ({ onNavigateToHome }) => {
   const [messages, setMessages] = useState([]);
@@ -11,6 +14,7 @@ const ChatPage = ({ onNavigateToHome }) => {
   const [thinkingAdvisors, setThinkingAdvisors] = useState([]);
   const [collectedInfo, setCollectedInfo] = useState({});
   const messagesEndRef = useRef(null);
+  const { isDark } = useTheme();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -120,6 +124,10 @@ const ChatPage = ({ onNavigateToHome }) => {
     }
   };
 
+  const handleSuggestionClick = (suggestion) => {
+    handleSendMessage(suggestion);
+  };
+
   return (
     <div className="chat-page">
       {/* Header */}
@@ -137,24 +145,28 @@ const ChatPage = ({ onNavigateToHome }) => {
               <p className="chat-subtitle">
                 {Object.keys(collectedInfo).length > 0 
                   ? `Context: ${Object.entries(collectedInfo).map(([k,v]) => `${k}: ${v}`).join(', ')}`
-                  : 'Consulting with your three advisors'
+                  : 'Consulting with personas'
                 }
               </p>
             </div>
           </div>
-          <div className="advisor-indicators">
-            {Object.entries(advisors).map(([id, advisor]) => {
-              const Icon = advisor.icon;
-              return (
-                <div 
-                  key={id} 
-                  className="advisor-indicator" 
-                  style={{ backgroundColor: advisor.bgColor }}
-                >
-                  <Icon style={{ color: advisor.color }} />
-                </div>
-              );
-            })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div className="advisor-indicators">
+              {Object.entries(advisors).map(([id, advisor]) => {
+                const Icon = advisor.icon;
+                const colors = getAdvisorColors(id, isDark);
+                return (
+                  <div 
+                    key={id} 
+                    className="advisor-indicator" 
+                    style={{ backgroundColor: colors.bgColor }}
+                  >
+                    <Icon style={{ color: colors.color }} />
+                  </div>
+                );
+              })}
+            </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -165,37 +177,29 @@ const ChatPage = ({ onNavigateToHome }) => {
           {/* Messages */}
           <div className="messages-container">
             {messages.length === 0 && (
-              <div className="empty-state">
-                <div className="empty-state-icon">
-                  <MessageCircle />
-                </div>
-                <h3 className="empty-state-title">Start Your Consultation</h3>
-                <p className="empty-state-text">
-                  Ask a question and get insights from all three advisors
-                </p>
-              </div>
+              <SuggestionsPanel onSuggestionClick={handleSuggestionClick} />
             )}
             
             {messages.map((message, index) => {
               if (message.type === 'orchestrator') {
                 return (
                   <div key={index} className="advisor-message-container">
-                    <div className="advisor-avatar" style={{ backgroundColor: '#F3F4F6' }}>
-                      <MessageCircle style={{ color: '#6B7280' }} />
+                    <div className="advisor-avatar orchestrator-avatar">
+                      <MessageCircle className="orchestrator-icon" />
                     </div>
-                    <div className="advisor-message-bubble">
+                    <div className="advisor-message-bubble orchestrator-bubble">
                       <div className="advisor-message-header">
-                        <h4 className="advisor-message-name" style={{ color: '#6B7280' }}>
+                        <h4 className="advisor-message-name orchestrator-name">
                           PhD Assistant
                         </h4>
-                        <span className="message-time">
+                        <span className="message-time orchestrator-time">
                           {message.timestamp.toLocaleTimeString([], {
                             hour: '2-digit', 
                             minute: '2-digit'
                           })}
                         </span>
                       </div>
-                      <p className="advisor-message-text">{message.content}</p>
+                      <p className="advisor-message-text orchestrator-text">{message.content}</p>
                     </div>
                   </div>
                 );
@@ -206,21 +210,21 @@ const ChatPage = ({ onNavigateToHome }) => {
             {/* Thinking Indicators */}
             {thinkingAdvisors.includes('system') && (
               <div className="thinking-container">
-                <div className="advisor-avatar" style={{ backgroundColor: '#F3F4F6' }}>
-                  <MessageCircle style={{ color: '#6B7280' }} />
+                <div className="advisor-avatar orchestrator-avatar">
+                  <MessageCircle className="orchestrator-icon" />
                 </div>
-                <div className="thinking-bubble">
+                <div className="thinking-bubble orchestrator-bubble">
                   <div className="thinking-header">
-                    <h4 className="advisor-name" style={{ color: '#6B7280' }}>
+                    <h4 className="advisor-name orchestrator-name">
                       Processing...
                     </h4>
                   </div>
                   <div className="thinking-dots">
-                    <div className="thinking-dot" style={{ backgroundColor: '#6B7280', animationDelay: '0ms' }}></div>
-                    <div className="thinking-dot" style={{ backgroundColor: '#6B7280', animationDelay: '150ms' }}></div>
-                    <div className="thinking-dot" style={{ backgroundColor: '#6B7280', animationDelay: '300ms' }}></div>
+                    <div className="thinking-dot orchestrator-dot" style={{ animationDelay: '0ms' }}></div>
+                    <div className="thinking-dot orchestrator-dot" style={{ animationDelay: '150ms' }}></div>
+                    <div className="thinking-dot orchestrator-dot" style={{ animationDelay: '300ms' }}></div>
                   </div>
-                  <p className="thinking-text">analyzing your question...</p>
+                  <p className="thinking-text orchestrator-thinking-text">analyzing your question...</p>
                 </div>
               </div>
             )}
