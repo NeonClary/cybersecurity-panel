@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Send } from 'lucide-react';
 
-const ChatInput = ({ onSendMessage, isLoading }) => {
+const ChatInput = ({ onSendMessage, isLoading, placeholder = "Ask your advisors anything about your PhD journey..." }) => {
   const [inputMessage, setInputMessage] = useState('');
 
   const handleSend = () => {
@@ -25,7 +25,7 @@ const ChatInput = ({ onSendMessage, isLoading }) => {
           value={inputMessage}
           onChange={(e) => setInputMessage(e.target.value)}
           onKeyPress={handleKeyPress}
-          placeholder="Ask your advisors anything about your PhD journey..."
+          placeholder={placeholder}
           className="message-input"
           rows="2"
           disabled={isLoading}
