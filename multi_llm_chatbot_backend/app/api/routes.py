@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Body, HTTPException
-from app.llm.mistral_client import MistralClient
+import httpx
+from app.llm.llm_client import LLMClient
 from app.models.persona import Persona
 from app.core.orchestrator import ChatOrchestrator
 from app.core.seamless_orchestrator import SeamlessOrchestrator
@@ -8,10 +9,70 @@ from typing import Optional, List
 
 router = APIRouter()
 
-# Initialize LLM and orchestrators
-llm = MistralClient()
+# Improved LLM client with better short response handling
+class ShortResponseOllamaClient(LLMClient):
+    def __init__(self, model_name: str = "llama3.2:1b"):
+        self.model_name = model_name
+    
+    async def generate(self, system_prompt: str, context: List[dict]) -> str:
+        # Create a more natural conversation format
+        messages = []
+        
+        # Add system message
+        if system_prompt:
+            messages.append(f"System: {system_prompt}")
+        
+        # Add conversation history
+        for msg in context:
+            role = msg['role'].capitalize()
+            if role == "User":
+                messages.append(f"Student: {msg['content']}")
+            elif role in ["Methodist", "Theorist", "Pragmatist"]:
+                messages.append(f"{role} Advisor: {msg['content']}")
+            else:
+                messages.append(f"{role}: {msg['content']}")
+        
+        # Create the final prompt
+        conversation = "\n".join(messages)
+        prompt = f"{conversation}\n\nAssistant:"
+        
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": False,
+            "options": {
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 40,
+                "num_predict": 200,  # Increased from 150
+                "repeat_penalty": 1.1,
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                response = await client.post("http://localhost:11434/api/generate", json=payload)
+                response.raise_for_status()
+                result = response.json().get("response", "[No response]").strip()
+                
+                # Clean up common issues
+                result = result.replace("Here are 2-3 sentence", "").strip()
+                result = result.replace("Here's an expansion of the advice:", "").strip()
+                result = result.replace("conceptual insights:", "").strip()
+                result = result.replace("actionable advice:", "").strip()
+                
+                # If response is too short or just punctuation, return a fallback
+                if len(result) < 10 or result in [":", ".", ""]:
+                    return "I'd be happy to help with that. Could you provide more specific details about what you're looking for?"
+                
+                return result
+                
+        except Exception as e:
+            return f"I apologize, but I'm having trouble generating a response right now. Please try again."
+
+llm = ShortResponseOllamaClient(model_name="llama3.2:1b")
 chat_orchestrator = ChatOrchestrator()
-seamless_orchestrator = SeamlessOrchestrator()
+seamless_orchestrator = SeamlessOrchestrator(llm=llm)
 
 # Global context storage
 class GlobalSessionContext:
@@ -22,31 +83,32 @@ class GlobalSessionContext:
         self.full_log.append({"role": role, "content": content})
 
     def filter_by_persona(self, persona_id: str):
-        return [msg for msg in self.full_log if msg["role"] in ("user", persona_id)]
+        # Return full context but mark the persona for better understanding
+        return self.full_log
 
     def clear(self):
         self.full_log = []
 
 session_context = GlobalSessionContext()
 
-# Default personas
+# Improved personas with natural, conversational prompts
 DEFAULT_PERSONAS = [
     Persona(
         id="methodist",
         name="Methodist Advisor",
-        system_prompt="You are a highly methodical PhD advisor who believes in structure and planning. Provide organized, step-by-step guidance.",
+        system_prompt="You are Dr. Methodist, a structured PhD advisor. Give brief, organized advice in 2-3 clear sentences. Focus on systematic approaches and planning.",
         llm=llm
     ),
     Persona(
         id="theorist",
-        name="Theorist Advisor",
-        system_prompt="You are a philosophical PhD advisor who focuses on abstract theories and ideas. Help students think deeply about concepts and frameworks.",
+        name="Theorist Advisor", 
+        system_prompt="You are Dr. Theorist, a philosophical PhD advisor. Give brief, thoughtful insights in 2-3 sentences. Focus on concepts, frameworks, and deeper understanding.",
         llm=llm
     ),
     Persona(
         id="pragmatist",
         name="Pragmatist Advisor",
-        system_prompt="You are a practical PhD advisor who focuses on real-world outcomes and utility. Give actionable, concrete advice.",
+        system_prompt="You are Dr. Pragmatist, a practical PhD advisor. Give brief, actionable advice in 2-3 sentences. Focus on concrete steps and real-world solutions.",
         llm=llm
     )
 ]
@@ -67,125 +129,199 @@ class ChatMessage(BaseModel):
     user_input: str
     session_id: Optional[str] = None
 
-# Main chat endpoint with seamless orchestrator
+class ReplyToAdvisor(BaseModel):
+    user_input: str
+    advisor_id: str
+    original_message_id: Optional[str] = None
+
+# Sequential advisor responses endpoint
+@router.post("/chat-sequential")
+async def chat_sequential(message: ChatMessage):
+    """Generate advisor responses one by one for faster perceived response time"""
+    
+    try:
+        orchestrator_result = await seamless_orchestrator.process_message(message.user_input)
+
+        if orchestrator_result["status"] == "orchestrator_asking":
+            return {
+                "type": "orchestrator_question",
+                "responses": [{
+                    "persona": "PhD Advisor Assistant",
+                    "response": orchestrator_result["orchestrator_question"]
+                }],
+                "collected_info": orchestrator_result["collected_info"]
+            }
+
+        elif orchestrator_result["status"] == "ready_for_advisors":
+            enhanced_context = orchestrator_result["enhanced_context"]
+            session_context.append("user", enhanced_context)
+
+            # Generate responses sequentially
+            advisor_order = ["methodist", "theorist", "pragmatist"]
+            responses = []
+            
+            for i, persona_id in enumerate(advisor_order):
+                try:
+                    persona = chat_orchestrator.personas[persona_id]
+                    # Get current context up to this point
+                    context = session_context.full_log.copy()
+                    
+                    # Generate response
+                    reply = await persona.respond(context)
+                    
+                    # Add this advisor's response to context for next advisor
+                    session_context.append(persona_id, reply)
+                    
+                    responses.append({
+                        "persona": persona.name,
+                        "persona_id": persona_id,
+                        "response": reply,
+                        "order": i
+                    })
+                    
+                except Exception as e:
+                    print(f"Error generating response for {persona_id}: {e}")
+                    responses.append({
+                        "persona": chat_orchestrator.personas[persona_id].name,
+                        "persona_id": persona_id,
+                        "response": "I'm having trouble generating a response right now. Please try asking again.",
+                        "order": i
+                    })
+
+            return {
+                "type": "sequential_responses",
+                "responses": responses,
+                "collected_info": orchestrator_result["collected_info"]
+            }
+            
+    except Exception as e:
+        print(f"Error in chat_sequential: {e}")
+        return {
+            "type": "error",
+            "responses": [{
+                "persona": "System",
+                "response": "I'm having trouble processing your request. Could you please try again?"
+            }]
+        }
+
+# Reply to specific advisor endpoint
+@router.post("/reply-to-advisor")
+async def reply_to_advisor(reply: ReplyToAdvisor):
+    """Reply to a specific advisor and get response only from that advisor"""
+    
+    try:
+        if reply.advisor_id not in chat_orchestrator.personas:
+            raise HTTPException(status_code=404, detail=f"Advisor '{reply.advisor_id}' not found")
+
+        # Add user reply to context
+        session_context.append("user", reply.user_input)
+
+        # Get response from specific advisor
+        persona = chat_orchestrator.personas[reply.advisor_id]
+        context = session_context.full_log.copy()
+        
+        # Generate response
+        reply_response = await persona.respond(context)
+        session_context.append(reply.advisor_id, reply_response)
+        
+        return {
+            "type": "advisor_reply",
+            "persona": persona.name,
+            "persona_id": reply.advisor_id,
+            "response": reply_response,
+            "original_message_id": reply.original_message_id
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in reply_to_advisor: {e}")
+        return {
+            "type": "error",
+            "persona": "System",
+            "response": "I'm having trouble generating a reply right now. Please try again."
+        }
+
+# Main chat endpoint (keep for compatibility)
 @router.post("/chat")
 async def chat_with_orchestrator(message: ChatMessage):
-    orchestrator_result = await seamless_orchestrator.process_message(message.user_input)
+    """Redirect to sequential endpoint for better UX"""
+    return await chat_sequential(message)
 
-    if orchestrator_result["status"] == "orchestrator_asking":
-        return {
-            "type": "orchestrator_question",
-            "responses": [{
-                "persona": "PhD Advisor Assistant",
-                "response": orchestrator_result["orchestrator_question"]
-            }],
-            "collected_info": orchestrator_result["collected_info"]
-        }
+# Individual advisor endpoint with context
+@router.post("/chat/{persona_id}")
+async def chat_with_specific_advisor(persona_id: str, input: UserInput):
+    """Chat with a specific advisor"""
+    try:
+        if persona_id not in chat_orchestrator.personas:
+            raise HTTPException(status_code=404, detail=f"Persona '{persona_id}' not found")
 
-    elif orchestrator_result["status"] == "ready_for_advisors":
-        enhanced_context = orchestrator_result["enhanced_context"]
-
-        chat_orchestrator.set_active_personas(["methodist", "theorist", "pragmatist"])
-        session_context.append("user", enhanced_context)
-
-        advisor_responses = []
-        for persona_id in chat_orchestrator.get_active_personas():
-            persona = chat_orchestrator.personas[persona_id]
-            context = session_context.full_log
-            reply = await persona.respond(context)
-            session_context.append(persona_id, reply)
-            advisor_responses.append({"persona": persona.name, "response": reply})
-
-        return {
-            "type": "advisor_responses",
-            "responses": advisor_responses,
-            "collected_info": orchestrator_result["collected_info"]
-        }
-
-    return {
-        "type": "error",
-        "responses": [{
-            "persona": "System",
-            "response": "I'm having trouble processing your request. Could you please try again?"
-        }]
-    }
-
-# Reset both orchestrators
-@router.post("/reset-session")
-async def reset_session():
-    seamless_orchestrator.reset()
-    chat_orchestrator.history = []
-    session_context.clear()
-    return {"status": "reset", "message": "Session reset successfully"}
-
-# Direct chat bypassing seamless orchestrator
-@router.post("/chat-direct")
-async def chat_direct(
-    user_input: str = Body(...),
-    active_personas: List[str] = Body(default=["methodist", "theorist", "pragmatist"])
-):
-    chat_orchestrator.set_active_personas(active_personas)
-    session_context.append("user", user_input)
-
-    responses = []
-    for persona_id in active_personas:
+        session_context.append("user", input.user_input)
         persona = chat_orchestrator.personas[persona_id]
-        context = session_context.full_log
+        context = session_context.full_log.copy()
         reply = await persona.respond(context)
         session_context.append(persona_id, reply)
-        responses.append({"persona": persona.name, "response": reply})
 
-    return responses
+        return {
+            "persona": persona.name,
+            "persona_id": persona_id,
+            "response": reply
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in chat_with_specific_advisor: {e}")
+        return {
+            "persona": "System",
+            "response": "I'm having trouble generating a response right now. Please try again."
+        }
 
-# Individual persona endpoint
-@router.post("/chat/{persona_id}")
-async def chat_with_persona(persona_id: str, input: UserInput, skip_user_append: bool = False):
-    if persona_id not in chat_orchestrator.personas:
-        raise HTTPException(status_code=404, detail=f"Persona '{persona_id}' not found")
-
-    if not skip_user_append:
-        session_context.append("user", input.user_input)
-
-    persona = chat_orchestrator.personas[persona_id]
-    context = session_context.filter_by_persona(persona_id)
-    reply = await persona.respond(context)
-    session_context.append(persona_id, reply)
-
-    return {"persona": persona.name, "response": reply}
-
-# Persona management
-@router.post("/personas/add")
-async def add_persona(input: PersonaInput):
-    if input.id in chat_orchestrator.personas:
-        raise HTTPException(status_code=400, detail=f"Persona '{input.id}' already exists")
-
-    new_persona = Persona(
-        id=input.id,
-        name=input.name,
-        system_prompt=input.system_prompt,
-        llm=llm
-    )
-    chat_orchestrator.register_persona(new_persona)
-    return {"message": f"Persona '{input.name}' added successfully."}
-
-@router.post("/personas/remove")
-async def remove_persona(persona_id: str = Body(...)):
-    if persona_id not in chat_orchestrator.personas:
-        raise HTTPException(status_code=404, detail=f"Persona '{persona_id}' not found")
-
-    del chat_orchestrator.personas[persona_id]
-    return {"message": f"Persona '{persona_id}' removed successfully."}
-
-@router.get("/personas")
-async def list_personas():
-    return list(chat_orchestrator.personas.keys())
+# Reset session
+@router.post("/reset-session")
+async def reset_session():
+    try:
+        seamless_orchestrator.reset()
+        session_context.clear()
+        return {"status": "reset", "message": "Session reset successfully"}
+    except Exception as e:
+        print(f"Error resetting session: {e}")
+        return {"status": "error", "message": "Failed to reset session"}
 
 # Context inspection
 @router.get("/context")
 def get_context():
     return session_context.full_log
 
-@router.post("/reset")
-async def reset_context():
-    session_context.clear()
-    return {"message": "Context reset successfully"}
+# Model switching for development
+@router.post("/switch-model")
+async def switch_model(model_name: str = Body(...)):
+    global llm
+    try:
+        llm = ShortResponseOllamaClient(model_name=model_name)
+        
+        # Update all personas with new LLM
+        for persona_id in chat_orchestrator.personas:
+            chat_orchestrator.personas[persona_id].llm = llm
+        
+        seamless_orchestrator.llm = llm
+        
+        return {"message": f"Switched to model: {model_name}"}
+    except Exception as e:
+        return {"error": f"Failed to switch model: {str(e)}"}
+
+@router.get("/current-model")
+async def get_current_model():
+    return {"model": llm.model_name}
+
+# Debug endpoint
+@router.get("/debug/personas")
+async def debug_personas():
+    return {
+        "personas": {
+            pid: {
+                "name": persona.name,
+                "prompt": persona.system_prompt[:100] + "..."
+            } for pid, persona in chat_orchestrator.personas.items()
+        },
+        "context_length": len(session_context.full_log)
+    }

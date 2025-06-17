@@ -2,11 +2,11 @@
 
 import re
 from typing import Dict, List, Optional
-from app.llm.mistral_client import MistralClient
+from app.llm.llm_client import LLMClient
 
 class SeamlessOrchestrator:
-    def __init__(self):
-        self.llm = MistralClient()
+    def __init__(self, llm: LLMClient = None):
+        self.llm = llm
         self.required_fields = ["research_area", "specific_question", "academic_stage"]
         self.collected_info = {}
         self.conversation_history = []
@@ -50,23 +50,17 @@ class SeamlessOrchestrator:
         # Detect research area
         research_areas = {
             "computer science": ["computer science", "cs", "software", "programming", "algorithms"],
-            "machine learning": ["machine learning", "ml", "ai", "artificial intelligence", "deep learning"],
-            "biology": ["biology", "molecular", "genetics", "bioinformatics"],
-            "chemistry": ["chemistry", "chemical", "organic chemistry"],
-            "physics": ["physics", "quantum", "theoretical physics"],
-            "mathematics": ["mathematics", "math", "statistics", "mathematical"],
-            "psychology": ["psychology", "cognitive", "behavioral"],
-            "sociology": ["sociology", "social science", "anthropology"], 
-            "literature": ["literature", "english", "linguistics"],
-            "history": ["history", "historical"],
-            "philosophy": ["philosophy", "philosophical"],
-            "economics": ["economics", "economic", "finance"],
-            "political science": ["political science", "politics", "government"],
+            "machine learning": ["machine learning", "ml", "ai", "artificial intelligence", "neural networks"],
+            "biology": ["biology", "bio", "genetics", "molecular", "cell"],
+            "physics": ["physics", "quantum", "mechanics", "particle"],
+            "psychology": ["psychology", "psych", "cognitive", "behavioral"],
+            "chemistry": ["chemistry", "chemical", "organic", "inorganic"],
+            "mathematics": ["mathematics", "math", "statistics", "calculus"],
             "engineering": ["engineering", "mechanical", "electrical", "civil"],
-            "medicine": ["medicine", "medical", "healthcare", "clinical"],
-            "education": ["education", "teaching", "pedagogy"],
-            "business": ["business", "management", "mba"],
-            "data science": ["data science", "data analysis", "big data"]
+            "economics": ["economics", "finance", "business", "market"],
+            "literature": ["literature", "english", "writing", "poetry"],
+            "history": ["history", "historical", "ancient", "medieval"],
+            "sociology": ["sociology", "social", "society", "culture"]
         }
         
         for area, keywords in research_areas.items():
@@ -75,14 +69,15 @@ class SeamlessOrchestrator:
                 break
         
         # Detect academic stage
-        stage_keywords = {
-            "early PhD": ["first year", "1st year", "beginning", "just started", "new student"],
-            "coursework phase": ["coursework", "classes", "courses", "taking classes"],
-            "mid PhD": ["proposal", "qualifying", "comprehensive", "candidacy"],
-            "late PhD": ["dissertation", "thesis writing", "final year", "defending", "defense"]
+        stage_patterns = {
+            "first year": ["first year", "1st year", "beginning", "just started", "new"],
+            "second year": ["second year", "2nd year", "coursework", "classes"],
+            "third year": ["third year", "3rd year", "qualifying", "comprehensive"],
+            "dissertation": ["dissertation", "thesis", "writing", "final year", "defense"],
+            "postdoc": ["postdoc", "post-doctoral", "finished", "graduated"]
         }
         
-        for stage, keywords in stage_keywords.items():
+        for stage, keywords in stage_patterns.items():
             if any(keyword in user_lower for keyword in keywords):
                 info["academic_stage"] = stage
                 break
@@ -114,6 +109,9 @@ class SeamlessOrchestrator:
     
     async def generate_orchestrator_question(self) -> str:
         """Generate a contextual follow-up question using the LLM"""
+        if not self.llm:
+            return self._get_fallback_question()
+            
         missing = [f for f in self.required_fields if f not in self.collected_info]
         
         # Create context for the LLM
@@ -121,27 +119,31 @@ class SeamlessOrchestrator:
         context += f"Information collected: {self.collected_info}\n"
         context += f"Still need to know: {missing}\n"
         
-        system_prompt = """You are a PhD advisor's assistant helping to gather essential information before providing advice. 
-        Based on the conversation and what information is still missing, ask ONE natural, conversational follow-up question.
+        system_prompt = """You are a PhD advisor's assistant. Ask ONE brief follow-up question (under 15 words) to gather missing info.
         
-        Missing information types:
-        - research_area: What field/discipline they're studying
+        Missing info types:
+        - research_area: What field/discipline they study
         - specific_question: What specific aspect they need help with
         - academic_stage: What stage of PhD they're in
         
-        Ask in a friendly, conversational way as if you're part of the chat. Keep it brief and natural."""
+        Ask briefly and naturally."""
         
         try:
             question = await self.llm.generate(system_prompt, [{"role": "user", "content": context}])
             return question.strip()
         except Exception as e:
-            # Fallback to template questions
-            fallback_questions = {
-                "research_area": "What field are you studying in?",
-                "specific_question": "What specific aspect would you like guidance on?", 
-                "academic_stage": "What stage of your PhD are you currently in?"
-            }
-            return fallback_questions.get(missing[0], "Could you tell me more about your situation?")
+            print(f"Error generating orchestrator question: {e}")
+            return self._get_fallback_question()
+    
+    def _get_fallback_question(self) -> str:
+        """Fallback questions when LLM fails"""
+        missing = [f for f in self.required_fields if f not in self.collected_info]
+        fallback_questions = {
+            "research_area": "What field are you studying in?",
+            "specific_question": "What specific aspect would you like guidance on?", 
+            "academic_stage": "What stage of your PhD are you currently in?"
+        }
+        return fallback_questions.get(missing[0] if missing else "research_area", "Could you tell me more about your situation?")
     
     async def process_message(self, user_input: str) -> Dict:
         """Process user message and determine next action"""
