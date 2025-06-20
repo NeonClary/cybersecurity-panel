@@ -22,7 +22,7 @@ def create_llm_client(provider: str = None) -> LLMClient:
         
     if provider == "gemini":
         try:
-            return GeminiClient(model_name="gemini-1.5-flash")
+            return GeminiClient(model_name = os.getenv("GEMINI_MODEL"))
         except ValueError as e:
             # Fallback to Ollama if Gemini API key is not available
             print(f"Gemini API key not found, falling back to Ollama: {e}")
@@ -170,7 +170,7 @@ async def get_current_provider():
         "current_provider": current_provider,
         "available_providers": available_providers,
         "model_info": {
-            "name": llm.model_name if hasattr(llm, 'model_name') else "gemini-1.5-flash",
+            "name": llm.model_name if hasattr(llm, 'model_name') else "gemini-2.0-flash",
             "provider": current_provider
         }
     }
@@ -206,7 +206,7 @@ async def switch_provider(provider_data: ProviderSwitch):
             "message": f"Successfully switched to {current_provider}",
             "current_provider": current_provider,
             "model_info": {
-                "name": new_llm.model_name if hasattr(new_llm, 'model_name') else "gemini-1.5-flash",
+                "name": new_llm.model_name if hasattr(new_llm, 'model_name') else "gemini-2.0-flash",
                 "provider": current_provider
             }
         }
@@ -387,7 +387,7 @@ async def switch_model(model_name: str = Body(...)):
 @router.get("/current-model")
 async def get_current_model():
     # For backward compatibility
-    model_name = llm.model_name if hasattr(llm, 'model_name') else "gemini-1.5-flash"
+    model_name = llm.model_name if hasattr(llm, 'model_name') else "gemini-2.0-flash"
     return {
         "model": model_name,
         "provider": current_provider
