@@ -1,10 +1,16 @@
+# app/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
+from dotenv import load_dotenv
+import os
+
+# Load environment variables
+load_dotenv()
 
 app = FastAPI(
     title="Multi-LLM Chatbot Backend",
-    version="0.1"
+    version="0.2"
 )
 
 # Add CORS middleware
@@ -21,4 +27,8 @@ app.include_router(router)
 
 @app.get("/")
 def root():
-    return {"message": "Backend is up and running"}
+    return {
+        "message": "Multi-LLM PhD Advisor Backend is up and running",
+        "version": "0.2",
+        "features": ["Ollama Support", "Gemini API Support", "Provider Switching"]
+    }
