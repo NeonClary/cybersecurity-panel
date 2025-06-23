@@ -1,0 +1,7 @@
+# main
+.env
+
+# backend
+multi_llm_chatbot_backend/.env
+
+# frontend
