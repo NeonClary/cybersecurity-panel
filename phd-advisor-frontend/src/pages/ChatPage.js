@@ -1,19 +1,24 @@
+// src/pages/ChatPage.js
 import React, { useState, useEffect, useRef } from 'react';
-import { Home, MessageCircle, Reply, X } from 'lucide-react';
+import { Home, MessageCircle, Reply, X, Sparkles, Users, Settings2 } from 'lucide-react';
 import ChatInput from '../components/ChatInput';
 import MessageBubble from '../components/MessageBubble';
 import ThinkingIndicator from '../components/ThinkingIndicator';
 import SuggestionsPanel from '../components/SuggestionsPanel';
 import ThemeToggle from '../components/ThemeToggle';
+import ProviderDropdown from '../components/ProviderDropdown';
 import { advisors, getAdvisorColors } from '../data/advisors';
 import { useTheme } from '../contexts/ThemeContext';
+import '../styles/ChatPage.css';
 
 const ChatPage = ({ onNavigateToHome }) => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingAdvisors, setThinkingAdvisors] = useState([]);
   const [collectedInfo, setCollectedInfo] = useState({});
-  const [replyingTo, setReplyingTo] = useState(null); // { advisorId, messageId, advisorName }
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [currentProvider, setCurrentProvider] = useState('gemini');
+  const [isProviderSwitching, setIsProviderSwitching] = useState(false);
   const messagesEndRef = useRef(null);
   const { isDark } = useTheme();
 
@@ -25,18 +30,84 @@ const ChatPage = ({ onNavigateToHome }) => {
     scrollToBottom();
   }, [messages, thinkingAdvisors]);
 
+  useEffect(() => {
+    fetchCurrentProvider();
+  }, []);
+
+  const fetchCurrentProvider = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/current-provider');
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentProvider(data.current_provider);
+        console.log('Loaded provider:', data.current_provider, 'Available:', data.available_providers);
+      }
+    } catch (error) {
+      console.error('Error fetching current provider:', error);
+    }
+  };
+
+  const handleProviderSwitch = async (newProvider) => {
+    if (newProvider === currentProvider || isProviderSwitching) return;
+
+    setIsProviderSwitching(true);
+    try {
+      const response = await fetch('http://localhost:8000/switch-provider', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          provider: newProvider
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentProvider(newProvider);
+        
+        const switchMessage = {
+          id: generateMessageId(),
+          type: 'system',
+          content: `✨ Switched to ${newProvider.charAt(0).toUpperCase() + newProvider.slice(1)} provider. Your advisors are now ready with the new AI model.`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, switchMessage]);
+      } else {
+        const error = await response.json();
+        console.error('Failed to switch provider:', error);
+        const errorMessage = {
+          id: generateMessageId(),
+          type: 'error',
+          content: `Failed to switch to ${newProvider}: ${error.detail || 'Unknown error'}`,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+    } catch (error) {
+      console.error('Error switching provider:', error);
+      const errorMessage = {
+        id: generateMessageId(),
+        type: 'error',
+        content: `Error switching to ${newProvider}. Please try again.`,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsProviderSwitching(false);
+    }
+  };
+
   const generateMessageId = () => {
     return Date.now().toString() + Math.random().toString(36).substr(2, 9);
   };
 
   const handleSendMessage = async (inputMessage) => {
-    // Check if this is a reply to a specific advisor
     if (replyingTo) {
       await handleReplyToAdvisor(inputMessage, replyingTo);
       return;
     }
 
-    // Regular message flow - add user message immediately
     const userMessage = {
       id: generateMessageId(),
       type: 'user',
@@ -46,7 +117,7 @@ const ChatPage = ({ onNavigateToHome }) => {
     setMessages(prev => [...prev, userMessage]);
     
     setIsLoading(true);
-    setThinkingAdvisors(['system']); // Show thinking indicator for orchestrator/system
+    setThinkingAdvisors(['system']);
 
     try {
       const response = await fetch('http://localhost:8000/chat-sequential', {
@@ -60,19 +131,14 @@ const ChatPage = ({ onNavigateToHome }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to send message');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
+      setCollectedInfo(data.collected_info || {});
       setThinkingAdvisors([]);
-      
-      // Update collected info if provided
-      if (data.collected_info) {
-        setCollectedInfo(data.collected_info);
-      }
 
       if (data.type === 'orchestrator_question') {
-        // Orchestrator is asking for clarification
         const orchestratorMessage = {
           id: generateMessageId(),
           type: 'orchestrator',
@@ -80,81 +146,75 @@ const ChatPage = ({ onNavigateToHome }) => {
           timestamp: new Date()
         };
         setMessages(prev => [...prev, orchestratorMessage]);
-        
       } else if (data.type === 'sequential_responses') {
-        // Show advisor responses sequentially with realistic timing
-        await showSequentialResponses(data.responses);
-      }
-      
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setThinkingAdvisors([]);
-      setMessages(prev => [...prev, {
-        id: generateMessageId(),
-        type: 'error',
-        content: 'Sorry, there was an error processing your message. Please try again.',
-        timestamp: new Date()
-      }]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const showSequentialResponses = async (responses) => {
-    const advisorOrder = ['methodist', 'theorist', 'pragmatist'];
-    
-    for (let i = 0; i < advisorOrder.length; i++) {
-      const advisorId = advisorOrder[i];
-      
-      // Show thinking indicator for this specific advisor
-      setThinkingAdvisors([advisorId]);
-      
-      // Wait a bit to simulate thinking time (since responses are pre-generated)
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Find the response for this advisor
-      const advisorResponse = responses.find(r => r.persona_id === advisorId);
-      
-      if (advisorResponse) {
-        // Remove thinking indicator and add message
-        setThinkingAdvisors([]);
+        const advisorIds = ['methodist', 'theorist', 'pragmatist'];
         
-        const message = {
+        for (let i = 0; i < advisorIds.length; i++) {
+          const advisorId = advisorIds[i];
+          const response = data.responses.find(r => r.persona_id === advisorId);
+          
+          if (response) {
+            setThinkingAdvisors([advisorId]);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const advisorMessage = {
+              id: generateMessageId(),
+              type: 'advisor',
+              advisorId: advisorId,
+              content: response.response,
+              timestamp: new Date()
+            };
+            
+            setMessages(prev => [...prev, advisorMessage]);
+            setThinkingAdvisors([]);
+            
+            if (i < advisorIds.length - 1) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          }
+        }
+      } else if (data.type === 'error') {
+        const errorMessage = {
           id: generateMessageId(),
-          type: 'advisor',
-          advisorId: advisorResponse.persona_id,
-          content: advisorResponse.response,
+          type: 'error',
+          content: data.responses[0].response,
           timestamp: new Date()
         };
-        
-        setMessages(prev => [...prev, message]);
-        
-        // Small delay before next advisor starts thinking
-        if (i < advisorOrder.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
-        }
+        setMessages(prev => [...prev, errorMessage]);
       }
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+      const errorMessage = {
+        id: generateMessageId(),
+        type: 'error',
+        content: 'Sorry, I encountered an error. Please try again.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+      setThinkingAdvisors([]);
     }
-    
-    // Clear any remaining thinking indicators
-    setThinkingAdvisors([]);
   };
 
   const handleReplyToAdvisor = async (inputMessage, replyInfo) => {
-    // Add user reply message
     const userReplyMessage = {
       id: generateMessageId(),
       type: 'user',
       content: inputMessage,
-      timestamp: new Date(),
-      replyTo: replyInfo
+      replyTo: {
+        advisorId: replyInfo.advisorId,
+        advisorName: replyInfo.advisorName,
+        messageId: replyInfo.messageId
+      },
+      timestamp: new Date()
     };
     setMessages(prev => [...prev, userReplyMessage]);
-    
-    // Show thinking for the specific advisor
+
     setThinkingAdvisors([replyInfo.advisorId]);
-    setReplyingTo(null); // Clear reply state
-    
+    setIsLoading(true);
+
     try {
       const response = await fetch('http://localhost:8000/reply-to-advisor', {
         method: 'POST',
@@ -169,33 +229,35 @@ const ChatPage = ({ onNavigateToHome }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to send reply');
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      setThinkingAdvisors([]);
 
-      // Add advisor reply
       const advisorReplyMessage = {
         id: generateMessageId(),
         type: 'advisor',
-        advisorId: data.persona_id,
+        advisorId: replyInfo.advisorId,
         content: data.response,
-        timestamp: new Date(),
-        isReply: true
+        isReply: true,
+        timestamp: new Date()
       };
-      
+
       setMessages(prev => [...prev, advisorReplyMessage]);
-      
+
     } catch (error) {
       console.error('Error sending reply:', error);
-      setThinkingAdvisors([]);
-      setMessages(prev => [...prev, {
+      const errorMessage = {
         id: generateMessageId(),
         type: 'error',
-        content: 'Sorry, there was an error sending your reply. Please try again.',
+        content: 'Sorry, I encountered an error with your reply. Please try again.',
         timestamp: new Date()
-      }]);
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+      setThinkingAdvisors([]);
+      setReplyingTo(null);
     }
   };
 
@@ -214,139 +276,164 @@ const ChatPage = ({ onNavigateToHome }) => {
     setReplyingTo(null);
   };
 
+  const hasMessages = messages.length > 0;
+
   return (
-    <div className="chat-page">
-      {/* Header */}
-      <header className="chat-header">
-        <div className="chat-header-content">
-          <div className="chat-header-left">
-            <button
-              onClick={onNavigateToHome}
-              className="home-button"
-            >
-              <Home className="home-icon" />
-            </button>
-            <div>
-              <h1 className="chat-title">Advisory Panel Chat</h1>
-              <p className="chat-subtitle">
-                {Object.keys(collectedInfo).length > 0 
-                  ? `Context: ${Object.entries(collectedInfo).map(([k,v]) => `${k}: ${v}`).join(', ')}`
-                  : replyingTo 
-                    ? `Replying to ${replyingTo.advisorName}`
-                    : 'Consulting with your three advisors'
-                }
-              </p>
+    <div className="modern-chat-page">
+      {/* Floating Header */}
+      <div className="floating-header">
+        <div className="header-left">
+          <button onClick={onNavigateToHome} className="modern-home-btn">
+            <Home size={20} />
+          </button>
+          <div className="header-brand">
+            <div className="brand-icon">
+              <Users size={24} />
+            </div>
+            <div className="brand-text">
+              <h1>PhD Advisory</h1>
+              <p>AI-Powered Academic Guidance</p>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <div className="advisor-indicators">
-              {Object.entries(advisors).map(([id, advisor]) => {
-                const Icon = advisor.icon;
-                const colors = getAdvisorColors(id, isDark);
-                return (
-                  <div 
-                    key={id} 
-                    className="advisor-indicator" 
-                    style={{ backgroundColor: colors.bgColor }}
-                  >
-                    <Icon style={{ color: colors.color }} />
-                  </div>
-                );
-              })}
-            </div>
+        </div>
+        
+        <div className="header-right">
+          <div className="advisor-pills">
+            {Object.entries(advisors).map(([id, advisor]) => {
+              const Icon = advisor.icon;
+              const colors = getAdvisorColors(id, isDark);
+              const isThinking = thinkingAdvisors.includes(id);
+              
+              return (
+                <div 
+                  key={id} 
+                  className={`advisor-pill ${isThinking ? 'thinking' : ''}`}
+                  style={{ 
+                    backgroundColor: colors.bgColor,
+                    borderColor: colors.color + '20'
+                  }}
+                >
+                  <Icon size={16} style={{ color: colors.color }} />
+                  <span style={{ color: colors.color }}>{advisor.name.split(' ')[1]}</span>
+                  {isThinking && <div className="thinking-pulse" style={{ backgroundColor: colors.color }}></div>}
+                </div>
+              );
+            })}
+          </div>
+          
+          <div className="header-controls">
+            <ProviderDropdown 
+              currentProvider={currentProvider}
+              onProviderChange={handleProviderSwitch}
+              isLoading={isProviderSwitching}
+            />
             <ThemeToggle />
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Chat Area */}
-      <div className="chat-container">
-        <div className="chat-box">
-          {/* Messages */}
-          <div className="messages-container">
-            {messages.length === 0 && !replyingTo && (
+      {/* Main Content Area */}
+      <div className="main-content">
+        {!hasMessages ? (
+          /* Welcome State - Just Suggestions */
+          <div className="welcome-state">
+            <div className="suggestions-container">
               <SuggestionsPanel onSuggestionClick={handleSendMessage} />
-            )}
-            
-            {messages.map((message, index) => {
-              if (message.type === 'orchestrator') {
-                return (
-                  <div key={message.id || index} className="advisor-message-container">
-                    <div className="advisor-avatar orchestrator-avatar">
-                      <MessageCircle className="orchestrator-icon" />
-                    </div>
-                    <div className="advisor-message-bubble orchestrator-bubble">
-                      <div className="advisor-message-header">
-                        <h4 className="advisor-message-name orchestrator-name">
-                          PhD Assistant
-                        </h4>
-                        <span className="message-time orchestrator-time">
-                          {message.timestamp.toLocaleTimeString([], {
-                            hour: '2-digit', 
-                            minute: '2-digit'
-                          })}
-                        </span>
-                      </div>
-                      <p className="advisor-message-text orchestrator-text">{message.content}</p>
-                    </div>
-                  </div>
-                );
-              }
-              return (
-                <MessageBubble 
-                  key={message.id || index} 
-                  message={message} 
-                  onClick={() => handleMessageClick(message)}
-                  showReplyButton={message.type === 'advisor'}
-                />
-              );
-            })}
-            
-            {/* Thinking Indicators */}
-            {thinkingAdvisors.includes('system') && (
-              <div className="thinking-container">
-                <div className="advisor-avatar orchestrator-avatar">
-                  <MessageCircle className="orchestrator-icon" />
-                </div>
-                <div className="thinking-bubble orchestrator-bubble">
-                  <div className="thinking-header">
-                    <h4 className="advisor-name orchestrator-name">
-                      Processing...
-                    </h4>
-                  </div>
-                  <div className="thinking-dots">
-                    <div className="thinking-dot orchestrator-dot" style={{ animationDelay: '0ms' }}></div>
-                    <div className="thinking-dot orchestrator-dot" style={{ animationDelay: '150ms' }}></div>
-                    <div className="thinking-dot orchestrator-dot" style={{ animationDelay: '300ms' }}></div>
-                  </div>
-                  <p className="thinking-text orchestrator-thinking-text">analyzing your question...</p>
-                </div>
-              </div>
-            )}
-            
-            {thinkingAdvisors.filter(id => id !== 'system').map(advisorId => (
-              <ThinkingIndicator key={advisorId} advisorId={advisorId} />
-            ))}
-            
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Reply Banner */}
-          {replyingTo && (
-            <div className="reply-banner">
-              <div className="reply-info">
-                <Reply className="reply-icon" />
-                <span>Replying to {replyingTo.advisorName}</span>
-              </div>
-              <button onClick={cancelReply} className="cancel-reply-btn">
-                <X size={16} />
-              </button>
             </div>
-          )}
+          </div>
+        ) : (
+          /* Chat State */
+          <div className="chat-state">
+            <div className="messages-area">
+              <div className="messages-scroll">
+                {messages.map((message, index) => {
+                  if (message.type === 'orchestrator') {
+                    return (
+                      <div key={message.id || index} className="orchestrator-message">
+                        <div className="orchestrator-avatar">
+                          <MessageCircle size={20} />
+                        </div>
+                        <div className="orchestrator-content">
+                          <div className="orchestrator-header">
+                            <span className="orchestrator-name">PhD Assistant</span>
+                            <span className="message-timestamp">
+                              {message.timestamp.toLocaleTimeString([], {
+                                hour: '2-digit', 
+                                minute: '2-digit'
+                              })}
+                            </span>
+                          </div>
+                          <div className="orchestrator-text">{message.content}</div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  if (message.type === 'system') {
+                    return (
+                      <div key={message.id || index} className="system-notification">
+                        <div className="system-content">
+                          {message.content}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <MessageBubble 
+                      key={message.id || index} 
+                      message={message} 
+                      onClick={() => handleMessageClick(message)}
+                      showReplyButton={message.type === 'advisor'}
+                    />
+                  );
+                })}
+                
+                {/* Thinking Indicators */}
+                {thinkingAdvisors.includes('system') && (
+                  <div className="orchestrator-thinking">
+                    <div className="orchestrator-avatar">
+                      <MessageCircle size={20} />
+                    </div>
+                    <div className="thinking-content">
+                      <span className="thinking-label">PhD Assistant is thinking...</span>
+                      <div className="thinking-animation">
+                        <div className="dot"></div>
+                        <div className="dot"></div>
+                        <div className="dot"></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                {thinkingAdvisors.filter(id => id !== 'system').map(advisorId => (
+                  <ThinkingIndicator key={advisorId} advisorId={advisorId} />
+                ))}
 
-          {/* Input Area */}
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Floating Input Area */}
+      <div className="floating-input-area">
+        {replyingTo && (
+          <div className="reply-banner">
+            <div className="reply-info">
+              <Reply size={16} />
+              <span>Replying to <strong>{replyingTo.advisorName}</strong></span>
+            </div>
+            <button onClick={cancelReply} className="cancel-reply">
+              <X size={16} />
+            </button>
+          </div>
+        )}
+        
+        <div className="input-wrapper">
           <ChatInput 
-            onSendMessage={handleSendMessage} 
+            onSendMessage={handleSendMessage}
             isLoading={isLoading}
             placeholder={
               replyingTo 

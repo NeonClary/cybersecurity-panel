@@ -1,3 +1,4 @@
+// src/components/SuggestionsPanel.js
 import React from 'react';
 import { BookOpen, FlaskConical, PenTool, Heart } from 'lucide-react';
 
@@ -90,7 +91,8 @@ const SuggestionsPanel = ({ onSuggestionClick }) => {
                     style={{
                       borderColor: category.color + '20',
                       '--hover-bg': category.bgColor,
-                      '--hover-border': category.color
+                      '--hover-border': category.color,
+                      '--hover-text': category.color
                     }}
                   >
                     {suggestion}

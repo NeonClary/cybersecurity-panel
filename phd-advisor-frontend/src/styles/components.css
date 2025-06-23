@@ -1,3 +1,5 @@
+/* components.css - General Component Styles */
+
 /* CSS Custom Properties for Theming */
 :root[data-theme="light"] {
   /* Background Colors */
@@ -91,30 +93,31 @@
 
 /* Theme Toggle Button */
 .theme-toggle {
-  padding: 8px;
-  background-color: transparent;
+  padding: 10px;
+  background: var(--bg-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .theme-toggle:hover {
-  background-color: var(--bg-tertiary);
+  background: var(--bg-secondary);
   border-color: var(--accent-primary);
   color: var(--accent-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .theme-icon {
   width: 20px;
   height: 20px;
 }
-
-/* Updated Component Styles with Theme Variables */
 
 /* Homepage Styles */
 .homepage {
@@ -238,15 +241,10 @@
   height: 24px;
 }
 
-.cta-arrow {
-  width: 20px;
-  height: 20px;
-}
-
-/* Advisor Cards */
+/* Advisors Grid */
 .advisors-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 32px;
   margin-bottom: 64px;
 }
@@ -254,14 +252,16 @@
 .advisor-card {
   background-color: var(--bg-primary);
   border-radius: 16px;
-  box-shadow: var(--shadow-md);
   padding: 32px;
+  box-shadow: var(--shadow-md);
   border: 1px solid var(--border-primary);
-  transition: box-shadow 0.3s ease;
+  text-align: center;
+  transition: all 0.3s ease;
 }
 
 .advisor-card:hover {
-  box-shadow: var(--shadow-lg);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-xl);
 }
 
 .advisor-card-icon {
@@ -271,7 +271,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 24px;
+  margin: 0 auto 24px auto;
 }
 
 .advisor-card-icon svg {
@@ -287,12 +287,13 @@
 }
 
 .advisor-card-role {
-  font-weight: 500;
-  margin-bottom: 16px;
   font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
 }
 
 .advisor-card-description {
+  font-size: 16px;
   color: var(--text-secondary);
   line-height: 1.6;
   margin: 0;
@@ -300,11 +301,7 @@
 
 /* Features Section */
 .features-section {
-  background-color: var(--bg-primary);
-  border-radius: 24px;
-  box-shadow: var(--shadow-xl);
-  padding: 48px;
-  border: 1px solid var(--border-primary);
+  margin-bottom: 64px;
 }
 
 .features-title {
@@ -317,149 +314,44 @@
 
 .features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 32px;
 }
 
 .feature-card {
   text-align: center;
+  padding: 24px;
 }
 
 .feature-icon {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   background-color: var(--feature-bg);
-  border-radius: 12px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 16px auto;
+  margin: 0 auto 24px auto;
 }
 
 .feature-icon svg {
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   color: var(--feature-icon-color);
 }
 
 .feature-title {
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: bold;
   color: var(--text-primary);
-  margin-bottom: 8px;
-  font-size: 18px;
+  margin-bottom: 12px;
 }
 
 .feature-description {
+  font-size: 16px;
   color: var(--text-secondary);
-  margin: 0;
   line-height: 1.6;
-}
-
-/* Chat Page Styles */
-.chat-page {
-  min-height: 100vh;
-  background-color: var(--bg-secondary);
-}
-
-.chat-header {
-  background-color: var(--bg-primary);
-  box-shadow: var(--shadow-sm);
-  border-bottom: 1px solid var(--border-primary);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.chat-header-content {
-  max-width: 1024px;
-  margin: 0 auto;
-  padding: 16px 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.chat-header-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.home-button {
-  padding: 8px;
-  background-color: transparent;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-.home-button:hover {
-  background-color: var(--bg-tertiary);
-}
-
-.home-icon {
-  width: 20px;
-  height: 20px;
-  color: var(--text-secondary);
-}
-
-.chat-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
   margin: 0;
-}
-
-.chat-subtitle {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.advisor-indicators {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.advisor-indicator {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.advisor-indicator svg {
-  width: 16px;
-  height: 16px;
-}
-
-/* Chat Container */
-.chat-container {
-  max-width: 1024px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
-.chat-box {
-  background-color: var(--bg-primary);
-  border-radius: 16px;
-  box-shadow: var(--shadow-md);
-  height: calc(100vh - 200px);
-  display: flex;
-  flex-direction: column;
-}
-
-.messages-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
 }
 
 /* Suggestions Panel */
@@ -532,8 +424,6 @@
   font-size: 16px;
   font-weight: 600;
   margin: 0;
-  line-height: 1.3;
-  color: var(--text-primary);
 }
 
 .suggestion-buttons {
@@ -544,157 +434,26 @@
 }
 
 .suggestion-button {
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  padding: 12px 16px;
   text-align: left;
+  padding: 12px 16px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
+  background-color: transparent;
+  color: var(--text-accent);
   font-size: 14px;
   line-height: 1.4;
-  color: var(--text-accent);
   cursor: pointer;
   transition: all 0.2s ease;
-  width: 100%;
 }
 
 .suggestion-button:hover {
-  background-color: var(--bg-tertiary);
-  border-color: var(--accent-primary);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.suggestion-button:active {
-  transform: translateY(0);
-}
-
-/* Reply Functionality Styles */
-.reply-banner {
-  background-color: var(--bg-tertiary);
-  border-top: 1px solid var(--border-primary);
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.reply-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.reply-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--accent-primary);
-}
-
-.cancel-reply-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
-  transition: background-color 0.2s ease;
-}
-
-.cancel-reply-btn:hover {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.reply-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  opacity: 0.8;
-  margin-bottom: 4px;
-}
-
-.reply-badge {
-  font-size: 11px;
-  opacity: 0.7;
-  margin-left: 8px;
-}
-
-.advisor-message-bubble.clickable {
-  cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
-}
-
-.advisor-message-bubble.clickable:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.message-actions {
-  margin-top: 8px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.advisor-message-bubble.clickable:hover .message-actions {
-  opacity: 1;
-}
-
-.reply-button {
-  background: transparent;
-  border: 1px solid;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  transition: all 0.2s ease;
-}
-
-.reply-button:hover {
-  background-color: var(--bg-tertiary);
+  background-color: var(--hover-bg, var(--bg-secondary));
+  border-color: var(--hover-border, var(--accent-primary));
+  color: var(--hover-text, var(--text-primary));
   transform: translateY(-1px);
 }
 
-/* Orchestrator/PhD Assistant Styles */
-.orchestrator-avatar {
-  background-color: var(--bg-tertiary) !important;
-}
-
-.orchestrator-icon {
-  color: var(--text-secondary) !important;
-}
-
-.orchestrator-bubble {
-  background-color: var(--bg-tertiary) !important;
-  border-color: var(--border-secondary) !important;
-}
-
-.orchestrator-name {
-  color: var(--text-secondary) !important;
-}
-
-.orchestrator-time {
-  color: var(--text-tertiary) !important;
-}
-
-.orchestrator-text {
-  color: var(--text-accent) !important;
-}
-
-.orchestrator-dot {
-  background-color: var(--text-secondary) !important;
-}
-
-.orchestrator-thinking-text {
-  color: var(--text-secondary) !important;
-  opacity: 0.8;
-}
+/* Message Components */
 .user-message-container {
   display: flex;
   justify-content: flex-end;
@@ -711,6 +470,18 @@
 
 .user-message p {
   margin: 0;
+}
+
+.reply-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 4px 8px;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .advisor-message-container {
@@ -741,6 +512,12 @@
   border: 1px solid;
   padding: 16px;
   max-width: 512px;
+  transition: all 0.2s ease;
+}
+
+.advisor-message-bubble.clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .advisor-message-header {
@@ -755,6 +532,15 @@
   font-size: 14px;
 }
 
+.reply-badge {
+  font-size: 10px;
+  background: var(--accent-primary);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
 .message-time {
   font-size: 12px;
 }
@@ -762,6 +548,29 @@
 .advisor-message-text {
   line-height: 1.6;
   margin: 0;
+}
+
+.message-actions {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-tertiary);
+}
+
+.reply-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 1px solid;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reply-button:hover {
+  background: var(--bg-secondary);
 }
 
 /* Error Messages */
@@ -910,7 +719,7 @@
   }
 }
 
-/* Responsive adjustments */
+/* Responsive Design */
 @media (max-width: 1024px) {
   .suggestions-panel {
     padding: 24px 16px;
@@ -964,21 +773,5 @@
 
   .features-grid {
     grid-template-columns: 1fr;
-  }
-
-  .chat-header-content {
-    padding: 12px 16px;
-  }
-
-  .chat-container {
-    padding: 16px;
-  }
-
-  .chat-box {
-    height: calc(100vh - 160px);
-  }
-
-  .messages-container {
-    padding: 16px;
   }
 }
