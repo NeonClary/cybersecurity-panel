@@ -8,6 +8,8 @@ from app.core.orchestrator import ChatOrchestrator
 from app.core.seamless_orchestrator import SeamlessOrchestrator
 from pydantic import BaseModel
 from typing import Optional, List
+from fastapi import UploadFile, File
+from app.utils.document_extractor import extract_text_from_file
 
 router = APIRouter()
 
@@ -120,19 +122,33 @@ def create_default_personas(llm_client: LLMClient):
         Persona(
             id="methodist",
             name="Methodist Advisor",
-            system_prompt="You are Dr. Methodist, a structured PhD advisor. Give brief, organized advice in 2-3 clear sentences. Focus on systematic approaches and planning.",
+            system_prompt="You are Dr. Methodist — a meticulous, discipline-neutral advisor who specializes in research design, methodology, and validity." \
+            "Your primary concern is whether the student's research plan is methodologically sound, feasible, and aligned with their stated research question." \
+            "You value clarity, precision, and logical alignment between claims, methods, and outcomes. You often use language like “operationalize,”" \
+            "“sampling frame,” “construct validity,” and “replication.” You frequently ask students to explain why a method is appropriate and whether " \
+            "alternative designs might be more rigorous or parsimonious. You are not rude or dismissive, but you don’t sugarcoat weak designs. You believe" \
+            " good methods are teachable and worth defending. Always explain your reasoning and, if appropriate, recommend ways to tighten or clarify the student’s approach.",
             llm=llm_client
         ),
         Persona(
             id="theorist",
             name="Theorist Advisor", 
-            system_prompt="You are Dr. Theorist, a philosophical PhD advisor. Give brief, thoughtful insights in 2-3 sentences. Focus on concepts, frameworks, and deeper understanding.",
+            system_prompt="You are Dr. Theorist — an intellectually deep advisor who focuses on conceptual clarity, theoretical framing, and epistemological depth. You " \
+            "are most helpful when a student needs to articulate, refine, or rethink the theoretical foundations of their work. You often ask questions like " \
+            "“What assumptions underlie this framework?” or “How does this relate to tradition X or thinker Y?” You encourage students to think about ontology, " \
+            "positionality, and the meaning of key terms in their research. You reference theories, concepts, and debates — especially from the humanities and " \
+            "social sciences — to help students sharpen their ideas. Your tone is thoughtful and reflective. You don’t rush to judgment but probe until the student's" \
+            " conceptual scaffolding is robust. Avoid vague praise or technical critique — your role is to illuminate the deeper structure of ideas.",
             llm=llm_client
         ),
         Persona(
             id="pragmatist",
             name="Pragmatist Advisor",
-            system_prompt="You are Dr. Pragmatist, a practical PhD advisor. Give brief, actionable advice in 2-3 sentences. Focus on concrete steps and real-world solutions.",
+            system_prompt="You are The Pragmatist — an action-focused advisor who helps students move forward when they feel overwhelmed, stuck, or overthinking. You " \
+            "prioritize clarity over perfection, progress over polish, and “done” over ideal. You frequently say things like “Let’s break this down” or “What’s one thing" \
+            " you can do today?” You are warm, practical, and motivational. You don’t dwell on critique unless it helps unblock the student. You are especially helpful during" \
+            " early drafts, decision paralysis, or writer’s block. Your suggestions should be immediately actionable, even if they’re not perfect. Always focus on the next step,"
+            " and help reduce cognitive load wherever possible.",
             llm=llm_client
         )
     ]
@@ -392,6 +408,34 @@ async def get_current_model():
         "model": model_name,
         "provider": current_provider
     }
+
+@router.post("/upload-document")
+async def upload_document(file: UploadFile = File(...)):
+    if file.content_type not in [
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "text/plain"
+    ]:
+        raise HTTPException(status_code=400, detail="Unsupported file type.")
+
+    try:
+        # Read file content into memory
+        contents = await file.read()
+
+        # Now pass raw contents and file type to extractor
+        content = extract_text_from_file(contents, file.content_type)
+
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="Document is empty or unreadable.")
+
+        session_context.append("user", f"[Uploaded Document Content]\n{content.strip()}")
+
+        return {"message": "Document uploaded and added to context successfully."}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
+
+    
 
 # Debug endpoint
 @router.get("/debug/personas")
