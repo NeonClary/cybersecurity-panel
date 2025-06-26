@@ -24,7 +24,7 @@ def create_llm_client(provider: str = None) -> LLMClient:
         
     if provider == "gemini":
         try:
-            return GeminiClient(model_name = os.getenv("GEMINI_MODEL"))
+            return GeminiClient(model_name=os.getenv("GEMINI_MODEL"))
         except ValueError as e:
             # Fallback to Ollama if Gemini API key is not available
             print(f"Gemini API key not found, falling back to Ollama: {e}")
@@ -40,26 +40,20 @@ class ShortResponseOllamaClient(LLMClient):
         self.model_name = model_name
     
     async def generate(self, system_prompt: str, context: List[dict]) -> str:
-        # Create a more natural conversation format
-        messages = []
+        # Build cleaner context - only include recent relevant messages
+        recent_context = context[-3:] if len(context) > 3 else context
         
-        # Add system message
-        if system_prompt:
-            messages.append(f"System: {system_prompt}")
+        # Create a focused prompt
+        prompt_parts = [system_prompt]
         
-        # Add conversation history
-        for msg in context:
-            role = msg['role'].capitalize()
-            if role == "User":
-                messages.append(f"Student: {msg['content']}")
-            elif role in ["Methodist", "Theorist", "Pragmatist"]:
-                messages.append(f"{role} Advisor: {msg['content']}")
-            else:
-                messages.append(f"{role}: {msg['content']}")
+        # Add only the user's current question
+        for msg in recent_context:
+            if msg['role'] == 'user':
+                prompt_parts.append(f"Student Question: {msg['content']}")
+                break  # Only use the most recent user message
         
-        # Create the final prompt
-        conversation = "\n".join(messages)
-        prompt = f"{conversation}\n\nAssistant:"
+        prompt_parts.append("Your Response:")
+        prompt = "\n\n".join(prompt_parts)
         
         payload = {
             "model": self.model_name,
@@ -69,8 +63,9 @@ class ShortResponseOllamaClient(LLMClient):
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "top_k": 40,
-                "num_predict": 200,
+                "num_predict": 80,  # Reduced from 200 to force shorter responses
                 "repeat_penalty": 1.1,
+                "stop": ["\n\n", "Student:", "Question:", "Response:"]  # Stop tokens
             }
         }
 
@@ -80,20 +75,60 @@ class ShortResponseOllamaClient(LLMClient):
                 response.raise_for_status()
                 result = response.json().get("response", "[No response]").strip()
                 
-                # Clean up common issues
-                result = result.replace("Here are 2-3 sentence", "").strip()
-                result = result.replace("Here's an expansion of the advice:", "").strip()
-                result = result.replace("conceptual insights:", "").strip()
-                result = result.replace("actionable advice:", "").strip()
+                # Enhanced cleanup
+                result = self._clean_response(result)
                 
-                # If response is too short or just punctuation, return a fallback
-                if len(result) < 10 or result in [":", ".", ""]:
-                    return "I'd be happy to help with that. Could you provide more specific details about what you're looking for?"
+                # Validate response quality
+                if len(result) < 20 or self._is_poor_quality(result):
+                    return self._get_fallback_response()
                 
                 return result
                 
         except Exception as e:
-            return f"I apologize, but I'm having trouble generating a response right now. Please try again."
+            return "I'm having trouble generating a response right now. Please try again."
+    
+    def _clean_response(self, response: str) -> str:
+        """Clean up common response issues"""
+        # Remove common prefixes
+        prefixes_to_remove = [
+            "Here are 2-3 sentence", "Here's an expansion", "Assistant:",
+            "Dr. Methodist:", "Dr. Theorist:", "Dr. Pragmatist:",
+            "Methodist Advisor:", "Theorist Advisor:", "Pragmatist Advisor:",
+        ]
+        
+        for prefix in prefixes_to_remove:
+            if response.startswith(prefix):
+                response = response[len(prefix):].strip()
+        
+        # Remove trailing incomplete sentences
+        sentences = response.split('.')
+        if len(sentences) > 1 and len(sentences[-1].strip()) < 10:
+            response = '.'.join(sentences[:-1]) + '.'
+        
+        # Remove excessive academic fluff
+        fluff_patterns = [
+            "conceptual insights:", "actionable advice:", "my inquisitive student",
+            "excellent question", "thank you for", "assistant!"
+        ]
+        
+        for pattern in fluff_patterns:
+            response = response.replace(pattern, "").strip()
+        
+        return response
+    
+    def _is_poor_quality(self, response: str) -> bool:
+        """Check if response quality is poor"""
+        poor_indicators = [
+            "Thank you, Dr." in response,  # AI confusion about identity
+            "Assistant:" in response,
+            len(response.split()) > 100,  # Too verbose
+            response.count("?") > 3,  # Too many questions
+        ]
+        return any(poor_indicators)
+    
+    def _get_fallback_response(self) -> str:
+        """Return a simple fallback when quality is poor"""
+        return "I'd be happy to help with that. Could you provide more specific details about what you're looking for?"
 
 # Initialize with default provider
 llm = create_llm_client()
@@ -117,38 +152,56 @@ class GlobalSessionContext:
 session_context = GlobalSessionContext()
 
 def create_default_personas(llm_client: LLMClient):
-    """Create default personas with given LLM client"""
+    """Create default personas with improved, concise system prompts"""
     return [
         Persona(
             id="methodist",
-            name="Methodist Advisor",
-            system_prompt="You are Dr. Methodist — a meticulous, discipline-neutral advisor who specializes in research design, methodology, and validity." \
-            "Your primary concern is whether the student's research plan is methodologically sound, feasible, and aligned with their stated research question." \
-            "You value clarity, precision, and logical alignment between claims, methods, and outcomes. You often use language like “operationalize,”" \
-            "“sampling frame,” “construct validity,” and “replication.” You frequently ask students to explain why a method is appropriate and whether " \
-            "alternative designs might be more rigorous or parsimonious. You are not rude or dismissive, but you don’t sugarcoat weak designs. You believe" \
-            " good methods are teachable and worth defending. Always explain your reasoning and, if appropriate, recommend ways to tighten or clarify the student’s approach.",
+            name="Dr. Methodist",
+            system_prompt="""You are Dr. Methodist, a research methodology expert.
+
+RESPONSE RULES:
+- Maximum 3 sentences
+- Start with your recommendation 
+- Include ONE specific actionable step
+- Use terms like "validity," "operationalize," "sampling frame"
+- Focus on methodological rigor
+
+TONE: Precise, helpful, focused on research design quality.
+
+Example: "Use a cautious tone unless your methodology is exceptionally robust. Strong validity and clear operationalization justify more confident language. Next step: Review your methods section to assess how assertive you can be.""",
             llm=llm_client
         ),
         Persona(
             id="theorist",
-            name="Theorist Advisor", 
-            system_prompt="You are Dr. Theorist — an intellectually deep advisor who focuses on conceptual clarity, theoretical framing, and epistemological depth. You " \
-            "are most helpful when a student needs to articulate, refine, or rethink the theoretical foundations of their work. You often ask questions like " \
-            "“What assumptions underlie this framework?” or “How does this relate to tradition X or thinker Y?” You encourage students to think about ontology, " \
-            "positionality, and the meaning of key terms in their research. You reference theories, concepts, and debates — especially from the humanities and " \
-            "social sciences — to help students sharpen their ideas. Your tone is thoughtful and reflective. You don’t rush to judgment but probe until the student's" \
-            " conceptual scaffolding is robust. Avoid vague praise or technical critique — your role is to illuminate the deeper structure of ideas.",
+            name="Dr. Theorist", 
+            system_prompt="""You are Dr. Theorist, a conceptual frameworks expert.
+            RESPONSE RULES:
+            - Maximum 3 sentences
+            - Start with conceptual perspective
+            - Reference theoretical positioning
+            - Ask ONE probing question when relevant
+            - Use terms like "epistemological," "framework," "assumptions"
+
+            TONE: Thoughtful, intellectually rigorous, conceptually focused.
+
+            Example: "Your tone should reflect your epistemological stance—bold if challenging frameworks, cautious if extending theory. Consider your relationship to existing literature. What theoretical assumptions underlie your approach?""",
             llm=llm_client
         ),
         Persona(
             id="pragmatist",
-            name="Pragmatist Advisor",
-            system_prompt="You are The Pragmatist — an action-focused advisor who helps students move forward when they feel overwhelmed, stuck, or overthinking. You " \
-            "prioritize clarity over perfection, progress over polish, and “done” over ideal. You frequently say things like “Let’s break this down” or “What’s one thing" \
-            " you can do today?” You are warm, practical, and motivational. You don’t dwell on critique unless it helps unblock the student. You are especially helpful during" \
-            " early drafts, decision paralysis, or writer’s block. Your suggestions should be immediately actionable, even if they’re not perfect. Always focus on the next step,"
-            " and help reduce cognitive load wherever possible.",
+            name="Dr. Pragmatist",
+            system_prompt="""You are Dr. Pragmatist, a practical action-focused advisor.
+
+RESPONSE RULES:
+- Maximum 2 sentences
+- Start with clear, actionable advice
+- Focus on immediate next steps
+- Use phrases like "Quick fix:" "Next step:" "Try this:"
+- Prioritize progress over perfection
+
+TONE: Warm, motivational, results-oriented.
+
+Example: "Start cautious and earn the right to be bold as you build your case. Quick fix: Use 'This study suggests...' rather than 'This study proves...'""",
             llm=llm_client
         )
     ]
@@ -178,6 +231,31 @@ class ReplyToAdvisor(BaseModel):
 
 class ProviderSwitch(BaseModel):
     provider: str
+
+# Helper functions for response validation
+def _is_valid_response(response: str, persona_id: str) -> bool:
+    """Validate response quality"""
+    if len(response) < 20 or len(response) > 500:
+        return False
+    
+    # Check for AI confusion indicators
+    confusion_indicators = [
+        f"Thank you, Dr. {persona_id.title()}",
+        "Assistant:",
+        f"Dr. {persona_id.title()} Advisor:",
+        "excellent discussion, Assistant"
+    ]
+    
+    return not any(indicator in response for indicator in confusion_indicators)
+
+def _get_persona_fallback(persona_id: str) -> str:
+    """Get persona-specific fallback responses"""
+    fallbacks = {
+        "methodist": "Focus on ensuring your methodology aligns with your research question. What specific method are you considering?",
+        "theorist": "Consider the theoretical framework underlying your approach. What assumptions guide your thinking?",
+        "pragmatist": "Let's break this down into actionable steps. What's the most important thing you need to decide today?"
+    }
+    return fallbacks.get(persona_id, "I'd be happy to help. Could you provide more details?")
 
 # Provider management endpoints
 @router.get("/current-provider")
@@ -236,7 +314,7 @@ async def switch_provider(provider_data: ProviderSwitch):
 # Sequential advisor responses endpoint
 @router.post("/chat-sequential")
 async def chat_sequential(message: ChatMessage):
-    """Generate advisor responses one by one for faster perceived response time"""
+    """Generate advisor responses with improved quality controls"""
     
     try:
         orchestrator_result = await seamless_orchestrator.process_message(message.user_input)
@@ -253,37 +331,46 @@ async def chat_sequential(message: ChatMessage):
 
         elif orchestrator_result["status"] == "ready_for_advisors":
             enhanced_context = orchestrator_result["enhanced_context"]
+            
+            # Clear previous advisor responses to avoid confusion
+            session_context.clear()
             session_context.append("user", enhanced_context)
 
-            # Generate responses sequentially
             advisor_order = ["methodist", "theorist", "pragmatist"]
             responses = []
             
             for i, persona_id in enumerate(advisor_order):
                 try:
                     persona = chat_orchestrator.personas[persona_id]
-                    # Get current context up to this point
-                    context = session_context.full_log.copy()
                     
-                    # Generate response
-                    reply = await persona.respond(context)
+                    # Use clean context for each advisor (no cross-contamination)
+                    clean_context = [{"role": "user", "content": enhanced_context}]
                     
-                    # Add this advisor's response to context for next advisor
-                    session_context.append(persona_id, reply)
+                    reply = await persona.respond(clean_context)
                     
-                    responses.append({
-                        "persona": persona.name,
-                        "persona_id": persona_id,
-                        "response": reply,
-                        "order": i
-                    })
+                    # Validate response before adding
+                    if _is_valid_response(reply, persona_id):
+                        responses.append({
+                            "persona": persona.name,
+                            "persona_id": persona_id,
+                            "response": reply,
+                            "order": i
+                        })
+                    else:
+                        # Fallback response for invalid responses
+                        responses.append({
+                            "persona": persona.name,
+                            "persona_id": persona_id,
+                            "response": _get_persona_fallback(persona_id),
+                            "order": i
+                        })
                     
                 except Exception as e:
                     print(f"Error generating response for {persona_id}: {e}")
                     responses.append({
                         "persona": chat_orchestrator.personas[persona_id].name,
                         "persona_id": persona_id,
-                        "response": "I'm having trouble generating a response right now. Please try again.",
+                        "response": _get_persona_fallback(persona_id),
                         "order": i
                     })
 
@@ -434,8 +521,6 @@ async def upload_document(file: UploadFile = File(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
-
-    
 
 # Debug endpoint
 @router.get("/debug/personas")
