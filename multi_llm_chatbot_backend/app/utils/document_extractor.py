@@ -1,7 +1,7 @@
+from io import BytesIO
+import PyPDF2
 import tempfile
 import docx2txt
-import PyPDF2
-from io import BytesIO
 
 def extract_text_from_file(file_bytes: bytes, content_type: str) -> str:
     if content_type == "application/pdf":
@@ -12,10 +12,7 @@ def extract_text_from_file(file_bytes: bytes, content_type: str) -> str:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
             tmp.write(file_bytes)
             tmp_path = tmp.name
-        try:
-            return docx2txt.process(tmp_path)
-        finally:
-            os.unlink(tmp_path)  # Clean up temp file
+        return docx2txt.process(tmp_path)
 
     elif content_type == "text/plain":
         return file_bytes.decode("utf-8")

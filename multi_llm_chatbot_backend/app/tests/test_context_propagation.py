@@ -6,7 +6,7 @@ BASE_URL = "http://localhost:8000"
 def test_unified_chat():
     print("\nSending unified chat request to /chat...\n")
     payload = {
-        "user_input": "I'm a second year PhD student in Machine Learning. Any advice for my research paper presentation?"
+        "user_input": "I'm a second year PhD student in Machine Learning. Any advice for my research paper presentation? I am preparing for final QnA session."
     }
 
     try:
