@@ -1,3 +1,4 @@
+/* ChatPage.css - Complete Fixed File */
 
 /* Modern Chat Page Layout */
 .modern-chat-page {
@@ -307,18 +308,110 @@
   40% { transform: scale(1); }
 }
 
-/* Floating Input Area - New Style */
+/* Floating Input Area - FIXED VERSION */
 .floating-input-area {
   position: fixed;
   bottom: 20px;
   left: 0;
   right: 0;
   z-index: 50;
-  background: transparent; /* No background or blur */
+  background: transparent;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
-/* Provider Dropdown Styles */
+/* Reply Banner in ChatPage - matches input width and fixes dark mode */
+.floating-input-area .reply-banner {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 0 16px 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  width: 100%;
+  max-width: 768px;
+  box-sizing: border-box;
+}
+
+[data-theme="dark"] .floating-input-area .reply-banner {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Reply Info - Fix dark mode text color */
+.floating-input-area .reply-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.floating-input-area .reply-info strong {
+  color: var(--accent-primary);
+}
+
+/* Cancel Reply Button */
+.floating-input-area .cancel-reply {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.floating-input-area .cancel-reply:hover {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+/* Document Indicator Styles */
+.document-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--feature-bg);  /* Use theme variable */
+  border: 1px solid var(--accent-primary);  /* Use theme variable */
+  border-radius: 20px;
+  color: var(--accent-primary);  /* Use theme variable */
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  transition: all 0.2s ease;
+}
+
+.document-indicator:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.doc-count {
+  background: var(--accent-primary);
+  color: white;
+  border-radius: 10px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.document-indicator:hover .doc-count {
+  background: white;
+  color: var(--accent-primary);
+}
+
+/* Provider Dropdown Styles - FIXED */
 .provider-dropdown {
   position: relative;
   display: inline-block;
@@ -420,6 +513,10 @@
   overflow: hidden;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+}
+
+[data-theme="dark"] .provider-dropdown-menu {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
 }
 
 .provider-option {
@@ -529,6 +626,10 @@
   
   .floating-input-area {
     bottom: 10px;
+  }
+  
+  .floating-input-area .reply-banner {
+    margin: 0 12px 12px 12px;
   }
   
   .orchestrator-content {
