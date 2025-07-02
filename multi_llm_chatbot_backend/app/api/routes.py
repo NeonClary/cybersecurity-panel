@@ -6,10 +6,12 @@ from app.llm.gemini_client import GeminiClient
 from app.models.persona import Persona
 from app.core.orchestrator import ChatOrchestrator
 from app.core.seamless_orchestrator import SeamlessOrchestrator
+from app.core.context import GlobalSessionContext
 from pydantic import BaseModel
 from typing import Optional, List
 from fastapi import UploadFile, File
 from app.utils.document_extractor import extract_text_from_file
+from app.utils.file_limits import is_within_upload_limit
 
 router = APIRouter()
 
@@ -134,20 +136,6 @@ class ShortResponseOllamaClient(LLMClient):
 llm = create_llm_client()
 chat_orchestrator = ChatOrchestrator()
 seamless_orchestrator = SeamlessOrchestrator(llm=llm)
-
-# Global context storage
-class GlobalSessionContext:
-    def __init__(self):
-        self.full_log: list[dict] = []
-
-    def append(self, role: str, content: str):
-        self.full_log.append({"role": role, "content": content})
-
-    def filter_by_persona(self, persona_id: str):
-        return self.full_log
-
-    def clear(self):
-        self.full_log = []
 
 session_context = GlobalSessionContext()
 
@@ -498,6 +486,7 @@ async def get_current_model():
 
 @router.post("/upload-document")
 async def upload_document(file: UploadFile = File(...)):
+    # Validate file type
     if file.content_type not in [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -506,16 +495,22 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Unsupported file type.")
 
     try:
-        # Read file content into memory
-        contents = await file.read()
+        # Read file bytes
+        file_bytes = await file.read()
 
-        # Now pass raw contents and file type to extractor
-        content = extract_text_from_file(contents, file.content_type)
+        # Check file size limit
+        if not is_within_upload_limit("default", file_bytes, session_context):
+            raise HTTPException(status_code=400, detail="Upload exceeds session document size limit (10 MB).")
 
+        # Extract and validate text
+        content = extract_text_from_file(file_bytes, file.content_type)
         if not content.strip():
             raise HTTPException(status_code=400, detail="Document is empty or unreadable.")
 
+        # Track file size and name
         session_context.append("user", f"[Uploaded Document Content]\n{content.strip()}")
+        session_context.uploaded_files.append(file.filename)
+        session_context.total_upload_size += len(file_bytes)
 
         return {"message": "Document uploaded and added to context successfully."}
 
@@ -535,3 +530,7 @@ async def debug_personas():
         "context_length": len(session_context.full_log),
         "current_provider": current_provider
     }
+
+@router.get("/uploaded-files")
+def get_uploaded_filenames():
+    return {"files": session_context.uploaded_files}
