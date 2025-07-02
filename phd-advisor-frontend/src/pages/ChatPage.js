@@ -119,7 +119,7 @@ const ChatPage = ({ onNavigateToHome }) => {
     const uploadMessage = {
       id: generateMessageId(),
       type: 'document_upload',
-      content: `📄 Successfully uploaded "${file.name}". Your advisors can now reference this document in their responses.`,
+      content: `Successfully uploaded "${file.name}". Your advisors can now reference this document in their responses.`,
       timestamp: new Date(),
       documentInfo: docInfo
     };
