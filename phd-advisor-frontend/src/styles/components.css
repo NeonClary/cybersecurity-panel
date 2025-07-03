@@ -1,5 +1,3 @@
-/* components.css - General Component Styles */
-
 /* CSS Custom Properties for Theming */
 :root[data-theme="light"] {
   /* Background Colors */
@@ -215,6 +213,7 @@
   line-height: 1.6;
 }
 
+/* CTA Button */
 .cta-button {
   display: inline-flex;
   align-items: center;
@@ -239,6 +238,11 @@
 .cta-icon {
   width: 24px;
   height: 24px;
+}
+
+.cta-arrow {
+  width: 20px;
+  height: 20px;
 }
 
 /* Advisors Grid */
@@ -623,6 +627,15 @@
   margin: 0;
 }
 
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-bottom: 8px;
+}
+
 .thinking-dots {
   display: flex;
   gap: 4px;
@@ -641,7 +654,7 @@
   margin-bottom: 0;
 }
 
-/* Chat Input */
+/* Basic Chat Input - SCOPED TO AVOID CONFLICTS */
 .input-area {
   border-top: 1px solid var(--border-primary);
   padding: 16px;
@@ -675,7 +688,8 @@
   box-shadow: var(--input-focus-shadow);
 }
 
-.send-button {
+/* IMPORTANT: Make send button styles specific to basic ChatInput only */
+.input-container .send-button {
   background: var(--accent-gradient);
   color: #FFFFFF;
   padding: 12px 24px;
@@ -689,23 +703,23 @@
   gap: 8px;
 }
 
-.send-button:hover:not(:disabled) {
+.input-container .send-button:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
 }
 
-.send-button:disabled {
+.input-container .send-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
 }
 
-.send-icon {
+.input-container .send-icon {
   width: 20px;
   height: 20px;
 }
 
-.send-text {
+.input-container .send-text {
   display: none;
 }
 
@@ -755,7 +769,8 @@
     font-size: 13px;
   }
 
-  .send-text {
+  /* Basic ChatInput mobile styles */
+  .input-container .send-text {
     display: inline;
   }
 

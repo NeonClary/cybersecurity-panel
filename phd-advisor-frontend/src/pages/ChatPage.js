@@ -1,7 +1,7 @@
 // src/pages/ChatPage.js
 import React, { useState, useEffect, useRef } from 'react';
-import { Home, MessageCircle, Reply, X, Sparkles, Users, Settings2 } from 'lucide-react';
-import ChatInput from '../components/ChatInput';
+import { Home, MessageCircle, Reply, X, Sparkles, Users, Settings2, FileText } from 'lucide-react';
+import EnhancedChatInput from '../components/EnhancedChatInput';
 import MessageBubble from '../components/MessageBubble';
 import ThinkingIndicator from '../components/ThinkingIndicator';
 import SuggestionsPanel from '../components/SuggestionsPanel';
@@ -10,6 +10,7 @@ import ProviderDropdown from '../components/ProviderDropdown';
 import { advisors, getAdvisorColors } from '../data/advisors';
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/ChatPage.css';
+import '../styles/EnhancedChatInput.css';
 
 const ChatPage = ({ onNavigateToHome }) => {
   const [messages, setMessages] = useState([]);
@@ -19,6 +20,7 @@ const ChatPage = ({ onNavigateToHome }) => {
   const [replyingTo, setReplyingTo] = useState(null);
   const [currentProvider, setCurrentProvider] = useState('gemini');
   const [isProviderSwitching, setIsProviderSwitching] = useState(false);
+  const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const messagesEndRef = useRef(null);
   const { isDark } = useTheme();
 
@@ -100,6 +102,39 @@ const ChatPage = ({ onNavigateToHome }) => {
 
   const generateMessageId = () => {
     return Date.now().toString() + Math.random().toString(36).substr(2, 9);
+  };
+
+  const handleFileUploaded = (file, response) => {
+    // Add the uploaded document to our list
+    const docInfo = {
+      id: generateMessageId(),
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      uploadTime: new Date()
+    };
+    setUploadedDocuments(prev => [...prev, docInfo]);
+
+    // Add a system message about the upload
+    const uploadMessage = {
+      id: generateMessageId(),
+      type: 'document_upload',
+      content: `Successfully uploaded "${file.name}". Your advisors can now reference this document in their responses.`,
+      timestamp: new Date(),
+      documentInfo: docInfo
+    };
+    
+    // Force update messages state
+    setMessages(prev => {
+      const newMessages = [...prev, uploadMessage];
+      console.log('Added upload message:', uploadMessage); // Debug log
+      return newMessages;
+    });
+
+    // Scroll to bottom to show the new message
+    setTimeout(() => {
+      scrollToBottom();
+    }, 100);
   };
 
   const handleSendMessage = async (inputMessage) => {
@@ -199,21 +234,17 @@ const ChatPage = ({ onNavigateToHome }) => {
   };
 
   const handleReplyToAdvisor = async (inputMessage, replyInfo) => {
-    const userReplyMessage = {
+    const userMessage = {
       id: generateMessageId(),
       type: 'user',
       content: inputMessage,
-      replyTo: {
-        advisorId: replyInfo.advisorId,
-        advisorName: replyInfo.advisorName,
-        messageId: replyInfo.messageId
-      },
-      timestamp: new Date()
+      timestamp: new Date(),
+      replyingTo: replyInfo
     };
-    setMessages(prev => [...prev, userReplyMessage]);
-
-    setThinkingAdvisors([replyInfo.advisorId]);
+    setMessages(prev => [...prev, userMessage]);
+    
     setIsLoading(true);
+    setThinkingAdvisors([replyInfo.advisorId]);
 
     try {
       const response = await fetch('http://localhost:8000/reply-to-advisor', {
@@ -233,24 +264,34 @@ const ChatPage = ({ onNavigateToHome }) => {
       }
 
       const data = await response.json();
+      setThinkingAdvisors([]);
 
-      const advisorReplyMessage = {
-        id: generateMessageId(),
-        type: 'advisor',
-        advisorId: replyInfo.advisorId,
-        content: data.response,
-        isReply: true,
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, advisorReplyMessage]);
+      if (data.type === 'advisor_reply') {
+        const replyMessage = {
+          id: generateMessageId(),
+          type: 'advisor',
+          advisorId: replyInfo.advisorId,
+          content: data.response,
+          timestamp: new Date(),
+          isReply: true
+        };
+        setMessages(prev => [...prev, replyMessage]);
+      } else if (data.type === 'error') {
+        const errorMessage = {
+          id: generateMessageId(),
+          type: 'error',
+          content: data.response,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
 
     } catch (error) {
       console.error('Error sending reply:', error);
       const errorMessage = {
         id: generateMessageId(),
         type: 'error',
-        content: 'Sorry, I encountered an error with your reply. Please try again.',
+        content: 'Sorry, I encountered an error. Please try again.',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -322,6 +363,14 @@ const ChatPage = ({ onNavigateToHome }) => {
           </div>
           
           <div className="header-controls">
+            {/* Document Count Indicator */}
+            {uploadedDocuments.length > 0 && (
+              <div className="document-indicator" title={`${uploadedDocuments.length} document(s) uploaded`}>
+                <FileText size={16} />
+                <span className="doc-count">{uploadedDocuments.length}</span>
+              </div>
+            )}
+            
             <ProviderDropdown 
               currentProvider={currentProvider}
               onProviderChange={handleProviderSwitch}
@@ -378,6 +427,17 @@ const ChatPage = ({ onNavigateToHome }) => {
                       </div>
                     );
                   }
+
+                  if (message.type === 'document_upload') {
+                    return (
+                      <div key={message.id || index} className="document-upload-notification">
+                        <div className="upload-notification-content">
+                          <FileText size={16} className="upload-icon" />
+                          <span>{message.content}</span>
+                        </div>
+                      </div>
+                    );
+                  }
                   
                   return (
                     <MessageBubble 
@@ -417,7 +477,6 @@ const ChatPage = ({ onNavigateToHome }) => {
         )}
       </div>
 
-      {/* Floating Input Area */}
       <div className="floating-input-area">
         {replyingTo && (
           <div className="reply-banner">
@@ -431,17 +490,17 @@ const ChatPage = ({ onNavigateToHome }) => {
           </div>
         )}
         
-        <div className="input-wrapper">
-          <ChatInput 
-            onSendMessage={handleSendMessage}
-            isLoading={isLoading}
-            placeholder={
-              replyingTo 
-                ? `Reply to ${replyingTo.advisorName}...`
-                : "Ask your advisors anything about your PhD journey..."
-            }
-          />
-        </div>
+        <EnhancedChatInput 
+          onSendMessage={handleSendMessage}
+          onFileUploaded={handleFileUploaded}
+          uploadedDocuments={uploadedDocuments}
+          isLoading={isLoading}
+          placeholder={
+            replyingTo 
+              ? `Reply to ${replyingTo.advisorName}...`
+              : "Ask your advisors anything about your PhD journey..."
+          }
+        />
       </div>
     </div>
   );

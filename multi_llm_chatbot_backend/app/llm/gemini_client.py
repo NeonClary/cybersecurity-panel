@@ -10,6 +10,7 @@ class GeminiClient(LLMClient):
         
         self.model_name = model_name
         self.api_key = os.getenv("GEMINI_API_KEY")
+        print("DEBUG: GEMINI_API_KEY =", os.getenv("GEMINI_API_KEY"))
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY environment variable is required")
         
