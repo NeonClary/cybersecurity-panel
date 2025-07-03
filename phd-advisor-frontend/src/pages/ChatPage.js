@@ -404,7 +404,7 @@ const ChatPage = ({ onNavigateToHome }) => {
                         </div>
                         <div className="orchestrator-content">
                           <div className="orchestrator-header">
-                            <span className="orchestrator-name">PhD Assistant</span>
+                            <span className="orchestrator-name">Orchestrator</span>
                             <span className="message-timestamp">
                               {message.timestamp.toLocaleTimeString([], {
                                 hour: '2-digit', 
@@ -456,7 +456,7 @@ const ChatPage = ({ onNavigateToHome }) => {
                       <MessageCircle size={20} />
                     </div>
                     <div className="thinking-content">
-                      <span className="thinking-label">PhD Assistant is thinking...</span>
+                      <span className="thinking-label">Orchestrator is thinking...</span>
                       <div className="thinking-animation">
                         <div className="dot"></div>
                         <div className="dot"></div>

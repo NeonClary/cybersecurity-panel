@@ -2,7 +2,7 @@ import { BookOpen, Target, Brain } from 'lucide-react';
 
 export const advisors = {
   methodist: {
-    name: 'Dr. Methodist',
+    name: 'Methodist',
     role: 'Methodical Advisor',
     // Light theme colors
     color: '#3B82F6',
@@ -15,7 +15,7 @@ export const advisors = {
     description: 'Structured & Planning-focused'
   },
   theorist: {
-    name: 'Dr. Theorist',
+    name: 'Theorist',
     role: 'Theoretical Advisor',
     // Light theme colors
     color: '#8B5CF6',
@@ -28,7 +28,7 @@ export const advisors = {
     description: 'Abstract & Conceptual'
   },
   pragmatist: {
-    name: 'Dr. Pragmatist',
+    name: 'Pragmatist',
     role: 'Practical Advisor',
     // Light theme colors
     color: '#10B981',
