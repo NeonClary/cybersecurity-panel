@@ -23,7 +23,6 @@ app.add_middleware(
 )
 
 # Include route definitions
-# app.include_router(router)
 app.include_router(router)
 
 @app.get("/")
