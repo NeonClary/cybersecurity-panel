@@ -1,5 +1,8 @@
 from app.models.persona import Persona
 from typing import List
+from app.utils.chroma_client import query_persona_knowledge
+from app.llm.gemini_client import GeminiClient
+from app.llm.llm_client import LLMClient
 
 class ChatOrchestrator:
     def __init__(self):
@@ -21,3 +24,18 @@ class ChatOrchestrator:
         # This logic can be replaced with something smarter like a LLM deciding order based on chat context
 
         return self.personas
+
+        
+    
+async def answer_with_persona_context(question: str, persona: str) -> str:
+    llm: LLMClient = GeminiClient()
+    context_chunks = query_persona_knowledge(question, persona)
+    context = "\n".join(context_chunks) if context_chunks else "No relevant info found."
+        
+    system_prompt = f"You are a helpful assistant responding as a {persona}."
+    message_context = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Context:\n{context}\n\nQuestion:\n{question}"}
+    ]
+
+    return await llm.generate(system_prompt, message_context)

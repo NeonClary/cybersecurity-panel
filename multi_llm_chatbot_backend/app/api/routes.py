@@ -13,6 +13,9 @@ from pydantic import BaseModel
 from typing import Optional, List
 from fastapi import UploadFile, File
 from app.utils.document_extractor import extract_text_from_file
+from app.core.orchestrator import answer_with_persona_context
+from app.utils.chroma_client import add_persona_doc
+import hashlib
 from app.utils.file_limits import is_within_upload_limit
 
 router = APIRouter()
@@ -379,6 +382,22 @@ async def debug_personas():
         "context_length": len(session_context.full_log),
         "current_provider": current_provider
     }
+
+class PersonaQuery(BaseModel):
+    question: str
+    persona: str
+
+@router.post("/ask/")
+async def ask_question(query: PersonaQuery):
+    response = await answer_with_persona_context(query.question, query.persona)
+    
+    # Store Q&A in vector DB
+    combined_text = f"Q: {query.question}\nA: {response}"
+    doc_id = hashlib.md5(combined_text.encode()).hexdigest()  # Create a unique doc ID
+    
+    add_persona_doc(combined_text, query.persona, doc_id)
+
+    return {"response": response}
 
 @router.get("/uploaded-files")
 def get_uploaded_filenames():
