@@ -15,13 +15,9 @@ class ChatOrchestrator:
     def get_active_personas(self) -> List[str]:
         return self.active_personas
 
-    async def process_user_input(self, user_input: str, context: List[dict]):
-        responses = []
+    def get_response_order(self) ->List[str]:
 
-        for pid in self.active_personas:
-            persona = self.personas[pid]
-            reply = await persona.respond(context)
-            responses.append({"persona": persona.name, "response": reply})
-            context.append({"role": persona.id, "content": reply})
+        # I have created this function to be a placeholder for the actual logic of response sequencing
+        # This logic can be replaced with something smarter like a LLM deciding order based on chat context
 
-        return responses
+        return self.personas

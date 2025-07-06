@@ -129,7 +129,7 @@ class SeamlessOrchestrator:
         Ask briefly and naturally."""
         
         try:
-            question = await self.llm.generate(system_prompt, [{"role": "user", "content": context}])
+            question = await self.llm.generate(system_prompt, [{"role": "user", "content": context}], temperature=0.5, max_tokens=50)
             return question.strip()
         except Exception as e:
             print(f"Error generating orchestrator question: {e}")
