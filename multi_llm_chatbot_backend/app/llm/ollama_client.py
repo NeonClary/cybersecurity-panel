@@ -8,7 +8,7 @@ class OllamaClient(LLMClient):
     def __init__(self, model_name: str = "llama3.2:1b"):
         self.model_name = model_name
     
-    async def generate(self, system_prompt: str, context: List[dict]) -> str:
+    async def generate(self, system_prompt: str, context: List[dict], temperature: float, max_tokens: int) -> str:
         # Flatten context into a string
         formatted = "\n".join(f"{msg['role'].capitalize()}: {msg['content']}" for msg in context)
         full_prompt = f"{system_prompt}\n\n{formatted}\n\nAssistant:"
@@ -18,10 +18,10 @@ class OllamaClient(LLMClient):
             "prompt": full_prompt,
             "stream": False,
             "options": {
-                "temperature": 0.7,
+                "temperature": temperature,
                 "top_p": 0.9,
                 "top_k": 40,
-                "num_predict": 512,  # Limit response length for faster generation
+                "num_predict": max_tokens,  # Limit response length for faster generation
             }
         }
 

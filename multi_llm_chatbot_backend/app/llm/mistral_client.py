@@ -5,7 +5,7 @@ from app.llm.llm_client import LLMClient
 OLLAMA_URL = "http://localhost:11434/api/generate"
 
 class MistralClient(LLMClient):
-    async def generate(self, system_prompt: str, context: List[dict]) -> str:
+    async def generate(self, system_prompt: str, context: List[dict], temperature: float, max_tokens: int) -> str:
         # Flatten context into a string
         formatted = "\n".join(f"{msg['role'].capitalize()}: {msg['content']}" for msg in context)
         full_prompt = f"{system_prompt}\n\n{formatted}\n\nAssistant:"
@@ -13,6 +13,8 @@ class MistralClient(LLMClient):
         payload = {
             "model": "mistral",
             "prompt": full_prompt,
+            "temperature": temperature,
+            "num_predict": max_tokens,
             "stream": False
         }
 
