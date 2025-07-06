@@ -5,7 +5,7 @@ class LLMClient(ABC):
     """Abstract base class for all LLM clients"""
     
     @abstractmethod
-    async def generate(self, system_prompt: str, context: List[dict]) -> str:
+    async def generate(self, system_prompt: str, context: List[dict], temperature: float, max_tokens: int) -> str:
         """
         Generate a response using the LLM.
         

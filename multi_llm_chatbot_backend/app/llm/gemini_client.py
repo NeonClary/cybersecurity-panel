@@ -16,7 +16,7 @@ class GeminiClient(LLMClient):
         
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
     
-    async def generate(self, system_prompt: str, context: List[dict]) -> str:
+    async def generate(self, system_prompt: str, context: List[dict], temperature: float, max_tokens: int) -> str:
         # Build focused context - only include recent relevant messages
         recent_context = context[-3:] if len(context) > 3 else context
         
@@ -46,10 +46,10 @@ class GeminiClient(LLMClient):
         payload = {
             "contents": formatted_messages,
             "generationConfig": {
-                "temperature": 0.7,
+                "temperature": temperature,
                 "topK": 40,
                 "topP": 0.9,
-                "maxOutputTokens": 150,  # Reduced from default to ensure concise responses
+                "maxOutputTokens": max_tokens,  # Reduced from default to ensure concise responses
                 "stopSequences": ["Student:", "Question:", "\n\nStudent:", "\n\nQuestion:"]
             },
             "safetySettings": [
@@ -94,10 +94,12 @@ class GeminiClient(LLMClient):
                             
                             # Validate response quality
                             if len(text) < 20 or self._is_poor_quality(text):
+                                print("Poor Response Quality from Gemini")
                                 return self._get_fallback_response()
                             
                             return text
                 
+                print("Candidate Issue")
                 return self._get_fallback_response()
                 
         except httpx.HTTPError as e:
@@ -142,7 +144,7 @@ class GeminiClient(LLMClient):
         poor_indicators = [
             "Thank you, Dr." in response,  # AI confusion about identity
             "Assistant:" in response,
-            len(response.split()) > 100,  # Too verbose
+            len(response.split()) > 700,  # Too verbose
             response.count("?") > 3,  # Too many questions
             "excellent discussion, Assistant" in response,
         ]
