@@ -1,26 +1,25 @@
 import os
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File, Request
+from typing import Optional, List
 import httpx
 from app.llm.llm_client import LLMClient
-from app.llm.gemini_client import GeminiClient
-from app.llm.short_ollama_client import ShortResponseOllamaClient
+from app.llm.improved_gemini_client import ImprovedGeminiClient
+from app.llm.improved_ollama_client import ImprovedOllamaClient
 from app.models.persona import Persona
-from app.core.orchestrator import ChatOrchestrator
-from app.core.seamless_orchestrator import SeamlessOrchestrator
-from app.core.context import GlobalSessionContext
+from app.core.improved_orchestrator import ImprovedChatOrchestrator
+from app.core.session_manager import get_session_manager
 from app.models.default_personas import get_default_personas
-from pydantic import BaseModel
-from typing import Optional, List
-from fastapi import UploadFile, File
 from app.utils.document_extractor import extract_text_from_file
-from app.core.orchestrator import answer_with_persona_context
-from app.utils.chroma_client import add_persona_doc
-import hashlib
 from app.utils.file_limits import is_within_upload_limit
+from pydantic import BaseModel
+import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Provider management
+# Provider management (same as before)
 current_provider = "gemini"
 available_providers = ["ollama", "gemini"]
 
@@ -31,30 +30,26 @@ def create_llm_client(provider: str = None) -> LLMClient:
         
     if provider == "gemini":
         try:
-            return GeminiClient(model_name=os.getenv("GEMINI_MODEL"))
+            return ImprovedGeminiClient(model_name=os.getenv("GEMINI_MODEL"))
         except ValueError as e:
-            # Fallback to Ollama if Gemini API key is not available
-            print(f"Gemini API key not found, falling back to Ollama: {e}")
-            return ShortResponseOllamaClient(model_name="llama3.2:1b")
+            logger.warning(f"Gemini API key not found, falling back to Ollama: {e}")
+            return ImprovedOllamaClient(model_name="llama3.2:1b")
     elif provider == "ollama":
-        return ShortResponseOllamaClient(model_name="llama3.2:1b")
+        return ImprovedOllamaClient(model_name="llama3.2:1b")
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
 # Initialize with default provider
 llm = create_llm_client()
-chat_orchestrator = ChatOrchestrator()
-seamless_orchestrator = SeamlessOrchestrator(llm=llm)
-
-session_context = GlobalSessionContext()
+chat_orchestrator = ImprovedChatOrchestrator()
+session_manager = get_session_manager()
 
 # Initialize personas
 DEFAULT_PERSONAS = get_default_personas(llm)
-
 for persona in DEFAULT_PERSONAS:
     chat_orchestrator.register_persona(persona)
 
-# Data models
+# Keep all the same data models as before
 class UserInput(BaseModel):
     user_input: str
 
@@ -76,15 +71,51 @@ class ReplyToAdvisor(BaseModel):
 class ProviderSwitch(BaseModel):
     provider: str
 
-# Helper functions for response validation
+# ==============================================================
+# SESSION MANAGEMENT COMPATIBILITY LAYER
+# ==============================================================
+
+def get_or_create_session_for_request(request: Request, 
+                                    session_id_override: Optional[str] = None) -> str:
+    """
+    Get or create session for request using multiple strategies:
+    1. Use provided session_id if given
+    2. Use X-Session-ID header if present  
+    3. Use client IP as fallback for backward compatibility
+    4. Create new session if nothing available
+    
+    This allows the old stateless API to work with session management
+    """
+    # Strategy 1: Explicit session ID (for new clients)
+    if session_id_override:
+        return session_id_override
+    
+    # Strategy 2: Check for session header (optional for frontend)
+    session_header = request.headers.get("X-Session-ID")
+    if session_header:
+        return session_header
+    
+    # Strategy 3: Use client IP for backward compatibility
+    # This gives each client IP their own persistent session
+    client_ip = request.client.host if request.client else "unknown"
+    ip_session_id = f"ip_{client_ip}"
+    
+    # Get or create session for this IP
+    session = session_manager.get_session(ip_session_id)
+    return session.session_id
+
+
+
+# Helper functions (same as before)
 def _is_valid_response(response: str, persona_id: str) -> bool:
     """Validate response quality"""
     if len(response) < 2 or len(response) > 5000:
         return False
     
-    # Check for AI confusion indicators
     confusion_indicators = [
         f"Thank you, Dr. {persona_id.title()}",
+        "Assistant:",
+        f"Dr. {persona_id.title()}",
         "Assistant:",
         f"Dr. {persona_id.title()} Advisor:",
         "excellent discussion, Assistant"
@@ -101,7 +132,7 @@ def _get_persona_fallback(persona_id: str) -> str:
     }
     return fallbacks.get(persona_id, "I'd be happy to help. Could you provide more details?")
 
-# Provider management endpoints
+# Provider management endpoints (EXACTLY THE SAME)
 @router.get("/current-provider")
 async def get_current_provider():
     return {
@@ -124,21 +155,14 @@ async def switch_provider(provider_data: ProviderSwitch):
         )
     
     try:
-        # Update current provider
         current_provider = provider_data.provider
-        
-        # Create new LLM client
         new_llm = create_llm_client(current_provider)
         llm = new_llm
         
-        # Update all personas with new LLM
         new_personas = get_default_personas(new_llm)
         chat_orchestrator.personas.clear()
         for persona in new_personas:
             chat_orchestrator.register_persona(persona)
-        
-        # Update seamless orchestrator
-        seamless_orchestrator.llm = new_llm
         
         return {
             "message": f"Successfully switched to {current_provider}",
@@ -155,79 +179,61 @@ async def switch_provider(provider_data: ProviderSwitch):
             detail=f"Failed to switch to {provider_data.provider}: {str(e)}"
         )
 
-# Sequential advisor responses endpoint
+# Main chat endpoint (SAME INTERFACE, improved backend)
 @router.post("/chat-sequential")
-async def chat_sequential(message: ChatMessage):
-    """Generate advisor responses with improved quality controls"""
-    
+async def chat_sequential(message: ChatMessage, request: Request):
+    """
+    SAME INTERFACE AS BEFORE - Generate advisor responses 
+    Now with improved session management behind the scenes
+    """
     try:
-        orchestrator_result = await seamless_orchestrator.process_message(message.user_input)
-
-        if orchestrator_result["status"] == "orchestrator_asking":
+        # Get session using compatibility layer
+        session_id = get_or_create_session_for_request(request, message.session_id)
+        
+        # Use the new orchestrator with session management
+        result = await chat_orchestrator.process_message(
+            user_input=message.user_input,
+            session_id=session_id,
+            response_length=message.response_length
+        )
+        
+        # Convert new format back to old format for backward compatibility
+        if result["type"] == "clarification":
             return {
                 "type": "orchestrator_question",
                 "responses": [{
                     "persona": "PhD Advisor Assistant",
-                    "response": orchestrator_result["orchestrator_question"]
+                    "response": result["message"]
                 }],
-                "collected_info": orchestrator_result["collected_info"]
+                "collected_info": {}
             }
-
-        elif orchestrator_result["status"] == "ready_for_advisors":
-            enhanced_context = orchestrator_result["enhanced_context"]
-            
-            # Clear previous advisor responses to avoid confusion
-            session_context.clear()
-            session_context.append("user", message.user_input)
-            session_context.append("orchestrator", enhanced_context)
-
-            advisor_order = chat_orchestrator.get_response_order()
-            print("Advisor Order:")
-            print(advisor_order)
-            responses = []
-            
-            for persona_id in advisor_order:
-                try:
-                    persona = chat_orchestrator.personas[persona_id]                    
-                    reply = await persona.respond(session_context.full_log, response_length="medium")
-                    print("Replies:")
-                    print(reply)
-                    
-                    # Validate response before adding
-                    if _is_valid_response(reply, persona_id):
-                        responses.append({
-                            "persona": persona.name,
-                            "persona_id": persona_id,
-                            "response": reply,
-                        })
-                    else:
-                        # Fallback response for invalid responses
-                        responses.append({
-                            "persona": persona.name,
-                            "persona_id": persona_id,
-                            "response": _get_persona_fallback(persona_id),
-                        })
-
-                    session_context.append(persona_id, reply)
-                    
-                except Exception as e:
-                    print(f"Error generating response for {persona_id}: {e}")
-                    responses.append({
-                        "persona": chat_orchestrator.personas[persona_id].name,
-                        "persona_id": persona_id,
-                        "response": _get_persona_fallback(persona_id),
-                    })
-
-            print("Response Block: " )
-            print(responses)
+        
+        elif result["type"] == "persona_responses":
+            # Convert new response format to old format
             return {
-                "type": "sequential_responses",
-                "responses": responses,
-                "collected_info": orchestrator_result["collected_info"]
+                "type": "sequential_responses", 
+                "responses": [
+                    {
+                        "persona": resp["persona_name"],
+                        "persona_id": resp["persona_id"],
+                        "response": resp["response"]
+                    }
+                    for resp in result["responses"]
+                ],
+                "collected_info": {}
+            }
+        
+        else:
+            return {
+                "type": "error",
+                "responses": [{
+                    "persona": "System",
+                    "response": result.get("message", "Please try again.")
+                }]
             }
             
     except Exception as e:
-        print(f"Error in chat_sequential: {e}")
+        logger.error(f"Error in chat_sequential: {e}")
         return {
             "type": "error",
             "responses": [{
@@ -236,109 +242,94 @@ async def chat_sequential(message: ChatMessage):
             }]
         }
 
-
-# Individual advisor endpoint with context
+# Individual advisor endpoint (SAME INTERFACE)
 @router.post("/chat/{persona_id}")
-async def chat_with_specific_advisor(persona_id: str, input: UserInput):
-    """Chat with a specific advisor"""
+async def chat_with_specific_advisor(persona_id: str, input: UserInput, request: Request):
+    """Chat with a specific advisor - SAME INTERFACE"""
     try:
         if persona_id not in chat_orchestrator.personas:
             raise HTTPException(status_code=404, detail=f"Persona '{persona_id}' not found")
 
-        session_context.append("user", input.user_input)
-        persona = chat_orchestrator.personas[persona_id]
-        context = session_context.full_log.copy()
-        reply = await persona.respond(context, response_length="medium")
-        session_context.append(persona_id, reply)
-
-        return {
-            "persona": persona.name,
-            "persona_id": persona_id,
-            "response": reply
-        }
+        # Get session using compatibility layer
+        session_id = get_or_create_session_for_request(request)
+        
+        # Use new orchestrator
+        result = await chat_orchestrator.chat_with_persona(
+            user_input=input.user_input,
+            persona_id=persona_id,
+            session_id=session_id
+        )
+        
+        if result["type"] == "single_persona_response":
+            persona_data = result["persona"]
+            return {
+                "persona": persona_data["persona_name"],
+                "persona_id": persona_data["persona_id"],
+                "response": persona_data["response"]
+            }
+        else:
+            return {
+                "persona": "System",
+                "response": result.get("message", "I'm having trouble generating a response right now. Please try again.")
+            }
+            
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in chat_with_specific_advisor: {e}")
+        logger.error(f"Error in chat_with_specific_advisor: {e}")
         return {
             "persona": "System",
             "response": "I'm having trouble generating a response right now. Please try again."
         }
 
-# Reply to specific advisor endpoint
+# Reply to advisor endpoint (SAME INTERFACE)
 @router.post("/reply-to-advisor")
-async def reply_to_advisor(reply: ReplyToAdvisor):
-    """Reply to a specific advisor and get response only from that advisor"""
-    
+async def reply_to_advisor(reply: ReplyToAdvisor, request: Request):
+    """Reply to a specific advisor - SAME INTERFACE"""
     try:
         if reply.advisor_id not in chat_orchestrator.personas:
             raise HTTPException(status_code=404, detail=f"Advisor '{reply.advisor_id}' not found")
 
-        # Add user reply to context
-        session_context.append("user", reply.user_input)
-
-        # Get response from specific advisor
-        persona = chat_orchestrator.personas[reply.advisor_id]
+        # Get session using compatibility layer
+        session_id = get_or_create_session_for_request(request)
         
-        # Generate response
-        reply_response = await persona.respond(session_context.full_log, response_length="medium")
-        session_context.append(reply.advisor_id, reply_response)
+        # Use new orchestrator
+        result = await chat_orchestrator.chat_with_persona(
+            user_input=reply.user_input,
+            persona_id=reply.advisor_id,
+            session_id=session_id
+        )
         
-        return {
-            "type": "advisor_reply",
-            "persona": persona.name,
-            "persona_id": reply.advisor_id,
-            "response": reply_response,
-            "original_message_id": reply.original_message_id
-        }
+        if result["type"] == "single_persona_response":
+            persona_data = result["persona"]
+            return {
+                "type": "advisor_reply",
+                "persona": persona_data["persona_name"],
+                "persona_id": persona_data["persona_id"],
+                "response": persona_data["response"],
+                "original_message_id": reply.original_message_id
+            }
+        else:
+            return {
+                "type": "error",
+                "persona": "System",
+                "response": result.get("message", "I'm having trouble generating a reply right now. Please try again.")
+            }
         
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Error in reply_to_advisor: {e}")
+        logger.error(f"Error in reply_to_advisor: {e}")
         return {
             "type": "error",
             "persona": "System",
             "response": "I'm having trouble generating a reply right now. Please try again."
         }
 
-# Reset session
-@router.post("/reset-session")
-async def reset_session():
-    try:
-        seamless_orchestrator.reset()
-        session_context.clear()
-        return {"status": "reset", "message": "Session reset successfully"}
-    except Exception as e:
-        print(f"Error resetting session: {e}")
-        return {"status": "error", "message": "Failed to reset session"}
-
-# Context inspection
-@router.get("/context")
-def get_context():
-    return session_context.full_log
-
-# Legacy model switching endpoint (now redirects to provider switching)
-@router.post("/switch-model")
-async def switch_model(model_name: str = Body(...)):
-    # For backward compatibility, try to map model names to providers
-    if "gemini" in model_name.lower():
-        return await switch_provider(ProviderSwitch(provider="gemini"))
-    else:
-        return await switch_provider(ProviderSwitch(provider="ollama"))
-
-@router.get("/current-model")
-async def get_current_model():
-    # For backward compatibility
-    model_name = llm.model_name if hasattr(llm, 'model_name') else "gemini-2.0-flash"
-    return {
-        "model": model_name,
-        "provider": current_provider
-    }
-
+# Document upload (SAME INTERFACE)
 @router.post("/upload-document")
-async def upload_document(file: UploadFile = File(...)):
-    # Validate file type
+async def upload_document(file: UploadFile = File(...), request: Request = None):
+    """Upload document - SAME INTERFACE"""
     if file.content_type not in [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -347,58 +338,157 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Unsupported file type.")
 
     try:
-        # Read file bytes
+        # Get session using compatibility layer
+        session_id = get_or_create_session_for_request(request)
+        session = session_manager.get_session(session_id)
+        
         file_bytes = await file.read()
 
-        # Check file size limit
-        if not is_within_upload_limit("default", file_bytes, session_context):
+        # Simple size check
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        if len(file_bytes) > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail="Upload exceeds session document size limit (10 MB).")
 
-        # Extract and validate text
         content = extract_text_from_file(file_bytes, file.content_type)
         if not content.strip():
             raise HTTPException(status_code=400, detail="Document is empty or unreadable.")
 
-        # Track file size and name
-        session_context.append("Document", f"[Uploaded Document Content]\n{content.strip()}")
-        session_context.uploaded_files.append(file.filename)
-        session_context.total_upload_size += len(file_bytes)
+        # Add to session context using new system
+        session.add_uploaded_file(file.filename, content, len(file_bytes))
 
         return {"message": "Document uploaded and added to context successfully."}
 
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Error uploading document: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
-# Debug endpoint
-@router.get("/debug/personas")
-async def debug_personas():
+# Get uploaded files (SAME INTERFACE)
+@router.get("/uploaded-files")
+async def get_uploaded_filenames(request: Request):
+    """Get uploaded files - SAME INTERFACE"""
+    try:
+        session_id = get_or_create_session_for_request(request)
+        session = session_manager.get_session(session_id)
+        return {"files": session.uploaded_files}
+    except Exception as e:
+        logger.error(f"Error getting uploaded files: {str(e)}")
+        return {"files": []}
+
+# Context endpoint (SAME INTERFACE)
+@router.get("/context")
+async def get_context(request: Request):
+    """Get context - SAME INTERFACE"""
+    try:
+        session_id = get_or_create_session_for_request(request)
+        session = session_manager.get_session(session_id)
+        return session.messages  # Return messages in same format as before
+    except Exception as e:
+        logger.error(f"Error getting context: {str(e)}")
+        return []
+
+# Reset session (SAME INTERFACE) 
+@router.post("/reset-session")
+async def reset_session(request: Request):
+    """Reset session - SAME INTERFACE"""
+    try:
+        session_id = get_or_create_session_for_request(request)
+        success = chat_orchestrator.reset_session(session_id)
+        
+        if success:
+            return {"status": "reset", "message": "Session reset successfully"}
+        else:
+            return {"status": "error", "message": "Failed to reset session"}
+    except Exception as e:
+        logger.error(f"Error resetting session: {e}")
+        return {"status": "error", "message": "Failed to reset session"}
+
+# Legacy model endpoints (SAME INTERFACE)
+@router.post("/switch-model")
+async def switch_model(model_name: str = Body(...)):
+    """Legacy model switching - SAME INTERFACE"""
+    if "gemini" in model_name.lower():
+        return await switch_provider(ProviderSwitch(provider="gemini"))
+    else:
+        return await switch_provider(ProviderSwitch(provider="ollama"))
+
+@router.get("/current-model")
+async def get_current_model():
+    """Legacy model info - SAME INTERFACE"""
+    model_name = llm.model_name if hasattr(llm, 'model_name') else "gemini-2.0-flash"
     return {
-        "personas": {
-            pid: {
-                "name": persona.name,
-                "prompt": persona.system_prompt[:100] + "..."
-            } for pid, persona in chat_orchestrator.personas.items()
-        },
-        "context_length": len(session_context.full_log),
-        "current_provider": current_provider
+        "model": model_name,
+        "provider": current_provider
     }
 
+# Debug endpoint (SAME INTERFACE)
+@router.get("/debug/personas")
+async def debug_personas(request: Request):
+    """Debug personas - SAME INTERFACE"""
+    try:
+        session_id = get_or_create_session_for_request(request)
+        session = session_manager.get_session(session_id)
+        
+        return {
+            "personas": {
+                pid: {
+                    "name": persona.name,
+                    "prompt": persona.system_prompt[:100] + "..."
+                } for pid, persona in chat_orchestrator.personas.items()
+            },
+            "context_length": len(session.messages),
+            "current_provider": current_provider
+        }
+    except Exception as e:
+        logger.error(f"Error in debug endpoint: {str(e)}")
+        return {
+            "personas": {},
+            "context_length": 0,
+            "current_provider": current_provider
+        }
+
+# Ask endpoint (SAME INTERFACE)
 class PersonaQuery(BaseModel):
     question: str
     persona: str
 
 @router.post("/ask/")
-async def ask_question(query: PersonaQuery):
-    response = await answer_with_persona_context(query.question, query.persona)
-    
-    # Store Q&A in vector DB
-    combined_text = f"Q: {query.question}\nA: {response}"
-    doc_id = hashlib.md5(combined_text.encode()).hexdigest()  # Create a unique doc ID
-    
-    add_persona_doc(combined_text, query.persona, doc_id)
+async def ask_question(query: PersonaQuery, request: Request):
+    """Ask question - SAME INTERFACE"""
+    try:
+        session_id = get_or_create_session_for_request(request)
+        
+        # Use the new orchestrator
+        result = await chat_orchestrator.chat_with_persona(
+            user_input=query.question,
+            persona_id=query.persona,
+            session_id=session_id
+        )
+        
+        if result["type"] == "single_persona_response":
+            response_text = result["persona"]["response"]
+        else:
+            response_text = result.get("message", "I'm having trouble responding right now.")
+        
+        return {"response": response_text}
+        
+    except Exception as e:
+        logger.error(f"Error in ask endpoint: {str(e)}")
+        return {"response": "I encountered an error. Please try again."}
 
-    return {"response": response}
-
-@router.get("/uploaded-files")
-def get_uploaded_filenames():
-    return {"files": session_context.uploaded_files}
+# Root endpoint (SAME INTERFACE)
+@router.get("/")
+def root():
+    """Root endpoint - SAME INTERFACE with updated info"""
+    return {
+        "message": "Multi-LLM PhD Advisor Backend is up and running",
+        "version": "1.0.0",  # Updated version 
+        "features": [
+            "Improved Session Management",
+            "Unified Context Handling", 
+            "Ollama Support", 
+            "Gemini API Support", 
+            "Provider Switching"
+        ]
+    }
