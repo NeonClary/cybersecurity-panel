@@ -1,10 +1,45 @@
-import React from 'react';
-import { Reply } from 'lucide-react';
+import React, { useState } from 'react';
+import { Reply, Copy, Check, Maximize2 } from 'lucide-react';
 import { advisors, getAdvisorColors } from '../data/advisors';
 import { useTheme } from '../contexts/ThemeContext';
 
-const MessageBubble = ({ message, onClick, showReplyButton = false }) => {
+const MessageBubble = ({ 
+  message, 
+  onReply, 
+  onCopy, 
+  onExpand,
+  showReplyButton = false 
+}) => {
   const { isDark } = useTheme();
+  const [showTooltip, setShowTooltip] = useState(null);
+  const [copiedStates, setCopiedStates] = useState({});
+
+  const handleCopy = async (messageId, content) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedStates(prev => ({ ...prev, [messageId]: true }));
+      if (onCopy) onCopy(messageId, content);
+      
+      // Reset the copied state after 2 seconds
+      setTimeout(() => {
+        setCopiedStates(prev => ({ ...prev, [messageId]: false }));
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to copy text: ', err);
+    }
+  };
+
+  const handleExpand = (messageId, advisorId) => {
+    if (onExpand) onExpand(messageId, advisorId);
+  };
+
+  const showTooltipWithDelay = (tooltipType) => {
+    setTimeout(() => setShowTooltip(tooltipType), 500);
+  };
+
+  const hideTooltip = () => {
+    setShowTooltip(null);
+  };
 
   if (message.type === 'user') {
     return (
@@ -26,6 +61,7 @@ const MessageBubble = ({ message, onClick, showReplyButton = false }) => {
     const advisor = advisors[message.advisorId];
     const Icon = advisor.icon;
     const colors = getAdvisorColors(message.advisorId, isDark);
+    const isCopied = copiedStates[message.id];
 
     return (
       <div className="advisor-message-container">
@@ -36,12 +72,11 @@ const MessageBubble = ({ message, onClick, showReplyButton = false }) => {
           <Icon style={{ color: colors.color }} />
         </div>
         <div 
-          className={`advisor-message-bubble ${showReplyButton ? 'clickable' : ''}`}
+          className="advisor-message-bubble"
           style={{ 
             backgroundColor: colors.bgColor,
             borderColor: colors.color + '40'
           }}
-          onClick={onClick}
         >
           <div className="advisor-message-header">
             <h4 
@@ -50,6 +85,7 @@ const MessageBubble = ({ message, onClick, showReplyButton = false }) => {
             >
               {advisor.name}
               {message.isReply && <span className="reply-badge">↳ Reply</span>}
+              {message.isExpansion && <span className="expansion-badge">⤴ Expanded</span>}
             </h4>
             <span 
               className="message-time"
@@ -74,20 +110,66 @@ const MessageBubble = ({ message, onClick, showReplyButton = false }) => {
           </p>
           {showReplyButton && (
             <div className="message-actions">
-              <button 
-                className="reply-button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClick();
-                }}
-                style={{ 
-                  color: colors.color,
-                  borderColor: colors.color + '40'
-                }}
-              >
-                <Reply size={14} />
-                <span>Reply</span>
-              </button>
+              <div className="action-buttons">
+                {/* Reply Button */}
+                <div className="tooltip-container">
+                  <button 
+                    className="action-button"
+                    onClick={() => onReply && onReply(message)}
+                    onMouseEnter={() => showTooltipWithDelay('reply')}
+                    onMouseLeave={hideTooltip}
+                    style={{ 
+                      color: colors.color,
+                      borderColor: colors.color + '40'
+                    }}
+                  >
+                    <Reply size={14} />
+                  </button>
+                  {showTooltip === 'reply' && (
+                    <div className="tooltip">Reply to this message</div>
+                  )}
+                </div>
+
+                {/* Copy Button */}
+                <div className="tooltip-container">
+                  <button 
+                    className="action-button"
+                    onClick={() => handleCopy(message.id, message.content)}
+                    onMouseEnter={() => showTooltipWithDelay('copy')}
+                    onMouseLeave={hideTooltip}
+                    style={{ 
+                      color: isCopied ? '#10B981' : colors.color,
+                      borderColor: isCopied ? '#10B98140' : colors.color + '40'
+                    }}
+                  >
+                    {isCopied ? <Check size={14} /> : <Copy size={14} />}
+                  </button>
+                  {showTooltip === 'copy' && (
+                    <div className="tooltip">
+                      {isCopied ? 'Copied!' : 'Copy response'}
+                    </div>
+                  )}
+                </div>
+
+                {/* Expand/Elaborate Button */}
+                <div className="tooltip-container">
+                  <button 
+                    className="action-button"
+                    onClick={() => handleExpand(message.id, message.advisorId)}
+                    onMouseEnter={() => showTooltipWithDelay('expand')}
+                    onMouseLeave={hideTooltip}
+                    style={{ 
+                      color: colors.color,
+                      borderColor: colors.color + '40'
+                    }}
+                  >
+                    <Maximize2 size={14} />
+                  </button>
+                  {showTooltip === 'expand' && (
+                    <div className="tooltip">Expand on this response</div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>
