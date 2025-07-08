@@ -302,6 +302,117 @@ const ChatPage = ({ onNavigateToHome }) => {
     }
   };
 
+  const handleCopyMessage = (messageId, content) => {
+  // Optional: Show a toast notification or add to message history
+  console.log(`Copied message ${messageId}: ${content.substring(0, 50)}...`);
+  
+  // could add a temporary notification here if desired
+  // const notificationMessage = {
+  //   id: generateMessageId(),
+  //   type: 'system',
+  //   content: '✅ Response copied to clipboard',
+  //   timestamp: new Date()
+  // };
+  
+  // setMessages(prev => [...prev, notificationMessage]);
+  
+  // // Remove the notification after 3 seconds
+  // setTimeout(() => {
+  //   setMessages(prev => prev.filter(msg => msg.id !== notificationMessage.id));
+  // }, 3000);
+  };
+
+  const handleExpandMessage = async (messageId, advisorId) => {
+    const advisor = advisors[advisorId];
+    
+    try {
+      setIsLoading(true);
+      setThinkingAdvisors([advisorId]);
+
+      // Find the original message to expand on
+      const originalMessage = messages.find(msg => msg.id === messageId);
+      
+      if (!originalMessage) {
+        console.error('Original message not found');
+        return;
+      }
+
+      // Create advisor-specific expansion prompts
+      const advisorSpecificPrompts = {
+        'methodologist': `Please expand on your previous response with more methodological detail. Include specific research methods, data collection techniques, analytical approaches, and methodological considerations that would be relevant. Provide practical examples and step-by-step guidance where applicable.`,
+        'theorist': `Please elaborate on your previous response by exploring the theoretical frameworks and conceptual foundations in greater depth. Include additional theoretical perspectives, scholarly context, and conceptual analysis that would enrich understanding of the topic.`,
+        'pragmatist': `Please expand on your previous response with more practical, actionable details. Include specific examples, concrete next steps, real-world applications, and practical strategies that can be immediately implemented.`
+      };
+
+      // Use advisor-specific prompt or general expansion prompt
+      const expandPrompt = advisorSpecificPrompts[advisorId] || 
+        `Please expand and elaborate on your previous response in more detail. Provide additional insights, practical examples, and deeper analysis that would be helpful for understanding and implementing your advice.`;
+
+      // Use the existing /reply-to-advisor endpoint
+      const response = await fetch('http://localhost:8000/reply-to-advisor', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          advisor_id: advisorId,
+          user_input: expandPrompt,
+          original_message_id: messageId
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setThinkingAdvisors([]);
+
+      if (data.type === 'advisor_reply') {
+        const expandedMessage = {
+          id: generateMessageId(),
+          type: 'advisor',
+          advisorId: advisorId,
+          content: data.response,
+          timestamp: new Date(),
+          isExpansion: true, // Mark this as an expansion
+          expandedFrom: messageId // Reference to original message
+        };
+        setMessages(prev => [...prev, expandedMessage]);
+      } else if (data.type === 'error') {
+        const errorMessage = {
+          id: generateMessageId(),
+          type: 'error',
+          content: data.response,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+
+    } catch (error) {
+      console.error('Error expanding message:', error);
+      const errorMessage = {
+        id: generateMessageId(),
+        type: 'error',
+        content: 'Sorry, I encountered an error while expanding the response. Please try again.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+      setThinkingAdvisors([]);
+    }
+  };
+
+  const handleReplyToMessage = (message) => {
+    const advisor = advisors[message.advisorId];
+    setReplyingTo({
+      advisorId: message.advisorId,
+      messageId: message.id,
+      advisorName: advisor.name
+    });
+  };
+
   const handleMessageClick = (message) => {
     if (message.type === 'advisor') {
       const advisor = advisors[message.advisorId];
@@ -443,7 +554,9 @@ const ChatPage = ({ onNavigateToHome }) => {
                     <MessageBubble 
                       key={message.id || index} 
                       message={message} 
-                      onClick={() => handleMessageClick(message)}
+                      onReply={handleReplyToMessage}
+                      onCopy={handleCopyMessage}
+                      onExpand={handleExpandMessage}
                       showReplyButton={message.type === 'advisor'}
                     />
                   );
