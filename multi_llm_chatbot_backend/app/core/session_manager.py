@@ -4,49 +4,106 @@ import uuid
 from dataclasses import dataclass, field
 import asyncio
 from threading import Lock
+from app.core.rag_manager import get_rag_manager
 
 @dataclass
 class ConversationContext:
-    """Individual conversation context for a session"""
-    session_id: str
-    messages: List[dict] = field(default_factory=list)
-    uploaded_files: List[str] = field(default_factory=list)
-    total_upload_size: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.now)
-    last_accessed: datetime = field(default_factory=datetime.now)
+    """Enhanced conversation context for RAG integration"""
     
+    def __init__(self, session_id: str = None):
+        self.session_id = session_id or str(uuid.uuid4())
+        self.messages: List[Dict[str, str]] = []
+        self.uploaded_files: List[str] = []  # Now just stores filenames, not content
+        self.total_upload_size: int = 0  # For tracking purposes only
+        self.created_at = datetime.now()
+        self.last_accessed = datetime.now()
+        
+        # New RAG-related attributes
+        self.document_chunks_count: int = 0  # Track total chunks in vector DB
+        self.last_retrieval_stats: Dict[str, Any] = {}  # Last RAG retrieval info
+
     def append_message(self, role: str, content: str):
-        """Add a message to the conversation"""
+        """Add a message to the conversation history"""
         self.messages.append({
             "role": role,
             "content": content,
             "timestamp": datetime.now().isoformat()
         })
         self.last_accessed = datetime.now()
-    
-    def get_recent_messages(self, limit: int = 20) -> List[dict]:
-        """Get recent messages with limit"""
-        return self.messages[-limit:] if len(self.messages) > limit else self.messages
-    
-    def get_messages_by_role(self, role: str) -> List[dict]:
-        """Get all messages from a specific role"""
-        return [msg for msg in self.messages if msg['role'] == role]
-    
+
     def clear_messages(self):
-        """Clear all messages but preserve metadata"""
-        self.messages = []
+        """Clear conversation messages but keep document references"""
+        self.messages.clear()
         self.last_accessed = datetime.now()
+
+    def get_messages_by_role(self, role: str) -> List[Dict[str, str]]:
+        """Get all messages by a specific role - ADDED METHOD"""
+        return [msg for msg in self.messages if msg.get('role') == role]
     
+    def get_recent_messages(self, count: int = 10) -> List[Dict[str, str]]:
+        """Get the most recent N messages"""
+        return self.messages[-count:] if len(self.messages) > count else self.messages
+    
+    def get_user_messages(self) -> List[Dict[str, str]]:
+        """Get all user messages"""
+        return self.get_messages_by_role('user')
+    
+    def get_latest_user_message(self) -> Optional[str]:
+        """Get the content of the most recent user message"""
+        user_messages = self.get_user_messages()
+        return user_messages[-1]['content'] if user_messages else None
+
     def add_uploaded_file(self, filename: str, content: str, file_size: int):
-        """Add uploaded file content to context"""
+        """
+        Add uploaded file - MODIFIED FOR RAG
+        
+        Now we only track the filename and size in session context.
+        The actual content goes to the vector database via RAG manager.
+        """
         self.uploaded_files.append(filename)
         self.total_upload_size += file_size
-        self.append_message("document", f"[Uploaded: {filename}]\n{content}")
-    
+        
+        # Add a system message noting the upload (not the full content)
+        self.append_message("system", f"Document '{filename}' uploaded and processed into vector database")
+        
+        # Update document chunk count from RAG manager
+        try:
+            rag_manager = get_rag_manager()
+            stats = rag_manager.get_document_stats(self.session_id)
+            self.document_chunks_count = stats.get("total_chunks", 0)
+        except Exception as e:
+            print(f"Warning: Could not update chunk count: {e}")
+
     def get_context_size(self) -> int:
-        """Calculate total context size in characters"""
+        """Calculate conversation context size in characters (excluding vector DB documents)"""
         return sum(len(msg['content']) for msg in self.messages)
+    
+    def get_rag_stats(self) -> Dict[str, Any]:
+        """Get statistics about documents in vector database for this session"""
+        try:
+            rag_manager = get_rag_manager()
+            return rag_manager.get_document_stats(self.session_id)
+        except Exception as e:
+            return {"error": str(e), "total_chunks": 0, "total_documents": 0}
+
+    def clear_all_data(self):
+        """Clear both conversation and vector database documents"""
+        # Clear conversation messages
+        self.clear_messages()
+        
+        # Clear vector database documents
+        try:
+            rag_manager = get_rag_manager()
+            success = rag_manager.delete_session_documents(self.session_id)
+            if success:
+                self.uploaded_files.clear()
+                self.total_upload_size = 0
+                self.document_chunks_count = 0
+                self.append_message("system", "All conversation history and documents cleared")
+            else:
+                self.append_message("system", "Conversation cleared, but some documents may remain")
+        except Exception as e:
+            self.append_message("system", f"Conversation cleared, document cleanup failed: {str(e)}")
 
 class SessionManager:
     """Thread-safe session manager for handling multiple user conversations"""
@@ -115,6 +172,42 @@ class SessionManager:
         
         if expired_sessions:
             print(f"Cleaned up {len(expired_sessions)} expired sessions")
+    
+    def reset_session_completely(self, session_id: str) -> bool:
+        """
+        Completely reset a session - both conversation and vector database documents
+        """
+        with self.lock:
+            if session_id in self.sessions:
+                session = self.sessions[session_id]
+                session.clear_all_data()
+                return True
+            return False
+    
+    def get_session_stats(self, session_id: str) -> Dict[str, Any]:
+        """Get comprehensive session statistics including RAG data"""
+        with self.lock:
+            if session_id not in self.sessions:
+                return {"error": "Session not found"}
+            
+            session = self.sessions[session_id]
+            
+            # Get basic session stats
+            basic_stats = {
+                "session_id": session_id,
+                "message_count": len(session.messages),
+                "uploaded_files": session.uploaded_files,
+                "total_upload_size": session.total_upload_size,
+                "context_size_chars": session.get_context_size(),
+                "created_at": session.created_at.isoformat(),
+                "last_accessed": session.last_accessed.isoformat()
+            }
+            
+            # Get RAG stats
+            rag_stats = session.get_rag_stats()
+            
+            # Combine stats
+            return {**basic_stats, "rag_stats": rag_stats}
 
 # Global session manager instance
 session_manager = SessionManager()

@@ -138,270 +138,245 @@ const ChatPage = ({ onNavigateToHome }) => {
   };
 
   const handleSendMessage = async (inputMessage) => {
-    if (replyingTo) {
-      await handleReplyToAdvisor(inputMessage, replyingTo);
-      return;
+  if (replyingTo) {
+    await handleReplyToAdvisor(inputMessage, replyingTo);
+    return;
+  }
+
+  const userMessage = {
+    id: generateMessageId(),
+    type: 'user',
+    content: inputMessage,
+    timestamp: new Date()
+  };
+  setMessages(prev => [...prev, userMessage]);
+  
+  setIsLoading(true);
+  setThinkingAdvisors(['system']);
+
+  try {
+    const response = await fetch('http://localhost:8000/chat-sequential', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_input: inputMessage
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
 
-    const userMessage = {
-      id: generateMessageId(),
-      type: 'user',
-      content: inputMessage,
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, userMessage]);
-    
-    setIsLoading(true);
-    setThinkingAdvisors(['system']);
+    const data = await response.json();
+    console.log('Backend response:', data); // Debug log
 
-    try {
-      const response = await fetch('http://localhost:8000/chat-sequential', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_input: inputMessage
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setCollectedInfo(data.collected_info || {});
-      setThinkingAdvisors([]);
-
-      if (data.type === 'orchestrator_question') {
-        const orchestratorMessage = {
-          id: generateMessageId(),
-          type: 'orchestrator',
-          content: data.responses[0].response,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, orchestratorMessage]);
-      } else if (data.type === 'sequential_responses') {
-        const advisorIds = ['methodist', 'theorist', 'pragmatist'];
-        
-        for (let i = 0; i < advisorIds.length; i++) {
-          const advisorId = advisorIds[i];
-          const response = data.responses.find(r => r.persona_id === advisorId);
-          
-          if (response) {
-            setThinkingAdvisors([advisorId]);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            const advisorMessage = {
-              id: generateMessageId(),
-              type: 'advisor',
-              advisorId: advisorId,
-              content: response.response,
-              timestamp: new Date()
-            };
-            
-            setMessages(prev => [...prev, advisorMessage]);
-            setThinkingAdvisors([]);
-            
-            if (i < advisorIds.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 500));
-            }
-          }
+    if (data.type === 'persona_responses' && data.responses) {
+      // Map each advisor response with RAG metadata
+      const advisorMessages = data.responses.map((advisor, index) => ({
+        id: generateMessageId(),
+        type: 'advisor',
+        advisorId: advisor.persona_id,
+        advisorName: advisor.persona_name,
+        content: advisor.response,
+        timestamp: new Date(),
+        // NEW: Map RAG metadata to the structure MessageBubble expects
+        ragMetadata: {
+          usedDocuments: advisor.used_documents || false,
+          chunksUsed: advisor.document_chunks_used || 0,
+          documentChunks: advisor.retrieved_chunks || []
         }
-      } else if (data.type === 'error') {
-        const errorMessage = {
+      }));
+
+      setMessages(prev => [...prev, ...advisorMessages]);
+
+      // Optional: Add RAG summary message if documents were used
+      const ragInfo = data.rag_info || {};
+      if (ragInfo.personas_using_documents > 0) {
+        const ragSummaryMessage = {
           id: generateMessageId(),
-          type: 'error',
-          content: data.responses[0].response,
+          type: 'system',
+          content: `📚 ${ragInfo.personas_using_documents}/${data.responses.length} advisors referenced your uploaded documents (${ragInfo.total_document_chunks_used} chunks used)`,
           timestamp: new Date()
         };
-        setMessages(prev => [...prev, errorMessage]);
+        setMessages(prev => [...prev, ragSummaryMessage]);
       }
 
-    } catch (error) {
-      console.error('Error sending message:', error);
+    } else if (data.type === 'error') {
       const errorMessage = {
         id: generateMessageId(),
         type: 'error',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: data.message || 'An error occurred. Please try again.',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      setThinkingAdvisors([]);
     }
+
+    } catch (error) {
+        console.error('Error sending message:', error);
+        const errorMessage = {
+          id: generateMessageId(),
+          type: 'error',
+          content: 'Sorry, I encountered an error. Please try again.',
+          timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+  }
+
+    setIsLoading(false);
+    setThinkingAdvisors([]);
   };
 
-  const handleReplyToAdvisor = async (inputMessage, replyInfo) => {
-    const userMessage = {
-      id: generateMessageId(),
-      type: 'user',
-      content: inputMessage,
-      timestamp: new Date(),
-      replyingTo: replyInfo
-    };
-    setMessages(prev => [...prev, userMessage]);
-    
-    setIsLoading(true);
-    setThinkingAdvisors([replyInfo.advisorId]);
+  const handleReplyToAdvisor = async (inputMessage, replyContext) => {
+  const replyMessage = {
+    id: generateMessageId(),
+    type: 'user',
+    content: inputMessage,
+    replyTo: {
+      advisorId: replyContext.advisorId,
+      advisorName: replyContext.advisorName,
+      messageId: replyContext.messageId
+    },
+    timestamp: new Date()
+  };
+  setMessages(prev => [...prev, replyMessage]);
+  
+  setIsLoading(true);
+  setThinkingAdvisors([replyContext.advisorId]);
 
-    try {
-      const response = await fetch('http://localhost:8000/reply-to-advisor', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_input: inputMessage,
-          advisor_id: replyInfo.advisorId,
-          original_message_id: replyInfo.messageId
-        }),
-      });
+  try {
+    const response = await fetch('http://localhost:8000/reply-to-advisor', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_input: inputMessage,
+        advisor_id: replyContext.advisorId,
+        original_message_id: replyContext.messageId
+      }),
+    });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setThinkingAdvisors([]);
-
-      if (data.type === 'advisor_reply') {
-        const replyMessage = {
-          id: generateMessageId(),
-          type: 'advisor',
-          advisorId: replyInfo.advisorId,
-          content: data.response,
-          timestamp: new Date(),
-          isReply: true
-        };
-        setMessages(prev => [...prev, replyMessage]);
-      } else if (data.type === 'error') {
-        const errorMessage = {
-          id: generateMessageId(),
-          type: 'error',
-          content: data.response,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      }
-
-    } catch (error) {
-      console.error('Error sending reply:', error);
-      const errorMessage = {
-        id: generateMessageId(),
-        type: 'error',
-        content: 'Sorry, I encountered an error. Please try again.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      setThinkingAdvisors([]);
-      setReplyingTo(null);
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
+
+    const data = await response.json();
+
+    if (data.type === 'advisor_reply') {
+      const replyResponseMessage = {
+        id: generateMessageId(),
+        type: 'advisor',
+        advisorId: data.persona_id,
+        advisorName: data.persona,
+        content: data.response,
+        isReply: true,
+        timestamp: new Date(),
+        // NEW: Map RAG metadata for reply responses too
+        ragMetadata: {
+          usedDocuments: data.used_documents || false,
+          chunksUsed: data.document_chunks_used || 0,
+          documentChunks: data.retrieved_chunks || []
+        }
+      };
+      setMessages(prev => [...prev, replyResponseMessage]);
+    }
+
+  } catch (error) {
+    console.error('Error replying to advisor:', error);
+    const errorMessage = {
+      id: generateMessageId(),
+      type: 'error',
+      content: 'Sorry, I encountered an error with your reply. Please try again.',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, errorMessage]);
+  }
+
+    setIsLoading(false);
+    setThinkingAdvisors([]);
+    setReplyingTo(null);
   };
 
   const handleCopyMessage = (messageId, content) => {
   // Optional: Show a toast notification or add to message history
   console.log(`Copied message ${messageId}: ${content.substring(0, 50)}...`);
-  
-  // could add a temporary notification here if desired
-  // const notificationMessage = {
-  //   id: generateMessageId(),
-  //   type: 'system',
-  //   content: '✅ Response copied to clipboard',
-  //   timestamp: new Date()
-  // };
-  
-  // setMessages(prev => [...prev, notificationMessage]);
-  
-  // // Remove the notification after 3 seconds
-  // setTimeout(() => {
-  //   setMessages(prev => prev.filter(msg => msg.id !== notificationMessage.id));
-  // }, 3000);
   };
 
-  const handleExpandMessage = async (messageId, advisorId) => {
-    const advisor = advisors[advisorId];
-    
-    try {
-      setIsLoading(true);
-      setThinkingAdvisors([advisorId]);
+const handleExpandMessage = async (messageId, advisorId) => {
+  const advisor = advisors[advisorId];
+  if (!advisor) return;
 
-      // Find the original message to expand on
-      const originalMessage = messages.find(msg => msg.id === messageId);
-      
-      if (!originalMessage) {
-        console.error('Original message not found');
-        return;
-      }
+  const originalMessage = messages.find(msg => msg.id === messageId);
+  if (!originalMessage) return;
 
-      // Create advisor-specific expansion prompts
-      const advisorSpecificPrompts = {
-        'methodologist': `Please expand on your previous response with more methodological detail. Include specific research methods, data collection techniques, analytical approaches, and methodological considerations that would be relevant. Provide practical examples and step-by-step guidance where applicable.`,
-        'theorist': `Please elaborate on your previous response by exploring the theoretical frameworks and conceptual foundations in greater depth. Include additional theoretical perspectives, scholarly context, and conceptual analysis that would enrich understanding of the topic.`,
-        'pragmatist': `Please expand on your previous response with more practical, actionable details. Include specific examples, concrete next steps, real-world applications, and practical strategies that can be immediately implemented.`
-      };
+  const expandPrompt = `Please expand on your previous response: "${originalMessage.content.substring(0, 100)}..." Provide more detail and depth.`;
+  
+  const expandMessage = {
+    id: generateMessageId(),
+    type: 'user',
+    content: expandPrompt,
+    timestamp: new Date(),
+    isExpandRequest: true,
+    expandsMessageId: messageId
+  };
+  setMessages(prev => [...prev, expandMessage]);
+  
+  setIsLoading(true);
+  setThinkingAdvisors([advisorId]);
 
-      // Use advisor-specific prompt or general expansion prompt
-      const expandPrompt = advisorSpecificPrompts[advisorId] || 
-        `Please expand and elaborate on your previous response in more detail. Provide additional insights, practical examples, and deeper analysis that would be helpful for understanding and implementing your advice.`;
+  try {
+    const response = await fetch(`http://localhost:8000/chat/${advisorId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_input: expandPrompt,
+        response_length: 'long'
+      }),
+    });
 
-      // Use the existing /reply-to-advisor endpoint
-      const response = await fetch('http://localhost:8000/reply-to-advisor', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          advisor_id: advisorId,
-          user_input: expandPrompt,
-          original_message_id: messageId
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setThinkingAdvisors([]);
-
-      if (data.type === 'advisor_reply') {
-        const expandedMessage = {
-          id: generateMessageId(),
-          type: 'advisor',
-          advisorId: advisorId,
-          content: data.response,
-          timestamp: new Date(),
-          isExpansion: true, // Mark this as an expansion
-          expandedFrom: messageId // Reference to original message
-        };
-        setMessages(prev => [...prev, expandedMessage]);
-      } else if (data.type === 'error') {
-        const errorMessage = {
-          id: generateMessageId(),
-          type: 'error',
-          content: data.response,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      }
-
-    } catch (error) {
-      console.error('Error expanding message:', error);
-      const errorMessage = {
-        id: generateMessageId(),
-        type: 'error',
-        content: 'Sorry, I encountered an error while expanding the response. Please try again.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsLoading(false);
-      setThinkingAdvisors([]);
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
+
+    const data = await response.json();
+
+    if (data.type === 'single_persona_response' && data.persona) {
+      const expandedMessage = {
+        id: generateMessageId(),
+        type: 'advisor',
+        advisorId: advisorId,
+        advisorName: advisor.name,
+        content: data.persona.response,
+        isExpansion: true,
+        expandsMessageId: messageId,
+        timestamp: new Date(),
+        // NEW: Map RAG metadata for expanded responses
+        ragMetadata: {
+          usedDocuments: data.persona.used_documents || false,
+          chunksUsed: data.persona.document_chunks_used || 0,
+          documentChunks: data.persona.retrieved_chunks || []
+        }
+      };
+      setMessages(prev => [...prev, expandedMessage]);
+    }
+
+  } catch (error) {
+    console.error('Error expanding message:', error);
+    const errorMessage = {
+      id: generateMessageId(),
+      type: 'error',
+      content: 'Sorry, I encountered an error expanding the response. Please try again.',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, errorMessage]);
+  }
+
+    setIsLoading(false);
+    setThinkingAdvisors([]);
   };
 
   const handleReplyToMessage = (message) => {

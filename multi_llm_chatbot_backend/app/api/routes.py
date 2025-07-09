@@ -8,6 +8,7 @@ from app.llm.improved_ollama_client import ImprovedOllamaClient
 from app.models.persona import Persona
 from app.core.improved_orchestrator import ImprovedChatOrchestrator
 from app.core.session_manager import get_session_manager
+from app.core.rag_manager import get_rag_manager
 from app.models.default_personas import get_default_personas
 from app.utils.document_extractor import extract_text_from_file
 from app.utils.file_limits import is_within_upload_limit
@@ -182,64 +183,38 @@ async def switch_provider(provider_data: ProviderSwitch):
 # Main chat endpoint (SAME INTERFACE, improved backend)
 @router.post("/chat-sequential")
 async def chat_sequential(message: ChatMessage, request: Request):
-    """
-    SAME INTERFACE AS BEFORE - Generate advisor responses 
-    Now with improved session management behind the scenes
-    """
+    """Generate advisor responses - ENHANCED with RAG"""
     try:
-        # Get session using compatibility layer
         session_id = get_or_create_session_for_request(request, message.session_id)
         
-        # Use the new orchestrator with session management
+        # Process message through improved orchestrator (now with RAG)
         result = await chat_orchestrator.process_message(
             user_input=message.user_input,
             session_id=session_id,
-            response_length=message.response_length
+            response_length=message.response_length or "medium"
         )
         
-        # Convert new format back to old format for backward compatibility
-        if result["type"] == "clarification":
-            return {
-                "type": "orchestrator_question",
-                "responses": [{
-                    "persona": "PhD Advisor Assistant",
-                    "response": result["message"]
-                }],
-                "collected_info": {}
-            }
-        
-        elif result["type"] == "persona_responses":
-            # Convert new response format to old format
-            return {
-                "type": "sequential_responses", 
-                "responses": [
-                    {
-                        "persona": resp["persona_name"],
-                        "persona_id": resp["persona_id"],
-                        "response": resp["response"]
-                    }
-                    for resp in result["responses"]
-                ],
-                "collected_info": {}
-            }
-        
-        else:
-            return {
-                "type": "error",
-                "responses": [{
-                    "persona": "System",
-                    "response": result.get("message", "Please try again.")
-                }]
-            }
+        # Add RAG information to response
+        if result["type"] == "persona_responses":
+            # Count how many personas used documents
+            personas_with_docs = sum(1 for r in result["responses"] if r.get("used_documents", False))
+            total_chunks_used = sum(r.get("document_chunks_used", 0) for r in result["responses"])
             
+            result["rag_info"] = {
+                "personas_using_documents": personas_with_docs,
+                "total_document_chunks_used": total_chunks_used,
+                "rag_enabled": True
+            }
+        
+        return result
+        
     except Exception as e:
-        logger.error(f"Error in chat_sequential: {e}")
+        logger.error(f"Error in chat-sequential: {str(e)}")
         return {
             "type": "error",
-            "responses": [{
-                "persona": "System",
-                "response": "I'm having trouble processing your request. Could you please try again?"
-            }]
+            "message": "I encountered an error processing your request. Please try again.",
+            "error": str(e),
+            "rag_enabled": False
         }
 
 # Individual advisor endpoint (SAME INTERFACE)
@@ -326,13 +301,21 @@ async def reply_to_advisor(reply: ReplyToAdvisor, request: Request):
             "response": "I'm having trouble generating a reply right now. Please try again."
         }
 
-# Document upload (SAME INTERFACE)
 @router.post("/upload-document")
 async def upload_document(file: UploadFile = File(...), request: Request = None):
-    """Upload document - SAME INTERFACE"""
+    """
+    Upload document with RAG integration - ENHANCED VERSION
+    
+    Now documents are:
+    1. Chunked intelligently 
+    2. Embedded and stored in ChromaDB
+    3. Available for semantic retrieval
+    4. NOT stored in session context (saves memory)
+    """
+    # Validate file type
     if file.content_type not in [
         "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
         "text/plain"
     ]:
         raise HTTPException(status_code=400, detail="Unsupported file type.")
@@ -347,22 +330,70 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
         # Simple size check
         MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
         if len(file_bytes) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=400, detail="Upload exceeds session document size limit (10 MB).")
+            raise HTTPException(status_code=400, detail="Upload exceeds file size limit (10 MB).")
 
+        # Extract text content
         content = extract_text_from_file(file_bytes, file.content_type)
         if not content.strip():
             raise HTTPException(status_code=400, detail="Document is empty or unreadable.")
 
-        # Add to session context using new system
-        session.add_uploaded_file(file.filename, content, len(file_bytes))
+        # Get RAG manager
+        rag_manager = get_rag_manager()
+        
+        # Determine file type for metadata
+        file_type_map = {
+            "application/pdf": "pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+            "text/plain": "txt"
+        }
+        file_type = file_type_map.get(file.content_type, "unknown")
+        
+        # Add document to vector database instead of session context
+        rag_result = rag_manager.add_document(
+            content=content,
+            filename=file.filename,
+            session_id=session_id,
+            file_type=file_type
+        )
+        
+        if not rag_result["success"]:
+            raise HTTPException(status_code=500, detail=f"Failed to process document: {rag_result.get('error', 'Unknown error')}")
+        
+        # Add just the filename to session for tracking (not the full content)
+        session.uploaded_files.append(file.filename)
+        session.total_upload_size += len(file_bytes)
+        
+        # Add a brief document reference to session messages (not full content)
+        session.append_message("system", f"Document uploaded: {file.filename} ({rag_result['chunks_created']} chunks, {rag_result['total_tokens']} tokens)")
 
-        return {"message": "Document uploaded and added to context successfully."}
+        return {
+            "message": "Document uploaded and processed successfully.",
+            "filename": file.filename,
+            "chunks_created": rag_result["chunks_created"],
+            "total_tokens": rag_result["total_tokens"],
+            "processing_method": "RAG_vector_storage"
+        }
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error uploading document: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
+
+# Add new endpoint to get document statistics
+@router.get("/document-stats")
+async def get_document_stats(request: Request):
+    """Get statistics about uploaded documents in vector database"""
+    try:
+        session_id = get_or_create_session_for_request(request)
+        rag_manager = get_rag_manager()
+        
+        stats = rag_manager.get_document_stats(session_id)
+        return stats
+        
+    except Exception as e:
+        logger.error(f"Error getting document stats: {str(e)}")
+        return {"total_chunks": 0, "total_documents": 0, "documents": []}
 
 # Get uploaded files (SAME INTERFACE)
 @router.get("/uploaded-files")
@@ -379,30 +410,43 @@ async def get_uploaded_filenames(request: Request):
 # Context endpoint (SAME INTERFACE)
 @router.get("/context")
 async def get_context(request: Request):
-    """Get context - SAME INTERFACE"""
+    """Get context - ENHANCED with RAG information"""
     try:
         session_id = get_or_create_session_for_request(request)
         session = session_manager.get_session(session_id)
-        return session.messages  # Return messages in same format as before
+
+        # Get RAG statistics
+        rag_stats = session.get_rag_stats()
+        
+        return {
+            "messages": session.messages,
+            "rag_info": {
+                "total_documents": rag_stats.get("total_documents", 0),
+                "total_chunks": rag_stats.get("total_chunks", 0),
+                "documents": rag_stats.get("documents", [])
+            }
+        }
     except Exception as e:
         logger.error(f"Error getting context: {str(e)}")
-        return []
+        return {"messages": [], "rag_info": {"total_documents": 0, "total_chunks": 0}}
 
-# Reset session (SAME INTERFACE) 
 @router.post("/reset-session")
 async def reset_session(request: Request):
-    """Reset session - SAME INTERFACE"""
+    """Reset session - ENHANCED with RAG cleanup"""
     try:
         session_id = get_or_create_session_for_request(request)
-        success = chat_orchestrator.reset_session(session_id)
+        
+        # Use the enhanced reset that clears both conversation and vector DB
+        success = session_manager.reset_session_completely(session_id)
         
         if success:
-            return {"status": "reset", "message": "Session reset successfully"}
+            return {"status": "reset", "message": "Session and all documents reset successfully"}
         else:
             return {"status": "error", "message": "Failed to reset session"}
     except Exception as e:
         logger.error(f"Error resetting session: {e}")
         return {"status": "error", "message": "Failed to reset session"}
+
 
 # Legacy model endpoints (SAME INTERFACE)
 @router.post("/switch-model")
@@ -422,30 +466,195 @@ async def get_current_model():
         "provider": current_provider
     }
 
-# Debug endpoint (SAME INTERFACE)
+@router.post("/search-documents")
+async def search_documents(request: Request, query: str = Body(..., embed=True), persona: str = Body("", embed=True)):
+    """
+    Search uploaded documents using RAG
+    
+    This endpoint allows direct document search for debugging/testing
+    """
+    try:
+        session_id = get_or_create_session_for_request(request)
+        rag_manager = get_rag_manager()
+        
+        # Get persona context for search enhancement
+        persona_contexts = {
+            "methodist": "methodology research design analysis",
+            "theorist": "theory theoretical framework conceptual",
+            "pragmatist": "practical application implementation"
+        }
+        persona_context = persona_contexts.get(persona, "")
+        
+        # Search documents
+        results = rag_manager.search_documents(
+            query=query,
+            session_id=session_id,
+            persona_context=persona_context,
+            n_results=5
+        )
+        
+        return {
+            "query": query,
+            "persona_filter": persona,
+            "results_count": len(results),
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Error searching documents: {str(e)}")
+        return {"query": query, "results_count": 0, "results": [], "error": str(e)}
+
+@router.get("/session-stats")
+async def get_session_stats(request: Request):
+    """Get comprehensive session statistics including RAG data"""
+    try:
+        session_id = get_or_create_session_for_request(request)
+        stats = session_manager.get_session_stats(session_id)
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting session stats: {str(e)}")
+        return {"error": str(e)}
+
+
 @router.get("/debug/personas")
 async def debug_personas(request: Request):
-    """Debug personas - SAME INTERFACE"""
+    """Debug personas - ENHANCED with RAG information"""
     try:
         session_id = get_or_create_session_for_request(request)
         session = session_manager.get_session(session_id)
+        
+        # Get RAG statistics
+        rag_manager = get_rag_manager()
+        rag_stats = rag_manager.get_document_stats(session_id)
         
         return {
             "personas": {
                 pid: {
                     "name": persona.name,
-                    "prompt": persona.system_prompt[:100] + "..."
+                    "prompt": persona.system_prompt[:100] + "...",
+                    "retrieval_keywords": chat_orchestrator._get_persona_context_keywords(pid)
                 } for pid, persona in chat_orchestrator.personas.items()
             },
-            "context_length": len(session.messages),
-            "current_provider": current_provider
+            "session_info": {
+                "context_length": len(session.messages),
+                "uploaded_files": session.uploaded_files,
+                "rag_stats": rag_stats
+            },
+            "current_provider": current_provider,
+            "rag_enabled": True
         }
     except Exception as e:
         logger.error(f"Error in debug endpoint: {str(e)}")
         return {
             "personas": {},
-            "context_length": 0,
-            "current_provider": current_provider
+            "session_info": {"context_length": 0},
+            "current_provider": current_provider,
+            "rag_enabled": False,
+            "error": str(e)
+        }
+
+@router.post("/chat/{persona_id}")
+async def chat_with_specific_persona(persona_id: str, message: ChatMessage, request: Request):
+    """
+    Chat with a specific persona - Enhanced with RAG debugging
+    
+    This endpoint helps debug RAG integration by testing individual personas
+    """
+    try:
+        session_id = get_or_create_session_for_request(request, message.session_id)
+        
+        # Validate persona exists
+        if persona_id not in chat_orchestrator.personas:
+            available_personas = list(chat_orchestrator.personas.keys())
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Persona '{persona_id}' not found. Available: {available_personas}"
+            )
+        
+        # Use the enhanced orchestrator method
+        result = await chat_orchestrator.chat_with_persona(
+            user_input=message.user_input,
+            persona_id=persona_id,
+            session_id=session_id,
+            response_length=message.response_length or "medium"
+        )
+        
+        # Fix: Handle the response structure properly
+        if result.get("type") == "single_persona_response" and "persona" in result:
+            persona_data = result["persona"]
+            
+            # Add debugging information
+            result["debug_info"] = {
+                "persona_id": persona_id,
+                "session_id": session_id,
+                "query_length": len(message.user_input),
+                "rag_manager_available": True,
+                "used_documents": persona_data.get("used_documents", False),
+                "chunks_used": persona_data.get("document_chunks_used", 0)
+            }
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in individual persona chat: {str(e)}")
+        return {
+            "type": "error",
+            "message": f"Error chatting with {persona_id}: {str(e)}",
+            "persona_id": persona_id
+        }
+
+# Also add a debug endpoint to check RAG status:
+
+@router.get("/debug/rag-status")
+async def debug_rag_status(request: Request):
+    """
+    Debug endpoint to check RAG system status
+    """
+    try:
+        session_id = get_or_create_session_for_request(request)
+        
+        # Get RAG manager
+        rag_manager = get_rag_manager()
+        
+        # Get session stats
+        session_stats = session_manager.get_session_stats(session_id)
+        
+        # Test a simple search
+        test_search = rag_manager.search_documents(
+            query="test methodology research",
+            session_id=session_id,
+            persona_context="",
+            n_results=3
+        )
+        
+        return {
+            "rag_manager_healthy": True,
+            "session_id": session_id,
+            "session_stats": session_stats.get("rag_stats", {}),
+            "test_search_results": len(test_search),
+            "test_search_details": [
+                {
+                    "relevance": chunk.get("relevance_score", 0),
+                    "distance": chunk.get("distance", "unknown"),
+                    "text_length": len(chunk.get("text", "")),
+                    "filename": chunk.get("metadata", {}).get("filename", "unknown")
+                }
+                for chunk in test_search[:3]
+            ],
+            "persona_keywords": {
+                pid: chat_orchestrator._get_persona_context_keywords(pid)
+                for pid in chat_orchestrator.personas.keys()
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in RAG debug: {str(e)}")
+        return {
+            "rag_manager_healthy": False,
+            "error": str(e),
+            "session_id": session_id if 'session_id' in locals() else "unknown"
         }
 
 # Ask endpoint (SAME INTERFACE)
@@ -476,6 +685,8 @@ async def ask_question(query: PersonaQuery, request: Request):
     except Exception as e:
         logger.error(f"Error in ask endpoint: {str(e)}")
         return {"response": "I encountered an error. Please try again."}
+    
+
 
 # Root endpoint (SAME INTERFACE)
 @router.get("/")

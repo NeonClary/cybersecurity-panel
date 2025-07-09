@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Reply, Copy, Check, Maximize2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Reply, Copy, Check, Maximize2, Info, FileText, Hash, Target } from 'lucide-react';
 import { advisors, getAdvisorColors } from '../data/advisors';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -13,6 +13,8 @@ const MessageBubble = ({
   const { isDark } = useTheme();
   const [showTooltip, setShowTooltip] = useState(null);
   const [copiedStates, setCopiedStates] = useState({});
+  const [showInfoOverlay, setShowInfoOverlay] = useState(false);
+  const overlayRef = useRef(null);
 
   const handleCopy = async (messageId, content) => {
     try {
@@ -33,12 +35,109 @@ const MessageBubble = ({
     if (onExpand) onExpand(messageId, advisorId);
   };
 
+  const handleInfoToggle = () => {
+    setShowInfoOverlay(!showInfoOverlay);
+  };
+
   const showTooltipWithDelay = (tooltipType) => {
     setTimeout(() => setShowTooltip(tooltipType), 500);
   };
 
   const hideTooltip = () => {
     setShowTooltip(null);
+  };
+
+  // Close overlay when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (overlayRef.current && !overlayRef.current.contains(event.target)) {
+        setShowInfoOverlay(false);
+      }
+    };
+
+    if (showInfoOverlay) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showInfoOverlay]);
+
+  // RAG Metadata Component
+  const RagInfoOverlay = ({ ragMetadata, colors }) => {
+    const hasDocuments = ragMetadata?.usedDocuments || false;
+    const chunksUsed = ragMetadata?.chunksUsed || 0;
+    const documentChunks = ragMetadata?.documentChunks || [];
+
+    return (
+      <div 
+        ref={overlayRef}
+        className="rag-info-overlay"
+        style={{ 
+          borderColor: colors.color + '40',
+          backgroundColor: isDark ? '#1f2937' : '#ffffff'
+        }}
+      >
+        <div className="rag-overlay-header" style={{ color: colors.color }}>
+          <Info size={14} />
+          <span>RAG Information</span>
+        </div>
+        
+        <div className="rag-overlay-content">
+          {/* Basic Stats */}
+          <div className="rag-stat-row">
+            <div className="rag-stat-label">Used Documents:</div>
+            <div className={`rag-stat-value ${hasDocuments ? 'positive' : 'negative'}`}>
+              {hasDocuments ? 'Yes' : 'No'}
+            </div>
+          </div>
+
+          <div className="rag-stat-row">
+            <div className="rag-stat-label">Document Chunks:</div>
+            <div className="rag-stat-value">{chunksUsed}</div>
+          </div>
+
+          {/* Document Details */}
+          {hasDocuments && documentChunks.length > 0 && (
+            <div className="rag-documents-section">
+              <div className="rag-section-title">
+                <FileText size={12} />
+                Referenced Sources
+              </div>
+              
+              {documentChunks.map((chunk, index) => (
+                <div key={index} className="rag-document-item">
+                  <div className="rag-document-header">
+                    <span className="rag-filename">
+                      {chunk.metadata?.filename || 'Unknown file'}
+                    </span>
+                    <span className="rag-relevance">
+                      <Target size={10} />
+                      {Math.round((chunk.relevance_score || 0) * 100)}%
+                    </span>
+                  </div>
+                  
+                  {chunk.text && (
+                    <div className="rag-chunk-preview">
+                      {chunk.text.substring(0, 120)}
+                      {chunk.text.length > 120 && '...'}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* No Documents Message */}
+          {!hasDocuments && (
+            <div className="rag-no-documents">
+              <Hash size={12} />
+              <span>This response was generated without referencing uploaded documents.</span>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   if (message.type === 'user') {
@@ -75,7 +174,8 @@ const MessageBubble = ({
           className="advisor-message-bubble"
           style={{ 
             backgroundColor: colors.bgColor,
-            borderColor: colors.color + '40'
+            borderColor: colors.color + '40',
+            position: 'relative' // For overlay positioning
           }}
         >
           <div className="advisor-message-header">
@@ -169,8 +269,36 @@ const MessageBubble = ({
                     <div className="tooltip">Expand on this response</div>
                   )}
                 </div>
+
+                {/* NEW: Info Button */}
+                <div className="tooltip-container">
+                  <button 
+                    className="action-button"
+                    onClick={handleInfoToggle}
+                    onMouseEnter={() => showTooltipWithDelay('info')}
+                    onMouseLeave={hideTooltip}
+                    style={{ 
+                      color: showInfoOverlay ? colors.color : colors.color,
+                      borderColor: showInfoOverlay ? colors.color : colors.color + '40',
+                      backgroundColor: showInfoOverlay ? colors.color + '20' : 'transparent'
+                    }}
+                  >
+                    <Info size={14} />
+                  </button>
+                  {showTooltip === 'info' && (
+                    <div className="tooltip">RAG Information</div>
+                  )}
+                </div>
               </div>
             </div>
+          )}
+
+          {/* RAG Info Overlay */}
+          {showInfoOverlay && (
+            <RagInfoOverlay 
+              ragMetadata={message.ragMetadata} 
+              colors={colors}
+            />
           )}
         </div>
       </div>
