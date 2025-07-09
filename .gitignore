@@ -3,5 +3,10 @@
 
 # backend
 multi_llm_chatbot_backend/.env
+multi_llm_chatbot_backend/chroma_db/
 
 # frontend
+
+# Ignore all __pycache__ folders
+**/__pycache__/
+
