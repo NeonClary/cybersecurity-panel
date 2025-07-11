@@ -343,9 +343,14 @@ const handleExpandMessage = async (messageId, advisorId) => {
     }
 
     const data = await response.json();
+    console.log('Expand response data:', data); // Debug log
+
+    // FIX: Handle both new and old response structures
+    let expandedMessage = null;
 
     if (data.type === 'single_persona_response' && data.persona) {
-      const expandedMessage = {
+      // New backend structure
+      expandedMessage = {
         id: generateMessageId(),
         type: 'advisor',
         advisorId: advisorId,
@@ -354,14 +359,42 @@ const handleExpandMessage = async (messageId, advisorId) => {
         isExpansion: true,
         expandsMessageId: messageId,
         timestamp: new Date(),
-        // NEW: Map RAG metadata for expanded responses
         ragMetadata: {
           usedDocuments: data.persona.used_documents || false,
           chunksUsed: data.persona.document_chunks_used || 0,
           documentChunks: data.persona.retrieved_chunks || []
         }
       };
+    } else if (data.persona && data.response) {
+      // Current backend structure (without type field)
+      expandedMessage = {
+        id: generateMessageId(),
+        type: 'advisor',
+        advisorId: advisorId,
+        advisorName: advisor.name,
+        content: data.response,
+        isExpansion: true,
+        expandsMessageId: messageId,
+        timestamp: new Date(),
+        ragMetadata: {
+          usedDocuments: false,
+          chunksUsed: 0,
+          documentChunks: []
+        }
+      };
+    }
+
+    if (expandedMessage) {
       setMessages(prev => [...prev, expandedMessage]);
+    } else {
+      // Fallback error message
+      const errorMessage = {
+        id: generateMessageId(),
+        type: 'error',
+        content: 'Sorry, I received an unexpected response format. Please try again.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
     }
 
   } catch (error) {
@@ -375,9 +408,9 @@ const handleExpandMessage = async (messageId, advisorId) => {
     setMessages(prev => [...prev, errorMessage]);
   }
 
-    setIsLoading(false);
-    setThinkingAdvisors([]);
-  };
+  setIsLoading(false);
+  setThinkingAdvisors([]);
+};
 
   const handleReplyToMessage = (message) => {
     const advisor = advisors[message.advisorId];
