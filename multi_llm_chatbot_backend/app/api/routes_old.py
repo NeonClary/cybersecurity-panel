@@ -95,7 +95,7 @@ def _is_valid_response(response: str, persona_id: str) -> bool:
 def _get_persona_fallback(persona_id: str) -> str:
     """Get persona-specific fallback responses"""
     fallbacks = {
-        "methodist": "Focus on ensuring your methodology aligns with your research question. What specific method are you considering?",
+        "methodologist": "Focus on ensuring your methodology aligns with your research question. What specific method are you considering?",
         "theorist": "Consider the theoretical framework underlying your approach. What assumptions guide your thinking?",
         "pragmatist": "Let's break this down into actionable steps. What's the most important thing you need to decide today?"
     }

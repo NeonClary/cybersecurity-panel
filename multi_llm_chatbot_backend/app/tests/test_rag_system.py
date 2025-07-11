@@ -65,7 +65,7 @@ def test_rag_system():
     print("🔍 Test 3: Testing direct document search...")
     
     search_queries = [
-        {"query": "What methodology should I use?", "persona": "methodist"},
+        {"query": "What methodology should I use?", "persona": "methodologist"},
         {"query": "What is the theoretical framework?", "persona": "theorist"},
         {"query": "What are the next steps?", "persona": "pragmatist"}
     ]

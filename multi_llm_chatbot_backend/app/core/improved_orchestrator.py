@@ -305,7 +305,7 @@ class ImprovedChatOrchestrator:
     def _get_fallback_response(self, persona_id: str) -> str:
         """Get persona-specific fallback response"""
         fallbacks = {
-            "methodist": "Let's focus on your research methodology. What specific methodological approach are you considering?",
+            "methodologist": "Let's focus on your research methodology. What specific methodological approach are you considering?",
             "theorist": "I'd like to explore the theoretical foundation of your work. What conceptual framework guides your research?",
             "pragmatist": "Let's take a practical approach. What's the most pressing decision you need to make about your research right now?"
         }
@@ -345,7 +345,7 @@ class ImprovedChatOrchestrator:
         based on their specialization
         """
         persona_keywords = {
-            "methodist": "methodology research design analysis methods data collection sampling validity reliability statistical approach quantitative qualitative",
+            "methodologist": "methodology research design analysis methods data collection sampling validity reliability statistical approach quantitative qualitative",
             "theorist": "theory theoretical framework conceptual model literature review philosophy epistemology ontology paradigm abstract concepts",
             "pragmatist": "practical application implementation action steps next steps recommendation solution strategy timeline concrete advice"
         }

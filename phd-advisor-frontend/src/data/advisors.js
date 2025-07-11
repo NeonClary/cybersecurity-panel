@@ -1,8 +1,8 @@
 import { BookOpen, Target, Brain } from 'lucide-react';
 
 export const advisors = {
-  methodist: {
-    name: 'Methodist',
+  methodologist: {
+    name: 'Methodologist',
     role: 'Methodical Advisor',
     // Light theme colors
     color: '#3B82F6',
@@ -53,7 +53,7 @@ export const getAdvisorColors = (advisorId, isDark = false) => {
     // For text that needs to be readable on colored backgrounds
     textColor: isDark ? '#F9FAFB' : 
                 advisor.color === '#10B981' ? '#047857' : // Darker green for pragmatist
-                advisor.color === '#3B82F6' ? '#1D4ED8' : // Darker blue for methodist  
+                advisor.color === '#3B82F6' ? '#1D4ED8' : // Darker blue for methodologist  
                 advisor.color === '#8B5CF6' ? '#7C3AED' : // Darker purple for theorist
                 '#374151' // fallback
   };

@@ -71,8 +71,8 @@ class ImprovedOllamaClient(LLMClient):
         # Remove common prefixes that indicate AI confusion
         prefixes_to_remove = [
             "Here are 2-3 sentence", "Here's an expansion", "Assistant:",
-            "Dr. Methodist:", "Dr. Theorist:", "Dr. Pragmatist:",
-            "Methodist Advisor:", "Theorist Advisor:", "Pragmatist Advisor:",
+            "Dr. Methodologist:", "Dr. Theorist:", "Dr. Pragmatist:",
+            "Methodologist Advisor:", "Theorist Advisor:", "Pragmatist Advisor:",
         ]
         
         for prefix in prefixes_to_remove:

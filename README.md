@@ -4,7 +4,7 @@ An AI-powered academic guidance system that provides personalized advice through
 
 ## Features
 
-- **Multiple AI Advisor Personas**: Chat with specialized advisors including Methodist (methodology expert), Theorist (conceptual frameworks), and Pragmatist (action-focused guidance)
+- **Multiple AI Advisor Personas**: Chat with specialized advisors including Methodologist (methodology expert), Theorist (conceptual frameworks), and Pragmatist (action-focused guidance)
 - **Document Upload Support**: Upload PDFs, Word documents, and text files to provide context for your questions
 - **Multi-LLM Backend**: Supports both Gemini API and Ollama models with seamless provider switching
 - **Real-time Chat Interface**: Modern, responsive chat interface with advisor-specific styling
@@ -83,7 +83,7 @@ The application will open at `http://localhost:3000`
 
 ## Advisor Personas
 
-### Methodist - Research Methodology Expert
+### Methodologist - Research Methodology Expert
 - **Focus**: Research design, validity, sampling, methodological rigor
 - **Style**: Precise, analytical, methodology-focused
 - **Best for**: Research design questions, data collection methods, validity concerns

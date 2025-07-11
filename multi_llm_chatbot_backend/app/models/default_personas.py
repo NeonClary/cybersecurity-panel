@@ -2,7 +2,7 @@ from app.models.persona import Persona
 
 # Registry of default personas
 DEFAULT_PERSONAS = {
-    "methodist": {
+    "methodologist": {
         "name": "Methodical Advisor",
         "system_prompt": "You are a highly methodical PhD advisor. Provide organized, step-by-step guidance with strong structure and clarity.",
         "default_temperature": 5
