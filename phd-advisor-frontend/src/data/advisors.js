@@ -3,7 +3,7 @@ import { BookOpen, Target, Brain } from 'lucide-react';
 export const advisors = {
   methodologist: {
     // Original structure preserved
-    name: 'Dr. Sophia Martinez',
+    name: 'Methodologist',
     role: 'Research Methodology Expert',
     // Light theme colors
     color: '#3B82F6',
@@ -16,7 +16,7 @@ export const advisors = {
     description: 'Structured & Planning-focused',
     
     // Enhanced information added
-    fullTitle: 'Dr. Sophia Martinez - Research Methodology Expert',
+    fullTitle: 'Methodologist - Research Methodology Expert',
     credentials: 'PhD in Research Methods and Statistics from Stanford University',
     experience: '15+ years of experience guiding doctoral students',
     
@@ -63,7 +63,7 @@ export const advisors = {
 
   theorist: {
     // Original structure preserved
-    name: 'Dr. Alexander Chen',
+    name: 'Theorist',
     role: 'Theoretical Frameworks Specialist',
     // Light theme colors
     color: '#8B5CF6',
@@ -76,7 +76,7 @@ export const advisors = {
     description: 'Abstract & Conceptual',
     
     // Enhanced information added
-    fullTitle: 'Dr. Alexander Chen - Theoretical Frameworks Specialist',
+    fullTitle: 'Theorist - Theoretical Frameworks Specialist',
     credentials: 'PhD in Philosophy of Science from Oxford University',
     experience: 'Deep expertise in epistemology and conceptual development',
     
@@ -123,7 +123,7 @@ export const advisors = {
 
   pragmatist: {
     // Original structure preserved
-    name: 'Dr. Maria Rodriguez',
+    name: 'Pragmatist',
     role: 'Action-Focused Research Coach',
     // Light theme colors
     color: '#10B981',
@@ -136,7 +136,7 @@ export const advisors = {
     description: 'Real-world & Outcome-focused',
     
     // Enhanced information added
-    fullTitle: 'Dr. Maria Rodriguez - Action-Focused Research Coach',
+    fullTitle: 'Pragmatist - Action-Focused Research Coach',
     credentials: 'PhD in Applied Psychology from UC Berkeley',
     experience: '12+ years of mentoring experience specializing in practical progress',
     
