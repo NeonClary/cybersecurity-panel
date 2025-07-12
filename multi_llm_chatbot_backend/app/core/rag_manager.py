@@ -453,17 +453,501 @@ class RAGManager:
         except Exception as e:
             return {"status": "error", "message": str(e)}
 
+
+class EnhancedRAGManager:
+    def __init__(self, persist_directory: str = "./chromadb_storage"):
+        """Initialize enhanced RAG manager with improved document handling"""
+        self.persist_directory = persist_directory
+        Path(persist_directory).mkdir(exist_ok=True)
+        
+        # Initialize ChromaDB client
+        self.client = chromadb.PersistentClient(
+            path=persist_directory,
+            settings=Settings(anonymized_telemetry=False)
+        )
+        
+        # Create or get collection
+        self.collection = self.client.get_or_create_collection(
+            name="phd_advisor_documents",
+            metadata={"hnsw:space": "cosine"}
+        )
+        
+        logger.info(f"Enhanced RAG Manager initialized with collection: {self.collection.name}")
+    
+    def add_document(self, content: str, filename: str, session_id: str, 
+                    file_type: str = "unknown") -> Dict[str, Any]:
+        """
+        Enhanced document addition with better metadata and document awareness
+        """
+        try:
+            # Preprocess the content
+            cleaned_content = self._preprocess_content(content)
+            if not cleaned_content.strip():
+                return {
+                    "success": False,
+                    "error": "Document content is empty after preprocessing",
+                    "filename": filename
+                }
+            
+            # Extract document metadata
+            doc_metadata = self._extract_document_metadata(cleaned_content, filename, file_type)
+            
+            # Create intelligent chunks with overlap and context preservation
+            chunks = self._create_enhanced_chunks(cleaned_content, filename, doc_metadata)
+            
+            # Prepare data for ChromaDB
+            chunk_texts = []
+            chunk_metadatas = []
+            chunk_ids = []
+            
+            for i, chunk_data in enumerate(chunks):
+                chunk_id = f"{session_id}_{filename}_{i}_{uuid.uuid4().hex[:8]}"
+                
+                # Enhanced metadata with document awareness
+                metadata = {
+                    "session_id": session_id,
+                    "filename": filename,
+                    "file_type": file_type,
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "document_section": chunk_data.get("section", "unknown"),
+                    "keywords": chunk_data.get("keywords", ""),
+                    "chunk_type": chunk_data.get("type", "content"),
+                    "document_title": doc_metadata.get("title", filename),
+                    "estimated_tokens": len(chunk_data["text"].split()) * 1.3,
+                    "has_references": "references" in chunk_data["text"].lower(),
+                    "has_methodology": "method" in chunk_data["text"].lower(),
+                    "has_theory": any(word in chunk_data["text"].lower() 
+                                    for word in ["theory", "theoretical", "framework", "concept"])
+                }
+                
+                chunk_texts.append(chunk_data["text"])
+                chunk_metadatas.append(metadata)
+                chunk_ids.append(chunk_id)
+            
+            # Add to ChromaDB
+            self.collection.add(
+                documents=chunk_texts,
+                metadatas=chunk_metadatas,
+                ids=chunk_ids
+            )
+            
+            total_tokens = sum(metadata["estimated_tokens"] for metadata in chunk_metadatas)
+            
+            logger.info(f"Successfully added document {filename}: {len(chunks)} chunks, ~{total_tokens:.0f} tokens")
+            
+            return {
+                "success": True,
+                "filename": filename,
+                "chunks_created": len(chunks),
+                "total_tokens": int(total_tokens),
+                "document_metadata": doc_metadata
+            }
+            
+        except Exception as e:
+            logger.error(f"Error adding document {filename}: {str(e)}")
+            return {
+                "success": False,
+                "filename": filename,
+                "error": str(e)
+            }
+    
+    def search_documents_with_context(self, query: str, session_id: str, 
+                                    persona_context: str = "", n_results: int = 5,
+                                    document_hint: str = None) -> List[Dict[str, Any]]:
+        """
+        Enhanced search with document awareness and context
+        """
+        try:
+            # Extract potential document references from query
+            document_references = self._extract_document_references(query)
+            
+            # Build enhanced query
+            enhanced_query = self._build_enhanced_query(query, persona_context, document_references)
+            
+            # Base search filters
+            search_filters = {"session_id": session_id}
+            
+            # If specific document mentioned, prioritize it
+            if document_hint or document_references:
+                priority_filename = document_hint or document_references[0] if document_references else None
+                if priority_filename:
+                    # First search: prioritize specific document
+                    priority_results = self._search_with_filters(
+                        enhanced_query, 
+                        {**search_filters, "filename": {"$contains": priority_filename}},
+                        n_results=min(3, n_results)
+                    )
+                    
+                    # Second search: get additional context from other documents
+                    remaining_results = max(0, n_results - len(priority_results))
+                    if remaining_results > 0:
+                        general_results = self._search_with_filters(
+                            enhanced_query,
+                            search_filters,
+                            n_results=remaining_results + 2  # Get extras to filter out duplicates
+                        )
+                        
+                        # Combine results, avoiding duplicates
+                        all_results = priority_results + [
+                            r for r in general_results 
+                            if r["metadata"]["filename"] != priority_filename
+                        ][:remaining_results]
+                    else:
+                        all_results = priority_results
+                else:
+                    all_results = self._search_with_filters(enhanced_query, search_filters, n_results)
+            else:
+                all_results = self._search_with_filters(enhanced_query, search_filters, n_results)
+            
+            # Enhance results with context and attribution
+            enhanced_results = self._enhance_search_results(all_results, query)
+            
+            logger.info(f"Enhanced search returned {len(enhanced_results)} results for query: {query[:50]}...")
+            return enhanced_results
+            
+        except Exception as e:
+            logger.error(f"Error in enhanced document search: {str(e)}")
+            return []
+    
+    def _search_with_filters(self, query: str, filters: Dict, n_results: int) -> List[Dict[str, Any]]:
+        """Helper method for filtered search"""
+        results = self.collection.query(
+            query_texts=[query],
+            n_results=n_results,
+            where=filters
+        )
+        
+        formatted_results = []
+        if results['documents'] and results['documents'][0]:
+            for i, (doc, metadata, distance) in enumerate(zip(
+                results['documents'][0],
+                results['metadatas'][0],
+                results['distances'][0]
+            )):
+                similarity_score = 1 / (1 + abs(distance)) if distance is not None else 0.5
+                
+                formatted_results.append({
+                    "text": doc,
+                    "metadata": metadata,
+                    "relevance_score": similarity_score,
+                    "distance": distance,
+                    "rank": i + 1
+                })
+        
+        return formatted_results
+    
+    def _extract_document_references(self, query: str) -> List[str]:
+        """Extract potential document name references from user query"""
+        # Common patterns for document references
+        patterns = [
+            r"(?:my|the|in)\s+([a-zA-Z_\-]+\.(?:pdf|docx|txt|doc))",  # my document.pdf
+            r"(?:my|the)\s+(dissertation|thesis|proposal|chapter|paper|manuscript)",  # my dissertation
+            r"(?:in|from)\s+(?:my\s+)?([a-zA-Z_\-\s]+(?:chapter|section|proposal))",  # in my methodology chapter
+            r"(?:the|my)\s+([a-zA-Z_\-\s]+(?:document|file))",  # the research document
+        ]
+        
+        references = []
+        query_lower = query.lower()
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, query_lower)
+            references.extend(matches)
+        
+        # Clean up references
+        cleaned_references = []
+        for ref in references:
+            cleaned = ref.strip().replace(" ", "_")
+            if len(cleaned) > 2:  # Avoid single characters
+                cleaned_references.append(cleaned)
+        
+        return cleaned_references[:3]  # Limit to first 3 references
+    
+    def _build_enhanced_query(self, original_query: str, persona_context: str, 
+                            document_refs: List[str]) -> str:
+        """Build enhanced query with context and document awareness"""
+        query_parts = [original_query]
+        
+        if persona_context:
+            query_parts.append(persona_context)
+        
+        if document_refs:
+            query_parts.extend(document_refs)
+        
+        return " ".join(query_parts)
+    
+    def _enhance_search_results(self, results: List[Dict], original_query: str) -> List[Dict[str, Any]]:
+        """Enhance search results with better attribution and context"""
+        enhanced = []
+        
+        for result in results:
+            metadata = result["metadata"]
+            
+            # Create enhanced result with clear attribution
+            enhanced_result = {
+                **result,
+                "document_source": {
+                    "filename": metadata.get("filename", "unknown"),
+                    "document_title": metadata.get("document_title", metadata.get("filename", "unknown")),
+                    "section": metadata.get("document_section", "unknown"),
+                    "chunk_position": f"{metadata.get('chunk_index', 0) + 1} of {metadata.get('total_chunks', 1)}"
+                },
+                "content_type": metadata.get("chunk_type", "content"),
+                "context_indicators": {
+                    "has_methodology": metadata.get("has_methodology", False),
+                    "has_theory": metadata.get("has_theory", False),
+                    "has_references": metadata.get("has_references", False)
+                }
+            }
+            
+            enhanced.append(enhanced_result)
+        
+        # Sort by relevance score, but boost results from explicitly mentioned documents
+        enhanced.sort(key=lambda x: (
+            1.0 if any(ref in x["document_source"]["filename"].lower() 
+                      for ref in self._extract_document_references(original_query)) else 0.0,
+            x["relevance_score"]
+        ), reverse=True)
+        
+        return enhanced
+    
+    def _extract_document_metadata(self, content: str, filename: str, file_type: str) -> Dict[str, Any]:
+        """Extract metadata from document content"""
+        lines = content.split('\n')
+        
+        # Try to find title (usually first significant line)
+        title = filename
+        for line in lines[:10]:
+            if line.strip() and len(line.strip()) > 10 and len(line.strip()) < 100:
+                if not line.strip().startswith(('Abstract', 'Introduction', '1.', 'Chapter')):
+                    title = line.strip()
+                    break
+        
+        # Extract other metadata
+        word_count = len(content.split())
+        has_sections = bool(re.search(r'(?:Chapter|Section|\d+\.)', content))
+        
+        return {
+            "title": title,
+            "word_count": word_count,
+            "has_sections": has_sections,
+            "file_type": file_type,
+            "estimated_pages": word_count // 250  # Rough estimate
+        }
+    
+    def _create_enhanced_chunks(self, content: str, filename: str, doc_metadata: Dict) -> List[Dict[str, Any]]:
+        """Create intelligent chunks with context preservation"""
+        # Split into logical sections first
+        sections = self._split_into_sections(content)
+        
+        chunks = []
+        for section_data in sections:
+            section_text = section_data["text"]
+            section_type = section_data["type"]
+            
+            # Create overlapping chunks within each section
+            if len(section_text.split()) > 300:  # Large section, needs chunking
+                section_chunks = self._create_overlapping_chunks(section_text, chunk_size=250, overlap=50)
+                for chunk_text in section_chunks:
+                    chunks.append({
+                        "text": chunk_text,
+                        "section": section_type,
+                        "type": "content",
+                        "keywords": self._extract_keywords(chunk_text)
+                    })
+            else:
+                # Small section, keep as single chunk
+                chunks.append({
+                    "text": section_text,
+                    "section": section_type,
+                    "type": section_type,
+                    "keywords": self._extract_keywords(section_text)
+                })
+        
+        return chunks
+    
+    def _split_into_sections(self, content: str) -> List[Dict[str, Any]]:
+        """Split content into logical sections"""
+        lines = content.split('\n')
+        sections = []
+        current_section = []
+        current_type = "introduction"
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Check if this line starts a new section
+            section_match = re.match(r'(?:Chapter|Section|\d+\.?\s+)(.+)', line, re.IGNORECASE)
+            if section_match:
+                # Save previous section
+                if current_section:
+                    sections.append({
+                        "text": '\n'.join(current_section),
+                        "type": current_type
+                    })
+                
+                # Start new section
+                current_section = [line]
+                section_title = section_match.group(1).lower()
+                current_type = self._classify_section_type(section_title)
+            else:
+                current_section.append(line)
+        
+        # Add final section
+        if current_section:
+            sections.append({
+                "text": '\n'.join(current_section),
+                "type": current_type
+            })
+        
+        return sections if sections else [{"text": content, "type": "content"}]
+    
+    def _classify_section_type(self, section_title: str) -> str:
+        """Classify section type based on title"""
+        title_lower = section_title.lower()
+        
+        if any(word in title_lower for word in ['method', 'approach', 'design', 'procedure']):
+            return "methodology"
+        elif any(word in title_lower for word in ['theory', 'framework', 'literature', 'review']):
+            return "theory"
+        elif any(word in title_lower for word in ['result', 'finding', 'analysis', 'data']):
+            return "results"
+        elif any(word in title_lower for word in ['conclusion', 'discussion', 'implication']):
+            return "conclusion"
+        elif any(word in title_lower for word in ['introduction', 'background', 'abstract']):
+            return "introduction"
+        else:
+            return "content"
+    
+    def _create_overlapping_chunks(self, text: str, chunk_size: int = 250, overlap: int = 50) -> List[str]:
+        """Create overlapping chunks from text"""
+        words = text.split()
+        chunks = []
+        
+        start = 0
+        while start < len(words):
+            end = min(start + chunk_size, len(words))
+            chunk = ' '.join(words[start:end])
+            chunks.append(chunk)
+            
+            if end >= len(words):
+                break
+            
+            start += chunk_size - overlap
+        
+        return chunks
+    
+    def _extract_keywords(self, text: str) -> str:
+        """Extract key terms from text chunk"""
+        # Simple keyword extraction - could be enhanced with NLP
+        words = text.lower().split()
+        
+        # Academic keywords to prioritize
+        academic_terms = set([
+            'methodology', 'theory', 'analysis', 'research', 'study', 'data',
+            'framework', 'approach', 'method', 'findings', 'results', 'literature',
+            'hypothesis', 'experiment', 'survey', 'interview', 'observation',
+            'qualitative', 'quantitative', 'mixed-methods', 'case study'
+        ])
+        
+        found_keywords = [word for word in words if word in academic_terms]
+        return ' '.join(found_keywords[:5])  # Top 5 keywords
+    
+    def _preprocess_content(self, content: str) -> str:
+        """Clean and preprocess document content"""
+        # Remove excessive whitespace
+        content = re.sub(r'\s+', ' ', content)
+        
+        # Remove page numbers and headers/footers
+        content = re.sub(r'\n\s*\d+\s*\n', '\n', content)
+        
+        # Clean up encoding issues
+        content = content.replace('\ufffd', ' ')
+        
+        return content.strip()
+    
+    def get_document_stats(self, session_id: str) -> Dict[str, Any]:
+        """Get enhanced statistics about documents in a session"""
+        try:
+            # Get all chunks for this session
+            results = self.collection.get(
+                where={"session_id": session_id},
+                include=["metadatas"]
+            )
+            
+            if not results['metadatas']:
+                return {"total_chunks": 0, "total_documents": 0, "documents": []}
+            
+            # Analyze documents
+            documents = {}
+            total_tokens = 0
+            
+            for metadata in results['metadatas']:
+                filename = metadata.get('filename', 'unknown')
+                
+                if filename not in documents:
+                    documents[filename] = {
+                        "filename": filename,
+                        "title": metadata.get('document_title', filename),
+                        "file_type": metadata.get('file_type', 'unknown'),
+                        "chunks": 0,
+                        "estimated_tokens": 0,
+                        "sections": set(),
+                        "has_methodology": False,
+                        "has_theory": False,
+                        "has_references": False
+                    }
+                
+                doc_info = documents[filename]
+                doc_info["chunks"] += 1
+                doc_info["estimated_tokens"] += metadata.get('estimated_tokens', 0)
+                doc_info["sections"].add(metadata.get('document_section', 'unknown'))
+                
+                if metadata.get('has_methodology'):
+                    doc_info["has_methodology"] = True
+                if metadata.get('has_theory'):
+                    doc_info["has_theory"] = True
+                if metadata.get('has_references'):
+                    doc_info["has_references"] = True
+                
+                total_tokens += metadata.get('estimated_tokens', 0)
+            
+            # Convert sets to lists for JSON serialization
+            for doc_info in documents.values():
+                doc_info["sections"] = list(doc_info["sections"])
+            
+            return {
+                "total_chunks": len(results['metadatas']),
+                "total_documents": len(documents),
+                "total_estimated_tokens": int(total_tokens),
+                "documents": list(documents.values())
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting document stats: {str(e)}")
+            return {"error": str(e), "total_chunks": 0, "total_documents": 0}
+
+
 # Global RAG manager instance
 _rag_manager = None
 
-def get_rag_manager() -> RAGManager:
-    """Get the global RAG manager instance"""
+# def get_rag_manager() -> RAGManager:
+#     """Get the global RAG manager instance"""
+#     global _rag_manager
+#     if _rag_manager is None:
+#         try:
+#             _rag_manager = RAGManager()
+#             logger.info("RAG Manager initialized successfully")
+#         except Exception as e:
+#             logger.error(f"Failed to initialize RAG Manager: {e}")
+#             raise
+#     return _rag_manager
+
+def get_rag_manager() -> EnhancedRAGManager:
+    """Get or create the global RAG manager instance"""
     global _rag_manager
     if _rag_manager is None:
-        try:
-            _rag_manager = RAGManager()
-            logger.info("RAG Manager initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize RAG Manager: {e}")
-            raise
+        _rag_manager = EnhancedRAGManager()
     return _rag_manager

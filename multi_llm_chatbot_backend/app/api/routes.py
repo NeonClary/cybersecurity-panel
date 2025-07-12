@@ -182,40 +182,63 @@ async def switch_provider(provider_data: ProviderSwitch):
 
 # Main chat endpoint (SAME INTERFACE, improved backend)
 @router.post("/chat-sequential")
-async def chat_sequential(message: ChatMessage, request: Request):
-    """Generate advisor responses - ENHANCED with RAG"""
+async def chat_sequential_enhanced(message: ChatMessage, request: Request):
+    """
+    Enhanced sequential chat with improved document awareness and response quality
+    """
     try:
+        # Get or create session
         session_id = get_or_create_session_for_request(request, message.session_id)
         
-        # Process message through improved orchestrator (now with RAG)
-        result = await chat_orchestrator.process_message(
+        # Process message with enhanced orchestrator
+        orchestrator_result = await chat_orchestrator.process_message_with_enhanced_context(
             user_input=message.user_input,
             session_id=session_id,
             response_length=message.response_length or "medium"
         )
-        
-        # Add RAG information to response
-        if result["type"] == "persona_responses":
-            # Count how many personas used documents
-            personas_with_docs = sum(1 for r in result["responses"] if r.get("used_documents", False))
-            total_chunks_used = sum(r.get("document_chunks_used", 0) for r in result["responses"])
+
+        if orchestrator_result["status"] == "success":
+            responses = orchestrator_result["responses"]
             
-            result["rag_info"] = {
-                "personas_using_documents": personas_with_docs,
-                "total_document_chunks_used": total_chunks_used,
-                "rag_enabled": True
+            # Enhanced RAG information for debugging and user feedback
+            rag_info = {
+                "total_personas": len(responses),
+                "personas_using_documents": sum(1 for r in responses if r.get("used_documents", False)),
+                "total_document_chunks_used": sum(r.get("document_chunks_used", 0) for r in responses),
+                "document_aware_query": orchestrator_result.get("document_references_detected", False),
+                "available_documents": orchestrator_result.get("available_documents", [])
             }
-        
-        return result
-        
+            
+            return {
+                "type": "multi_advisor",
+                "responses": responses,
+                "rag_info": rag_info,
+                "session_id": session_id,
+                "query_analysis": {
+                    "document_references_found": orchestrator_result.get("document_references_detected", False),
+                    "personas_with_high_quality_context": [
+                        r["persona_id"] for r in responses 
+                        if r.get("context_quality") == "high"
+                    ]
+                }
+            }
+        else:
+            # Fallback response with helpful guidance
+            return {
+                "type": "clarification_needed",
+                "message": orchestrator_result.get("message", "I need more information to help you effectively."),
+                "suggestions": orchestrator_result.get("suggestions", [
+                    "Could you provide more details about your specific question?",
+                    "Consider uploading relevant documents to get more targeted advice.",
+                    "Try asking about a specific aspect of your research."
+                ]),
+                "session_id": session_id,
+                "rag_info": {"total_personas": 0, "personas_using_documents": 0}
+            }
+
     except Exception as e:
-        logger.error(f"Error in chat-sequential: {str(e)}")
-        return {
-            "type": "error",
-            "message": "I encountered an error processing your request. Please try again.",
-            "error": str(e),
-            "rag_enabled": False
-        }
+        logger.error(f"Error in enhanced sequential chat: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 # Individual advisor endpoint (SAME INTERFACE)
 @router.post("/chat/{persona_id}")
@@ -304,51 +327,35 @@ async def reply_to_advisor(reply: ReplyToAdvisor, request: Request):
 @router.post("/upload-document")
 async def upload_document(file: UploadFile = File(...), request: Request = None):
     """
-    Upload document with RAG integration - ENHANCED VERSION
-    
-    Now documents are:
-    1. Chunked intelligently 
-    2. Embedded and stored in ChromaDB
-    3. Available for semantic retrieval
-    4. NOT stored in session context (saves memory)
+    Enhanced document upload with better metadata tracking and user feedback
     """
-    # Validate file type
-    if file.content_type not in [
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 
-        "text/plain"
-    ]:
-        raise HTTPException(status_code=400, detail="Unsupported file type.")
-
     try:
-        # Get session using compatibility layer
+        # Get or create session
         session_id = get_or_create_session_for_request(request)
         session = session_manager.get_session(session_id)
         
+        # Validate file
+        if not is_within_upload_limit(session.uploaded_files, file.size):
+            raise HTTPException(status_code=413, detail="Upload would exceed session limits")
+        
+        # Read and validate file content
         file_bytes = await file.read()
-
-        # Simple size check
-        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
-        if len(file_bytes) > MAX_FILE_SIZE:
-            raise HTTPException(status_code=400, detail="Upload exceeds file size limit (10 MB).")
-
-        # Extract text content
         content = extract_text_from_file(file_bytes, file.content_type)
         if not content.strip():
             raise HTTPException(status_code=400, detail="Document is empty or unreadable.")
 
-        # Get RAG manager
+        # Get enhanced RAG manager
         rag_manager = get_rag_manager()
         
         # Determine file type for metadata
         file_type_map = {
             "application/pdf": "pdf",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx", 
             "text/plain": "txt"
         }
         file_type = file_type_map.get(file.content_type, "unknown")
         
-        # Add document to vector database instead of session context
+        # Add document to enhanced vector database
         rag_result = rag_manager.add_document(
             content=content,
             filename=file.filename,
@@ -357,27 +364,46 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
         )
         
         if not rag_result["success"]:
-            raise HTTPException(status_code=500, detail=f"Failed to process document: {rag_result.get('error', 'Unknown error')}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to process document: {rag_result.get('error', 'Unknown error')}"
+            )
         
-        # Add just the filename to session for tracking (not the full content)
+        # Update session tracking
         session.uploaded_files.append(file.filename)
         session.total_upload_size += len(file_bytes)
         
-        # Add a brief document reference to session messages (not full content)
-        session.append_message("system", f"Document uploaded: {file.filename} ({rag_result['chunks_created']} chunks, {rag_result['total_tokens']} tokens)")
+        # Add enhanced document reference to session messages
+        doc_metadata = rag_result.get("document_metadata", {})
+        doc_title = doc_metadata.get("title", file.filename)
+        
+        session.append_message(
+            "system", 
+            f"Document uploaded: '{doc_title}' ({file.filename}) - "
+            f"{rag_result['chunks_created']} sections processed, "
+            f"~{rag_result['total_tokens']} tokens analyzed. "
+            f"You can now ask questions about this document by referencing it by name."
+        )
 
         return {
-            "message": "Document uploaded and processed successfully.",
+            "message": f"Document '{file.filename}' uploaded and processed successfully.",
             "filename": file.filename,
-            "chunks_created": rag_result["chunks_created"],
-            "total_tokens": rag_result["total_tokens"],
-            "processing_method": "RAG_vector_storage"
+            "document_title": doc_title,
+            "chunks_created": rag_result['chunks_created'],
+            "total_tokens": rag_result['total_tokens'],
+            "file_type": file_type,
+            "can_reference_by_name": True,
+            "suggestions": [
+                f"Try asking: 'What methodology does my {file.filename} propose?'",
+                f"Or: 'What are the key findings in {doc_title}?'",
+                f"Or: 'Compare the approach in my document with current best practices'"
+            ]
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error uploading document: {str(e)}")
+        logger.error(f"Error processing document upload: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
 # Add new endpoint to get document statistics
@@ -604,6 +630,137 @@ async def chat_with_specific_persona(persona_id: str, message: ChatMessage, requ
             "message": f"Error chatting with {persona_id}: {str(e)}",
             "persona_id": persona_id
         }
+    
+@router.get("/debug/enhanced-personas")
+async def debug_enhanced_personas(request: Request):
+    """
+    Enhanced debug endpoint with document context information
+    """
+    try:
+        session_id = get_or_create_session_for_request(request)
+        session = session_manager.get_session(session_id)
+        
+        # Get enhanced RAG statistics
+        rag_manager = get_rag_manager()
+        rag_stats = rag_manager.get_document_stats(session_id)
+        
+        # Analyze document awareness capabilities
+        document_analysis = {}
+        if rag_stats.get("documents"):
+            for doc in rag_stats["documents"]:
+                document_analysis[doc["filename"]] = {
+                    "chunks_available": doc["chunks"],
+                    "estimated_tokens": doc["estimated_tokens"],
+                    "sections_identified": doc["sections"],
+                    "content_types_detected": {
+                        "has_methodology": doc.get("has_methodology", False),
+                        "has_theory": doc.get("has_theory", False),
+                        "has_references": doc.get("has_references", False)
+                    }
+                }
+        
+        return {
+            "personas": {
+                pid: {
+                    "name": persona.name,
+                    "expertise_area": persona.name.split(" - ")[1] if " - " in persona.name else "General",
+                    "prompt_quality": "enhanced" if len(persona.system_prompt) > 500 else "basic",
+                    "document_handling_enabled": "document awareness" in persona.system_prompt.lower(),
+                    "retrieval_keywords": chat_orchestrator._get_enhanced_persona_context_keywords(pid)[:100] + "...",
+                    "temperature": getattr(persona, 'temperature', 5)
+                } for pid, persona in chat_orchestrator.personas.items()
+            },
+            "session_info": {
+                "context_length": len(session.messages),
+                "uploaded_files": session.uploaded_files,
+                "rag_stats": rag_stats,
+                "document_analysis": document_analysis
+            },
+            "system_capabilities": {
+                "document_name_recognition": True,
+                "cross_document_analysis": True,
+                "persona_specialized_retrieval": True,
+                "enhanced_attribution": True,
+                "query_document_detection": True
+            },
+            "current_provider": current_provider,
+            "rag_enabled": True,
+            "enhancement_level": "advanced"
+        }
+    except Exception as e:
+        logger.error(f"Error in enhanced debug endpoint: {str(e)}")
+        return {
+            "error": str(e),
+            "enhancement_level": "error",
+            "rag_enabled": False
+        }
+
+@router.get("/document-insights/{filename}")
+async def get_document_insights(filename: str, request: Request):
+    """
+    NEW ENDPOINT: Get insights about a specific uploaded document
+    """
+    try:
+        session_id = get_or_create_session_for_request(request)
+        rag_manager = get_rag_manager()
+        
+        # Get document statistics
+        stats = rag_manager.get_document_stats(session_id)
+        
+        # Find the specific document
+        document_info = None
+        for doc in stats.get("documents", []):
+            if doc["filename"] == filename:
+                document_info = doc
+                break
+        
+        if not document_info:
+            raise HTTPException(status_code=404, detail=f"Document {filename} not found")
+        
+        # Get a sample of content from this document
+        results = rag_manager.collection.get(
+            where={"session_id": session_id, "filename": filename},
+            limit=3,
+            include=["documents", "metadatas"]
+        )
+        
+        sample_sections = []
+        if results["documents"]:
+            for doc, metadata in zip(results["documents"], results["metadatas"]):
+                sample_sections.append({
+                    "section": metadata.get("document_section", "unknown"),
+                    "content_preview": doc[:200] + "..." if len(doc) > 200 else doc,
+                    "keywords": metadata.get("keywords", "")
+                })
+        
+        return {
+            "filename": filename,
+            "document_title": document_info.get("title", filename),
+            "file_type": document_info.get("file_type", "unknown"),
+            "statistics": {
+                "total_chunks": document_info["chunks"],
+                "estimated_tokens": document_info["estimated_tokens"],
+                "sections_identified": document_info["sections"]
+            },
+            "content_analysis": {
+                "has_methodology": document_info.get("has_methodology", False),
+                "has_theory": document_info.get("has_theory", False), 
+                "has_references": document_info.get("has_references", False)
+            },
+            "sample_sections": sample_sections,
+            "suggested_queries": [
+                f"What methodology does my {filename} propose?",
+                f"What are the key theoretical concepts in {filename}?",
+                f"What are the main findings in my {document_info.get('title', filename)}?",
+                f"How can I improve the approach described in {filename}?"
+            ]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting document insights: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error analyzing document: {str(e)}")
 
 # Also add a debug endpoint to check RAG status:
 
