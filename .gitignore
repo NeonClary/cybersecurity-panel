@@ -4,6 +4,7 @@
 # backend
 multi_llm_chatbot_backend/.env
 multi_llm_chatbot_backend/chroma_db/
+multi_llm_chatbot_backend/chromadb_storage/
 
 # frontend
 
