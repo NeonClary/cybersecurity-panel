@@ -210,7 +210,7 @@ async def chat_sequential_enhanced(message: ChatMessage, request: Request):
             }
             
             return {
-                "type": "multi_advisor",
+                "type": "persona_responses",
                 "responses": responses,
                 "rag_info": rag_info,
                 "session_id": session_id,
@@ -240,7 +240,6 @@ async def chat_sequential_enhanced(message: ChatMessage, request: Request):
         logger.error(f"Error in enhanced sequential chat: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
-# Individual advisor endpoint (SAME INTERFACE)
 @router.post("/chat/{persona_id}")
 async def chat_with_specific_advisor(persona_id: str, input: UserInput, request: Request):
     """Chat with a specific advisor - SAME INTERFACE"""
@@ -258,17 +257,33 @@ async def chat_with_specific_advisor(persona_id: str, input: UserInput, request:
             session_id=session_id
         )
         
-        if result["type"] == "single_persona_response":
+        # FIX: Handle the actual response structure from orchestrator
+        if result.get("type") == "single_persona_response" and "persona" in result:
+            # New expected structure
             persona_data = result["persona"]
             return {
                 "persona": persona_data["persona_name"],
                 "persona_id": persona_data["persona_id"],
                 "response": persona_data["response"]
             }
-        else:
+        elif "persona_id" in result and "response" in result:
+            # Current actual structure from orchestrator
+            return {
+                "persona": result["persona_name"],
+                "persona_id": result["persona_id"],
+                "response": result["response"]
+            }
+        elif result.get("type") == "error" or "error" in result:
+            # Error handling
             return {
                 "persona": "System",
-                "response": result.get("message", "I'm having trouble generating a response right now. Please try again.")
+                "response": result.get("error", "I'm having trouble generating a response right now. Please try again.")
+            }
+        else:
+            # Fallback
+            return {
+                "persona": "System",
+                "response": "I'm having trouble generating a response right now. Please try again."
             }
             
     except HTTPException:
@@ -335,8 +350,10 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
         session = session_manager.get_session(session_id)
         
         # Validate file
-        if not is_within_upload_limit(session.uploaded_files, file.size):
-            raise HTTPException(status_code=413, detail="Upload would exceed session limits")
+        MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+        if file.size and file.size > MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="File size exceeds 10MB limit")
+
         
         # Read and validate file content
         file_bytes = await file.read()
