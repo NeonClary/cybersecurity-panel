@@ -167,7 +167,7 @@ class ContextManager:
                     "role": "user",
                     "parts": [{"text": content}]
                 })
-            elif role in ['assistant', 'methodist', 'theorist', 'pragmatist']:
+            elif role in ['assistant', 'methodologist', 'theorist', 'pragmatist']:
                 formatted.append({
                     "role": "model",
                     "parts": [{"text": content}]

@@ -16,7 +16,7 @@ def test_direct_search():
     print("🔍 Testing direct document search...")
     
     test_queries = [
-        {"query": "research methodology approach", "persona": "methodist"},
+        {"query": "research methodology approach", "persona": "methodologist"},
         {"query": "theoretical framework theory", "persona": "theorist"},
         {"query": "practical steps implementation", "persona": "pragmatist"}
     ]
@@ -55,7 +55,7 @@ def test_single_persona_chat():
     """Test individual persona chat to isolate issues"""
     print("\n💬 Testing individual persona chat...")
     
-    personas = ["methodist", "theorist", "pragmatist"]
+    personas = ["methodologist", "theorist", "pragmatist"]
     query = "What research methodology should I use based on the uploaded document?"
     
     for persona in personas:

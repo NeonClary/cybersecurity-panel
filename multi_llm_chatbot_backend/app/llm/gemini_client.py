@@ -113,8 +113,8 @@ class GeminiClient(LLMClient):
         """Clean up Gemini responses"""
         # Remove common prefixes that indicate AI confusion
         prefixes_to_remove = [
-            "Dr. Methodist:", "Dr. Theorist:", "Dr. Pragmatist:",
-            "Methodist Advisor:", "Theorist Advisor:", "Pragmatist Advisor:",
+            "Dr. Methodologist:", "Dr. Theorist:", "Dr. Pragmatist:",
+            "Methodologist Advisor:", "Theorist Advisor:", "Pragmatist Advisor:",
             "As Dr.", "Here's my response:", "Response:", "Assistant:",
             "Here are 2-3 sentence", "Here's an expansion of the advice:",
         ]
