@@ -269,26 +269,6 @@ const MessageBubble = ({
                     <div className="tooltip">Expand on this response</div>
                   )}
                 </div>
-
-                {/* NEW: Info Button */}
-                <div className="tooltip-container">
-                  <button 
-                    className="action-button"
-                    onClick={handleInfoToggle}
-                    onMouseEnter={() => showTooltipWithDelay('info')}
-                    onMouseLeave={hideTooltip}
-                    style={{ 
-                      color: showInfoOverlay ? colors.color : colors.color,
-                      borderColor: showInfoOverlay ? colors.color : colors.color + '40',
-                      backgroundColor: showInfoOverlay ? colors.color + '20' : 'transparent'
-                    }}
-                  >
-                    <Info size={14} />
-                  </button>
-                  {showTooltip === 'info' && (
-                    <div className="tooltip">RAG Information</div>
-                  )}
-                </div>
               </div>
             </div>
           )}

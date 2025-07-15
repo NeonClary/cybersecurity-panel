@@ -143,6 +143,7 @@ const ChatPage = ({ onNavigateToHome }) => {
     return;
   }
 
+  // Add user message
   const userMessage = {
     id: generateMessageId(),
     type: 'user',
@@ -152,7 +153,8 @@ const ChatPage = ({ onNavigateToHome }) => {
   setMessages(prev => [...prev, userMessage]);
   
   setIsLoading(true);
-  setThinkingAdvisors(['system']);
+  // Show thinking indicators for all advisors (backend will decide which ones respond)
+  setThinkingAdvisors(['methodologist', 'theorist', 'pragmatist']);
 
   try {
     const response = await fetch('http://localhost:8000/chat-sequential', {
@@ -170,63 +172,47 @@ const ChatPage = ({ onNavigateToHome }) => {
     }
 
     const data = await response.json();
-    console.log('Backend response:', data); // Debug log
+    console.log('Backend response:', data);
 
-    if (data.type === 'persona_responses' && data.responses) {
-      // Map each advisor response with RAG metadata
-      const advisorMessages = data.responses.map((advisor, index) => ({
+    if (data.type === 'sequential_responses' && data.responses) {
+      // Simply map each advisor response in the order backend provides
+      const advisorMessages = data.responses.map((advisor) => ({
         id: generateMessageId(),
         type: 'advisor',
         advisorId: advisor.persona_id,
-        advisorName: advisor.persona_name,
+        advisorName: advisor.persona,
         content: advisor.response,
-        timestamp: new Date(),
-        // NEW: Map RAG metadata to the structure MessageBubble expects
-        ragMetadata: {
-          usedDocuments: advisor.used_documents || false,
-          chunksUsed: advisor.document_chunks_used || 0,
-          documentChunks: advisor.retrieved_chunks || []
-        }
+        timestamp: new Date()
       }));
 
       setMessages(prev => [...prev, ...advisorMessages]);
-
-      // Optional: Add RAG summary message if documents were used
-      const ragInfo = data.rag_info || {};
-      if (ragInfo.personas_using_documents > 0) {
-        const ragSummaryMessage = {
-          id: generateMessageId(),
-          type: 'system',
-          content: `📚 ${ragInfo.personas_using_documents}/${data.responses.length} advisors referenced your uploaded documents (${ragInfo.total_document_chunks_used} chunks used)`,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, ragSummaryMessage]);
-      }
 
     } else if (data.type === 'error') {
       const errorMessage = {
         id: generateMessageId(),
         type: 'error',
-        content: data.message || 'An error occurred. Please try again.',
+        content: data.responses?.[0]?.response || 'An error occurred. Please try again.',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
     }
 
-    } catch (error) {
-        console.error('Error sending message:', error);
-        const errorMessage = {
-          id: generateMessageId(),
-          type: 'error',
-          content: 'Sorry, I encountered an error. Please try again.',
-          timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
+  } catch (error) {
+    console.error('Error sending message:', error);
+    const errorMessage = {
+      id: generateMessageId(),
+      type: 'error',
+      content: 'Sorry, I encountered an error. Please try again.',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, errorMessage]);
   }
 
-    setIsLoading(false);
-    setThinkingAdvisors([]);
-  };
+  setIsLoading(false);
+  setThinkingAdvisors([]);
+  setReplyingTo(null);
+};
+
 
   const handleReplyToAdvisor = async (inputMessage, replyContext) => {
   const replyMessage = {
@@ -272,13 +258,7 @@ const ChatPage = ({ onNavigateToHome }) => {
         advisorName: data.persona,
         content: data.response,
         isReply: true,
-        timestamp: new Date(),
-        // NEW: Map RAG metadata for reply responses too
-        ragMetadata: {
-          usedDocuments: data.used_documents || false,
-          chunksUsed: data.document_chunks_used || 0,
-          documentChunks: data.retrieved_chunks || []
-        }
+        timestamp: new Date()
       };
       setMessages(prev => [...prev, replyResponseMessage]);
     }
@@ -294,10 +274,9 @@ const ChatPage = ({ onNavigateToHome }) => {
     setMessages(prev => [...prev, errorMessage]);
   }
 
-    setIsLoading(false);
-    setThinkingAdvisors([]);
-    setReplyingTo(null);
-  };
+  setIsLoading(false);
+  setThinkingAdvisors([]);
+};
 
   const handleCopyMessage = (messageId, content) => {
   // Optional: Show a toast notification or add to message history
@@ -343,30 +322,11 @@ const handleExpandMessage = async (messageId, advisorId) => {
     }
 
     const data = await response.json();
-    console.log('Expand response data:', data); // Debug log
 
-    // FIX: Handle both new and old response structures
+    // Clean response handling without RAG metadata
     let expandedMessage = null;
 
-    if (data.type === 'single_persona_response' && data.persona) {
-      // New backend structure
-      expandedMessage = {
-        id: generateMessageId(),
-        type: 'advisor',
-        advisorId: advisorId,
-        advisorName: advisor.name,
-        content: data.persona.response,
-        isExpansion: true,
-        expandsMessageId: messageId,
-        timestamp: new Date(),
-        ragMetadata: {
-          usedDocuments: data.persona.used_documents || false,
-          chunksUsed: data.persona.document_chunks_used || 0,
-          documentChunks: data.persona.retrieved_chunks || []
-        }
-      };
-    } else if (data.persona && data.response) {
-      // Current backend structure (without type field)
+    if (data.persona && data.response) {
       expandedMessage = {
         id: generateMessageId(),
         type: 'advisor',
@@ -375,19 +335,13 @@ const handleExpandMessage = async (messageId, advisorId) => {
         content: data.response,
         isExpansion: true,
         expandsMessageId: messageId,
-        timestamp: new Date(),
-        ragMetadata: {
-          usedDocuments: false,
-          chunksUsed: 0,
-          documentChunks: []
-        }
+        timestamp: new Date()
       };
     }
 
     if (expandedMessage) {
       setMessages(prev => [...prev, expandedMessage]);
     } else {
-      // Fallback error message
       const errorMessage = {
         id: generateMessageId(),
         type: 'error',
