@@ -1,16 +1,19 @@
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router  # This line stays the same!
-from dotenv import load_dotenv
+from app.api.routes import router
 import logging
-import os
+
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
-load_dotenv()
 
 app = FastAPI(
     title="Multi-LLM Chatbot Backend",
