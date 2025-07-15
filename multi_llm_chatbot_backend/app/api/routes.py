@@ -1,5 +1,6 @@
 import os
 from fastapi import APIRouter, Body, HTTPException, Header, UploadFile, File, Request
+from fastapi import Query
 from typing import Optional, List
 import httpx
 from app.llm.llm_client import LLMClient
@@ -13,6 +14,11 @@ from app.models.default_personas import get_default_personas
 from app.utils.document_extractor import extract_text_from_file
 from app.utils.file_limits import is_within_upload_limit
 from pydantic import BaseModel
+
+from fastapi.responses import StreamingResponse
+from fastapi import Query
+from app.utils.file_export import export_chat_as_file
+
 import hashlib
 import logging
 
@@ -423,6 +429,33 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
         logger.error(f"Error processing document upload: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
+
+@router.get("/export-chat")
+async def export_chat(request: Request, format: str = Query(..., regex="^(txt|pdf|docx)$")):
+    """
+    Export the current chat context as a downloadable file in txt, pdf, or docx format.
+    """
+    try:
+        session_id = get_or_create_session_for_request(request)
+        session = session_manager.get_session(session_id)
+
+        if not session.messages:
+            return {"error": "No messages to export in current session."}
+
+        # Generate the file using utility
+        file_stream, filename, media_type = export_chat_as_file(session.messages, format)
+
+        return StreamingResponse(
+            file_stream,
+            media_type=media_type,
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting chat: {str(e)}")
+        return {"error": "Failed to export chat.", "detail": str(e)}
+
+
 # Add new endpoint to get document statistics
 @router.get("/document-stats")
 async def get_document_stats(request: Request):
@@ -595,6 +628,32 @@ async def debug_personas(request: Request):
             "rag_enabled": False,
             "error": str(e)
         }
+
+@router.get("/debug/ranked-personas")
+async def get_ranked_personas(request: Request, k: int = Query(3, ge=1, le=10)):
+    """
+    Debug endpoint: Get top-k ranked personas based on current session context.
+    Uses LLM to rank based on latest conversation messages.
+    """
+    try:
+        session_id = get_or_create_session_for_request(request)
+        
+        # Call the ranking method
+        top_personas = await chat_orchestrator.get_top_personas(session_id=session_id, k=k)
+        
+        # Include some metadata for debug purposes
+        return {
+            "ranked_personas": top_personas,
+            "available_personas": list(chat_orchestrator.personas.keys()),
+            "session_id": session_id
+        }
+    except Exception as e:
+        logger.error(f"Error in /debug/ranked-personas: {e}")
+        return {
+            "ranked_personas": [],
+            "error": str(e)
+        }
+
 
 @router.post("/chat/{persona_id}")
 async def chat_with_specific_persona(persona_id: str, message: ChatMessage, request: Request):

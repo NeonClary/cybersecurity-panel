@@ -8,3 +8,5 @@ chromadb
 sentence-transformers
 nltk
 tiktoken
+reportlab
+docx

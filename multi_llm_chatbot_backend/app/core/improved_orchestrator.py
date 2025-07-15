@@ -4,6 +4,9 @@ from app.core.session_manager import ConversationContext, get_session_manager
 from app.core.context_manager import get_context_manager
 from app.core.rag_manager import get_rag_manager
 from app.llm.llm_client import LLMClient
+from app.models.default_personas import is_valid_persona_id
+
+import json
 import logging
 import re
 
@@ -595,3 +598,71 @@ When analyzing the document context:
                 "error": f"Error processing request: {str(e)}",
                 "persona_id": persona_id
             }
+        
+
+    async def get_top_personas(self, session_id: str, k: int = 3) -> List[str]:
+        """
+        Use the LLM to rank personas based on current session context.
+        Falls back to default persona order if LLM fails or returns invalid data.
+        """
+        try:
+            session = self.session_manager.get_session(session_id)
+
+            if not self.personas:
+                logger.warning("No personas registered.")
+                return []
+
+            # Use the LLM from one of the existing persona objects
+            llm = next(iter(self.personas.values())).llm
+
+            # Use recent conversation context (last 5 messages)
+            recent_context = "\n".join(
+                msg['content'] for msg in session.get_recent_messages(5)
+            )
+
+            # Format available persona descriptions
+            persona_descriptions = "\n".join([
+                f"- ID: {p.id}\n  Name: {p.name}\n  Prompt: {p.system_prompt.strip()}"
+                for p in self.personas.values()
+            ])
+
+            prompt = f"""
+                        The user is seeking PhD advice. Based on the conversation below, choose the top {k} most relevant advisors.
+
+                        Respond ONLY with a JSON list of exactly {k} advisor IDs in order of relevance.
+                        Example response: ["methodist", "pragmatist", "theorist"]
+
+                        --- Conversation ---
+                        {recent_context}
+
+                        --- Available Advisors ---
+                        {persona_descriptions}
+                      """.strip()
+
+            llm_response = await llm.generate(
+                system_prompt="You are an assistant that selects the best advisors for a PhD student.",
+                context=[{"role": "user", "content": prompt}],
+                temperature=0.4,
+                max_tokens=150
+            )
+
+            # Step 1: Try direct JSON load
+            try:
+                top_ids = json.loads(llm_response.strip())
+            except json.JSONDecodeError:
+                # Step 2: Fallback: try extracting list of quoted strings
+                top_ids = re.findall(r'"(.*?)"', llm_response)
+                logger.warning(f"Fallback JSON extraction used: {top_ids}")
+
+            # Step 3: Filter valid persona IDs
+            valid_ids = [pid for pid in top_ids if pid in self.personas]
+
+            if len(valid_ids) < k:
+                logger.warning(f"LLM returned insufficient or invalid IDs. Got: {valid_ids}")
+                return list(self.personas.keys())[:k]
+
+            return valid_ids[:k]
+
+        except Exception as e:
+            logger.error(f"Error selecting top personas: {e}")
+            return list(self.personas.keys())[:k]
