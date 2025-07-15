@@ -186,65 +186,88 @@ async def switch_provider(provider_data: ProviderSwitch):
             detail=f"Failed to switch to {provider_data.provider}: {str(e)}"
         )
 
-# Main chat endpoint (SAME INTERFACE, improved backend)
+# Main chat endpoint
 @router.post("/chat-sequential")
 async def chat_sequential_enhanced(message: ChatMessage, request: Request):
     """
-    Enhanced sequential chat with improved document awareness and response quality
+    Enhanced sequential chat with intelligent persona ordering.
+    Returns responses in the order determined by LLM-based relevance ranking.
     """
     try:
         # Get or create session
         session_id = get_or_create_session_for_request(request, message.session_id)
         
-        # Process message with enhanced orchestrator
-        orchestrator_result = await chat_orchestrator.process_message_with_enhanced_context(
-            user_input=message.user_input,
-            session_id=session_id,
-            response_length=message.response_length or "medium"
+        # Add user message to session first (needed for persona ranking)
+        session = session_manager.get_session(session_id)
+        session.append_message("user", message.user_input)
+        
+        # Get intelligently ordered personas based on context
+        top_personas = await chat_orchestrator.get_top_personas(
+            session_id=session_id, 
+            k=3  # Get top 3 most relevant personas
         )
-
-        if orchestrator_result["status"] == "success":
-            responses = orchestrator_result["responses"]
-            
-            # Enhanced RAG information for debugging and user feedback
-            rag_info = {
-                "total_personas": len(responses),
-                "personas_using_documents": sum(1 for r in responses if r.get("used_documents", False)),
-                "total_document_chunks_used": sum(r.get("document_chunks_used", 0) for r in responses),
-                "document_aware_query": orchestrator_result.get("document_references_detected", False),
-                "available_documents": orchestrator_result.get("available_documents", [])
-            }
-            
-            return {
-                "type": "persona_responses",
-                "responses": responses,
-                "rag_info": rag_info,
-                "session_id": session_id,
-                "query_analysis": {
-                    "document_references_found": orchestrator_result.get("document_references_detected", False),
-                    "personas_with_high_quality_context": [
-                        r["persona_id"] for r in responses 
-                        if r.get("context_quality") == "high"
-                    ]
-                }
-            }
-        else:
-            # Fallback response with helpful guidance
-            return {
-                "type": "clarification_needed",
-                "message": orchestrator_result.get("message", "I need more information to help you effectively."),
-                "suggestions": orchestrator_result.get("suggestions", [
-                    "Could you provide more details about your specific question?",
-                    "Consider uploading relevant documents to get more targeted advice.",
-                    "Try asking about a specific aspect of your research."
-                ]),
-                "session_id": session_id,
-                "rag_info": {"total_personas": 0, "personas_using_documents": 0}
-            }
+        
+        logger.info(f"Intelligent persona order for session {session_id}: {top_personas}")
+        
+        # Generate responses from personas in the intelligent order
+        responses = []
+        
+        for persona_id in top_personas:
+            try:
+                # Generate response from this persona
+                persona_result = await chat_orchestrator.chat_with_persona(
+                    user_input=message.user_input,
+                    persona_id=persona_id,
+                    session_id=session_id,
+                    response_length=message.response_length or "medium"
+                )
+                
+                
+                if "persona_name" in persona_result and "response" in persona_result:
+                    responses.append({
+                        "persona": persona_result["persona_name"],
+                        "persona_id": persona_result["persona_id"],
+                        "response": persona_result["response"]
+                    })
+                elif persona_result.get("type") == "single_persona_response" and "persona" in persona_result:
+                    persona_data = persona_result["persona"]
+                    responses.append({
+                        "persona": persona_data["persona_name"],
+                        "persona_id": persona_data["persona_id"],
+                        "response": persona_data["response"]
+                    })
+                else:
+                    # Fallback response
+                    responses.append({
+                        "persona": chat_orchestrator.personas[persona_id].name,
+                        "persona_id": persona_id,
+                        "response": "I'm having trouble processing your question right now. Please try again."
+                    })
+                    
+            except Exception as e:
+                logger.error(f"Error generating response for persona {persona_id}: {str(e)}")
+                # Error fallback
+                responses.append({
+                    "persona": chat_orchestrator.personas[persona_id].name,
+                    "persona_id": persona_id,
+                    "response": "I encountered an error while processing your question. Please try again."
+                })
+        
+        #  response format
+        return {
+            "type": "sequential_responses",
+            "responses": responses
+        }
 
     except Exception as e:
         logger.error(f"Error in enhanced sequential chat: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+        return {
+            "type": "error", 
+            "responses": [{
+                "persona": "System",
+                "response": "I'm having trouble processing your request. Could you please try again?"
+            }]
+        }
 
 @router.post("/chat/{persona_id}")
 async def chat_with_specific_advisor(persona_id: str, input: UserInput, request: Request):
