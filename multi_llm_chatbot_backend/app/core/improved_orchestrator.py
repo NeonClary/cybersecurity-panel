@@ -446,10 +446,10 @@ When analyzing the document context:
     async def _build_enhanced_context_for_persona(self, session, persona, user_message: str, document_context: str) -> List[Dict[str, str]]:
         """
         Build enhanced context that properly integrates document information with conversation history
-        FIXED VERSION - No document hallucination when no documents exist
+        FIXED VERSION - Ensures document context is properly preserved for both providers
         """
         enhanced_context = []
-    
+
         # Get recent conversation history (last 6 messages for efficiency)
         recent_messages = session.messages[-6:] if len(session.messages) > 6 else session.messages
         
@@ -467,6 +467,7 @@ When analyzing the document context:
     CURRENT SESSION CONTEXT:
     The student has uploaded the following documents: {doc_list}
 
+    DOCUMENT CONTENT:
     {document_context}
 
     IMPORTANT: When the student refers to "my document," "my dissertation," "my proposal," etc., they are referring to one of their uploaded documents. Use the document context above to understand which specific document they mean and reference it by name in your response.
@@ -495,21 +496,15 @@ When analyzing the document context:
                 "role": "system", 
                 "content": system_message
             })
-        
-        # Add recent conversation history
+
+        # Add recent conversation messages (excluding system messages to avoid duplication)
         for message in recent_messages:
-            if message.get('role') in ['user', 'assistant']:
+            if message.get('role') != 'system':
                 enhanced_context.append({
                     "role": message['role'],
                     "content": message['content']
                 })
-        
-        # Add current user message
-        enhanced_context.append({
-            "role": "user",
-            "content": user_message
-        })
-        
+
         return enhanced_context
     
     def _is_valid_response(self, response: str, persona_id: str) -> bool:

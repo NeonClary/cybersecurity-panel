@@ -141,24 +141,46 @@ class ContextManager:
     def _format_for_gemini(self, messages: List[dict], system_prompt: str) -> List[dict]:
         """
         Format messages for Gemini API (uses user/model roles with parts structure)
+        FIXED VERSION - Better handles system messages and document context
         """
         formatted = []
         
-        # Add system prompt as initial exchange
+        # Process all messages, handling system messages properly
+        system_message_content = ""
+        conversation_messages = []
+        
+        # Add initial system prompt if provided
         if system_prompt:
+            system_message_content = system_prompt
+        
+        for message in messages:
+            role = message['role']
+            content = message['content']
+            
+            if role == 'system':
+                # Accumulate system messages
+                if system_message_content:
+                    system_message_content += "\n\n" + content
+                else:
+                    system_message_content = content
+            else:
+                conversation_messages.append(message)
+        
+        # Add accumulated system content as initial exchange
+        if system_message_content:
             formatted.extend([
                 {
                     "role": "user",
-                    "parts": [{"text": system_prompt}]
+                    "parts": [{"text": system_message_content}]
                 },
                 {
                     "role": "model",
-                    "parts": [{"text": "I understand. I'll follow these instructions."}]
+                    "parts": [{"text": "I understand. I'll follow these instructions and use the document context you've provided."}]
                 }
             ])
         
-        # Convert messages to Gemini format
-        for message in messages:
+        # Convert conversation messages to Gemini format
+        for message in conversation_messages:
             role = message['role']
             content = message['content']
             
@@ -178,7 +200,7 @@ class ContextManager:
                     "role": "user",
                     "parts": [{"text": f"[Context Document] {content}"}]
                 })
-        
+
         return formatted
     
     def _format_for_ollama(self, messages: List[dict], system_prompt: str) -> str:

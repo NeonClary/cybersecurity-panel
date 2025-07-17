@@ -23,6 +23,7 @@ class ImprovedGeminiClient(LLMClient):
     async def generate(self, system_prompt: str, context: List[dict], temperature: float, max_tokens: int) -> str:
         """
         Generate response using improved context management
+        FIXED VERSION - Better debugging and context handling
         """
         try:
             # Use context manager to prepare optimal context window
@@ -34,6 +35,9 @@ class ImprovedGeminiClient(LLMClient):
             
             logger.debug(f"Context prepared: {len(context_window.messages)} messages, "
                         f"~{context_window.total_tokens} tokens, truncated={context_window.truncated}")
+            
+            # DEBUG: Log the actual content being sent to Gemini
+            logger.debug(f"Gemini payload preview: {str(context_window.messages)[:500]}...")
             
             payload = {
                 "contents": context_window.messages,
@@ -50,7 +54,7 @@ class ImprovedGeminiClient(LLMClient):
                         "threshold": "BLOCK_MEDIUM_AND_ABOVE"
                     },
                     {
-                        "category": "HARM_CATEGORY_HATE_SPEECH",
+                        "category": "HARM_CATEGORY_HATE_SPEECH", 
                         "threshold": "BLOCK_MEDIUM_AND_ABOVE"
                     },
                     {
@@ -64,33 +68,41 @@ class ImprovedGeminiClient(LLMClient):
                 ]
             }
             
-            url = f"{self.base_url}/{self.model_name}:generateContent?key={self.api_key}"
-            
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(url, json=payload)
+                response = await client.post(
+                    f"{self.base_url}/{self.model_name}:generateContent",
+                    json=payload,
+                    headers={"x-goog-api-key": self.api_key}
+                )
                 response.raise_for_status()
                 
                 result = response.json()
                 
-                if "candidates" in result and result["candidates"]:
-                    candidate = result["candidates"][0]
-                    if "content" in candidate and "parts" in candidate["content"]:
-                        text = candidate["content"]["parts"][0].get("text", "")
-                        return self._clean_response(text)
+                # Better error handling
+                if "candidates" not in result or not result["candidates"]:
+                    logger.error(f"No candidates in Gemini response: {result}")
+                    return "I apologize, but I'm unable to generate a response right now. Please try again."
                 
-                # Handle safety filter or other issues
-                if "promptFeedback" in result:
-                    feedback = result["promptFeedback"]
-                    logger.warning(f"Gemini prompt feedback: {feedback}")
+                candidate = result["candidates"][0]
                 
-                return "I apologize, but I'm unable to provide a response to that query."
+                if "content" not in candidate or "parts" not in candidate["content"]:
+                    logger.error(f"Invalid candidate structure: {candidate}")
+                    return "I apologize, but I received an unexpected response format. Please try again."
                 
-        except httpx.TimeoutException:
-            logger.error("Gemini API timeout")
-            return "I'm experiencing a delay in processing. Please try again."
+                text = candidate["content"]["parts"][0].get("text", "").strip()
+                
+                if not text:
+                    logger.warning("Empty response from Gemini")
+                    return "I apologize, but I couldn't generate a meaningful response. Please try rephrasing your question."
+                
+                return self._clean_response(text)
+                
         except httpx.HTTPStatusError as e:
             logger.error(f"Gemini API HTTP error: {e.response.status_code} - {e.response.text}")
-            return "I'm having trouble accessing the AI service. Please try again."
+            return "I'm experiencing issues connecting to the AI service. Please try again."
+        except httpx.TimeoutException:
+            logger.error("Gemini API timeout")
+            return "The AI service is taking too long to respond. Please try again."
         except Exception as e:
             logger.error(f"Unexpected error in Gemini client: {str(e)}")
             return "I encountered an unexpected error. Please try again."
