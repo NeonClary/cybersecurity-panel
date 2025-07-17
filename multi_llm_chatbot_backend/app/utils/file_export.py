@@ -1,9 +1,14 @@
 from io import BytesIO
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from docx import Document
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-
+from fastapi.responses import StreamingResponse
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, ListFlowable, ListItem
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from io import BytesIO
+import re
 
 def format_messages_for_export(messages: List[dict]) -> str:
     """
@@ -33,42 +38,123 @@ def generate_docx_file(text: str) -> BytesIO:
 
 def generate_pdf_file(text: str) -> BytesIO:
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
 
-    width, height = letter
-    y = height - 40
-    line_height = 14
+    styles = getSampleStyleSheet()
+    story = []
 
-    for line in text.splitlines():
-        if y < 40:
-            c.showPage()
-            y = height - 40
-        c.drawString(40, y, line)
-        y -= line_height
+    for block in text.split("\n\n"):
+        story.append(Paragraph(block.strip(), styles["Normal"]))
+        story.append(Spacer(1, 12))
 
-    c.save()
+    doc.build(story)
     buffer.seek(0)
     return buffer
 
-
-def export_chat_as_file(messages: List[dict], format: str) -> Tuple[BytesIO, str, str]:
+def export_chat_as_file(content: Union[str, List[dict]], format: str) -> Tuple[BytesIO, str, str]:
     """
-    Export chat messages to the requested file format.
-    Returns: (file_stream, filename, media_type)
+    Export either a list of chat messages or a summary string to the specified format.
     """
-    text = format_messages_for_export(messages)
+    if isinstance(content, list):
+        text = format_messages_for_export(content)
+    elif isinstance(content, str):
+        text = content.strip()
+    else:
+        raise ValueError("Unsupported content type")
 
     if format == "txt":
-        stream = generate_txt_file(text)
-        return stream, "chat_export.txt", "text/plain"
+        return generate_txt_file(text), "chat_export.txt", "text/plain"
 
     elif format == "docx":
-        stream = generate_docx_file(text)
-        return stream, "chat_export.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        return generate_docx_file(text), "chat_export.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
     elif format == "pdf":
-        stream = generate_pdf_file(text)
-        return stream, "chat_export.pdf", "application/pdf"
+        return generate_pdf_file(text), "chat_export.pdf", "application/pdf"
 
     else:
         raise ValueError(f"Unsupported export format: {format}")
+    
+def prepare_export_response(
+    content: Union[str, List[dict]],
+    format: str,
+    filename_prefix: str = "chat_export"
+) -> StreamingResponse:
+    """
+    Prepare a StreamingResponse for export, using the given filename prefix.
+    """
+    stream, filename, media_type = export_chat_as_file(content, format)
+
+    # Replace "chat_export" with custom prefix if needed
+    final_filename = filename.replace("chat_export", filename_prefix)
+
+    return StreamingResponse(
+        stream,
+        media_type=media_type,
+        headers={"Content-Disposition": f"attachment; filename={final_filename}"}
+    )
+
+
+def _render_rich_text(text: str) -> str:
+    """
+    Convert markdown-style **bold** to reportlab <b>bold</b> tags.
+    """
+    return re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+
+
+def generate_pdf_file_from_blocks(blocks: List[dict]) -> BytesIO:
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+
+    styles = getSampleStyleSheet()
+
+    heading_style = ParagraphStyle(
+        name="Heading",
+        parent=styles["Heading1"],
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
+
+    paragraph_style = ParagraphStyle(
+        name="Paragraph",
+        parent=styles["Normal"],
+        alignment=TA_LEFT,
+        leading=14,
+        spaceAfter=8
+    )
+
+    list_style = ParagraphStyle(
+        name="List",
+        parent=styles["Normal"],
+        leftIndent=20,
+        leading=14
+    )
+
+    story = []
+
+    for block in blocks:
+        if block["type"] == "heading":
+            story.append(Paragraph(_render_rich_text(block["text"]), heading_style))
+            story.append(Spacer(1, 12))
+
+        elif block["type"] == "paragraph":
+            story.append(Paragraph(_render_rich_text(block["text"]), paragraph_style))
+
+        elif block["type"] == "list":
+            list_items = [
+                ListItem(Paragraph(_render_rich_text(item), list_style))
+                for item in block["items"]
+            ]
+            story.append(
+                ListFlowable(
+                    list_items,
+                    bulletType="1" if block.get("style") == "numbered" else "bullet",
+                    start="1" if block.get("style") == "numbered" else None,
+                    leftIndent=20
+                )
+            )
+            story.append(Spacer(1, 8))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
+
