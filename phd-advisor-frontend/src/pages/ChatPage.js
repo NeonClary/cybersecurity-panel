@@ -1,4 +1,3 @@
-// src/pages/ChatPage.js
 import React, { useState, useEffect, useRef } from 'react';
 import { Home, MessageCircle, Reply, X, Sparkles, Users, Settings2, FileText } from 'lucide-react';
 import EnhancedChatInput from '../components/EnhancedChatInput';
@@ -7,6 +6,7 @@ import ThinkingIndicator from '../components/ThinkingIndicator';
 import SuggestionsPanel from '../components/SuggestionsPanel';
 import ThemeToggle from '../components/ThemeToggle';
 import ProviderDropdown from '../components/ProviderDropdown';
+import ExportButton from '../components/ExportButton';
 import { advisors, getAdvisorColors } from '../data/advisors';
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/ChatPage.css';
@@ -138,233 +138,232 @@ const ChatPage = ({ onNavigateToHome }) => {
   };
 
   const handleSendMessage = async (inputMessage) => {
-  if (replyingTo) {
-    await handleReplyToAdvisor(inputMessage, replyingTo);
-    return;
-  }
-
-  // Add user message
-  const userMessage = {
-    id: generateMessageId(),
-    type: 'user',
-    content: inputMessage,
-    timestamp: new Date()
-  };
-  setMessages(prev => [...prev, userMessage]);
-  
-  setIsLoading(true);
-  // Show thinking indicators for all advisors (backend will decide which ones respond)
-  setThinkingAdvisors(['methodologist', 'theorist', 'pragmatist']);
-
-  try {
-    const response = await fetch('http://localhost:8000/chat-sequential', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_input: inputMessage
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
+    if (replyingTo) {
+      await handleReplyToAdvisor(inputMessage, replyingTo);
+      return;
     }
 
-    const data = await response.json();
-    console.log('Backend response:', data);
+    // Add user message
+    const userMessage = {
+      id: generateMessageId(),
+      type: 'user',
+      content: inputMessage,
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, userMessage]);
+    
+    setIsLoading(true);
+    // Show thinking indicators for all advisors (backend will decide which ones respond)
+    setThinkingAdvisors(['methodologist', 'theorist', 'pragmatist']);
 
-    if (data.type === 'sequential_responses' && data.responses) {
-      // Simply map each advisor response in the order backend provides
-      const advisorMessages = data.responses.map((advisor) => ({
-        id: generateMessageId(),
-        type: 'advisor',
-        advisorId: advisor.persona_id,
-        advisorName: advisor.persona,
-        content: advisor.response,
-        timestamp: new Date()
-      }));
+    try {
+      const response = await fetch('http://localhost:8000/chat-sequential', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_input: inputMessage
+        }),
+      });
 
-      setMessages(prev => [...prev, ...advisorMessages]);
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
 
-    } else if (data.type === 'error') {
+      const data = await response.json();
+      console.log('Backend response:', data);
+
+      if (data.type === 'sequential_responses' && data.responses) {
+        // Simply map each advisor response in the order backend provides
+        const advisorMessages = data.responses.map((advisor) => ({
+          id: generateMessageId(),
+          type: 'advisor',
+          advisorId: advisor.persona_id,
+          advisorName: advisor.persona,
+          content: advisor.response,
+          timestamp: new Date()
+        }));
+
+        setMessages(prev => [...prev, ...advisorMessages]);
+
+      } else if (data.type === 'error') {
+        const errorMessage = {
+          id: generateMessageId(),
+          type: 'error',
+          content: data.responses?.[0]?.response || 'An error occurred. Please try again.',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+
+    } catch (error) {
+      console.error('Error sending message:', error);
       const errorMessage = {
         id: generateMessageId(),
         type: 'error',
-        content: data.responses?.[0]?.response || 'An error occurred. Please try again.',
+        content: 'Sorry, I encountered an error. Please try again.',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
     }
 
-  } catch (error) {
-    console.error('Error sending message:', error);
-    const errorMessage = {
-      id: generateMessageId(),
-      type: 'error',
-      content: 'Sorry, I encountered an error. Please try again.',
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, errorMessage]);
-  }
-
-  setIsLoading(false);
-  setThinkingAdvisors([]);
-  setReplyingTo(null);
-};
-
+    setIsLoading(false);
+    setThinkingAdvisors([]);
+    setReplyingTo(null);
+  };
 
   const handleReplyToAdvisor = async (inputMessage, replyContext) => {
-  const replyMessage = {
-    id: generateMessageId(),
-    type: 'user',
-    content: inputMessage,
-    replyTo: {
-      advisorId: replyContext.advisorId,
-      advisorName: replyContext.advisorName,
-      messageId: replyContext.messageId
-    },
-    timestamp: new Date()
-  };
-  setMessages(prev => [...prev, replyMessage]);
-  
-  setIsLoading(true);
-  setThinkingAdvisors([replyContext.advisorId]);
-
-  try {
-    const response = await fetch('http://localhost:8000/reply-to-advisor', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_input: inputMessage,
-        advisor_id: replyContext.advisorId,
-        original_message_id: replyContext.messageId
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.type === 'advisor_reply') {
-      const replyResponseMessage = {
-        id: generateMessageId(),
-        type: 'advisor',
-        advisorId: data.persona_id,
-        advisorName: data.persona,
-        content: data.response,
-        isReply: true,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, replyResponseMessage]);
-    }
-
-  } catch (error) {
-    console.error('Error replying to advisor:', error);
-    const errorMessage = {
+    const replyMessage = {
       id: generateMessageId(),
-      type: 'error',
-      content: 'Sorry, I encountered an error with your reply. Please try again.',
+      type: 'user',
+      content: inputMessage,
+      replyTo: {
+        advisorId: replyContext.advisorId,
+        advisorName: replyContext.advisorName,
+        messageId: replyContext.messageId
+      },
       timestamp: new Date()
     };
-    setMessages(prev => [...prev, errorMessage]);
-  }
+    setMessages(prev => [...prev, replyMessage]);
+    
+    setIsLoading(true);
+    setThinkingAdvisors([replyContext.advisorId]);
 
-  setIsLoading(false);
-  setThinkingAdvisors([]);
-};
+    try {
+      const response = await fetch('http://localhost:8000/reply-to-advisor', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_input: inputMessage,
+          advisor_id: replyContext.advisorId,
+          original_message_id: replyContext.messageId
+        }),
+      });
 
-  const handleCopyMessage = (messageId, content) => {
-  // Optional: Show a toast notification or add to message history
-  console.log(`Copied message ${messageId}: ${content.substring(0, 50)}...`);
-  };
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
 
-const handleExpandMessage = async (messageId, advisorId) => {
-  const advisor = advisors[advisorId];
-  if (!advisor) return;
+      const data = await response.json();
 
-  const originalMessage = messages.find(msg => msg.id === messageId);
-  if (!originalMessage) return;
+      if (data.type === 'advisor_reply') {
+        const replyResponseMessage = {
+          id: generateMessageId(),
+          type: 'advisor',
+          advisorId: data.persona_id,
+          advisorName: data.persona,
+          content: data.response,
+          isReply: true,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, replyResponseMessage]);
+      }
 
-  const expandPrompt = `Please expand on your previous response: "${originalMessage.content.substring(0, 100)}..." Provide more detail and depth.`;
-  
-  const expandMessage = {
-    id: generateMessageId(),
-    type: 'user',
-    content: expandPrompt,
-    timestamp: new Date(),
-    isExpandRequest: true,
-    expandsMessageId: messageId
-  };
-  setMessages(prev => [...prev, expandMessage]);
-  
-  setIsLoading(true);
-  setThinkingAdvisors([advisorId]);
-
-  try {
-    const response = await fetch(`http://localhost:8000/chat/${advisorId}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_input: expandPrompt,
-        response_length: 'long'
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // Clean response handling without RAG metadata
-    let expandedMessage = null;
-
-    if (data.persona && data.response) {
-      expandedMessage = {
-        id: generateMessageId(),
-        type: 'advisor',
-        advisorId: advisorId,
-        advisorName: advisor.name,
-        content: data.response,
-        isExpansion: true,
-        expandsMessageId: messageId,
-        timestamp: new Date()
-      };
-    }
-
-    if (expandedMessage) {
-      setMessages(prev => [...prev, expandedMessage]);
-    } else {
+    } catch (error) {
+      console.error('Error replying to advisor:', error);
       const errorMessage = {
         id: generateMessageId(),
         type: 'error',
-        content: 'Sorry, I received an unexpected response format. Please try again.',
+        content: 'Sorry, I encountered an error with your reply. Please try again.',
         timestamp: new Date()
       };
       setMessages(prev => [...prev, errorMessage]);
     }
 
-  } catch (error) {
-    console.error('Error expanding message:', error);
-    const errorMessage = {
-      id: generateMessageId(),
-      type: 'error',
-      content: 'Sorry, I encountered an error expanding the response. Please try again.',
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, errorMessage]);
-  }
+    setIsLoading(false);
+    setThinkingAdvisors([]);
+  };
 
-  setIsLoading(false);
-  setThinkingAdvisors([]);
-};
+  const handleCopyMessage = (messageId, content) => {
+    // Optional: Show a toast notification or add to message history
+    console.log(`Copied message ${messageId}: ${content.substring(0, 50)}...`);
+  };
+
+  const handleExpandMessage = async (messageId, advisorId) => {
+    const advisor = advisors[advisorId];
+    if (!advisor) return;
+
+    const originalMessage = messages.find(msg => msg.id === messageId);
+    if (!originalMessage) return;
+
+    const expandPrompt = `Please expand on your previous response: "${originalMessage.content.substring(0, 100)}..." Provide more detail and depth.`;
+    
+    const expandMessage = {
+      id: generateMessageId(),
+      type: 'user',
+      content: expandPrompt,
+      timestamp: new Date(),
+      isExpandRequest: true,
+      expandsMessageId: messageId
+    };
+    setMessages(prev => [...prev, expandMessage]);
+    
+    setIsLoading(true);
+    setThinkingAdvisors([advisorId]);
+
+    try {
+      const response = await fetch(`http://localhost:8000/chat/${advisorId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_input: expandPrompt,
+          response_length: 'long'
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Clean response handling without RAG metadata
+      let expandedMessage = null;
+
+      if (data.persona && data.response) {
+        expandedMessage = {
+          id: generateMessageId(),
+          type: 'advisor',
+          advisorId: advisorId,
+          advisorName: advisor.name,
+          content: data.response,
+          isExpansion: true,
+          expandsMessageId: messageId,
+          timestamp: new Date()
+        };
+      }
+
+      if (expandedMessage) {
+        setMessages(prev => [...prev, expandedMessage]);
+      } else {
+        const errorMessage = {
+          id: generateMessageId(),
+          type: 'error',
+          content: 'Sorry, I received an unexpected response format. Please try again.',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, errorMessage]);
+      }
+
+    } catch (error) {
+      console.error('Error expanding message:', error);
+      const errorMessage = {
+        id: generateMessageId(),
+        type: 'error',
+        content: 'Sorry, I encountered an error expanding the response. Please try again.',
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    }
+
+    setIsLoading(false);
+    setThinkingAdvisors([]);
+  };
 
   const handleReplyToMessage = (message) => {
     const advisor = advisors[message.advisorId];
@@ -391,6 +390,7 @@ const handleExpandMessage = async (messageId, advisorId) => {
   };
 
   const hasMessages = messages.length > 0;
+  const hasConversationMessages = messages.filter(m => m.type !== 'system' && m.type !== 'document_upload').length > 0;
 
   return (
     <div className="modern-chat-page">
@@ -423,111 +423,106 @@ const handleExpandMessage = async (messageId, advisorId) => {
                   key={id} 
                   className={`advisor-pill ${isThinking ? 'thinking' : ''}`}
                   style={{ 
-                    backgroundColor: colors.bgColor,
-                    borderColor: colors.color + '20'
+                    '--advisor-color': colors.color,
+                    '--advisor-bg': colors.bgColor
                   }}
+                  title={`${advisor.name} - ${advisor.expertise}`}
                 >
-                  <Icon size={16} style={{ color: colors.color }} />
-                  <span style={{ color: colors.color }}>{advisor.name.split(' ')[1]}</span>
-                  {isThinking && <div className="thinking-pulse" style={{ backgroundColor: colors.color }}></div>}
+                  <Icon size={16} />
+                  <span>{advisor.name}</span>
+                  {isThinking && (
+                    <div className="thinking-dots">
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                      <div className="dot"></div>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
           
           <div className="header-controls">
-            {/* Document Count Indicator */}
-            {uploadedDocuments.length > 0 && (
-              <div className="document-indicator" title={`${uploadedDocuments.length} document(s) uploaded`}>
-                <FileText size={16} />
-                <span className="doc-count">{uploadedDocuments.length}</span>
-              </div>
-            )}
+            {/* Export Button */}
+            <ExportButton hasMessages={hasConversationMessages} />
             
+            {/* Provider Dropdown */}
             <ProviderDropdown 
               currentProvider={currentProvider}
               onProviderChange={handleProviderSwitch}
               isLoading={isProviderSwitching}
             />
+            
+            {/* Theme Toggle */}
             <ThemeToggle />
           </div>
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="main-content">
+      {/* Main Content */}
+      <div className="chat-content">
         {!hasMessages ? (
-          /* Welcome State - Just Suggestions */
-          <div className="welcome-state">
-            <div className="suggestions-container">
-              <SuggestionsPanel onSuggestionClick={handleSendMessage} />
-            </div>
-          </div>
+          <SuggestionsPanel onSuggestionClick={handleSendMessage} />
         ) : (
-          /* Chat State */
-          <div className="chat-state">
-            <div className="messages-area">
+          <div className="messages-container">
+            <div className="messages-list">
               <div className="messages-scroll">
-                {messages.map((message, index) => {
-                  if (message.type === 'orchestrator') {
-                    return (
-                      <div key={message.id || index} className="orchestrator-message">
-                        <div className="orchestrator-avatar">
-                          <MessageCircle size={20} />
-                        </div>
-                        <div className="orchestrator-content">
-                          <div className="orchestrator-header">
-                            <span className="orchestrator-name">Orchestrator</span>
-                            <span className="message-timestamp">
-                              {message.timestamp.toLocaleTimeString([], {
-                                hour: '2-digit', 
-                                minute: '2-digit'
-                              })}
-                            </span>
-                          </div>
-                          <div className="orchestrator-text">{message.content}</div>
+                {messages.map((message) => (
+                  <div key={message.id}>
+                    {message.type === 'user' && (
+                      <div className="user-message-container">
+                        <div className="user-message">
+                          {message.replyTo && (
+                            <div className="reply-indicator">
+                              <Reply size={12} />
+                              <span>Reply to {message.replyTo.advisorName}</span>
+                            </div>
+                          )}
+                          <p>{message.content}</p>
                         </div>
                       </div>
-                    );
-                  }
-                  
-                  if (message.type === 'system') {
-                    return (
-                      <div key={message.id || index} className="system-notification">
-                        <div className="system-content">
-                          {message.content}
-                        </div>
-                      </div>
-                    );
-                  }
+                    )}
 
-                  if (message.type === 'document_upload') {
-                    return (
-                      <div key={message.id || index} className="document-upload-notification">
-                        <div className="upload-notification-content">
-                          <FileText size={16} className="upload-icon" />
-                          <span>{message.content}</span>
+                    {message.type === 'advisor' && (
+                      <MessageBubble
+                        message={message}
+                        onReply={handleReplyToMessage}
+                        onExpand={handleExpandMessage}
+                        onClick={handleMessageClick}
+                        showReplyButton={true}
+                      />
+                    )}
+
+                    {message.type === 'error' && (
+                      <div className="error-message-container">
+                        <div className="error-message">
+                          <p>{message.content}</p>
                         </div>
                       </div>
-                    );
-                  }
-                  
-                  return (
-                    <MessageBubble 
-                      key={message.id || index} 
-                      message={message} 
-                      onReply={handleReplyToMessage}
-                      onCopy={handleCopyMessage}
-                      onExpand={handleExpandMessage}
-                      showReplyButton={message.type === 'advisor'}
-                    />
-                  );
-                })}
-                
-                {/* Thinking Indicators */}
+                    )}
+
+                    {message.type === 'system' && (
+                      <div className="system-message-container">
+                        <div className="system-message">
+                          <p>{message.content}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {message.type === 'document_upload' && (
+                      <div className="system-message-container">
+                        <div className="system-message document-upload">
+                          <FileText size={16} />
+                          <p>{message.content}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
                 {thinkingAdvisors.includes('system') && (
                   <div className="orchestrator-thinking">
-                    <div className="orchestrator-avatar">
+                    <div className="thinking-bubble">
                       <MessageCircle size={20} />
                     </div>
                     <div className="thinking-content">
