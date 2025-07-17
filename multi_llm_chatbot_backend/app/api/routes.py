@@ -19,6 +19,9 @@ from fastapi.responses import StreamingResponse
 from fastapi import Query
 from app.utils.file_export import export_chat_as_file
 
+from app.utils.chat_summary import generate_summary_from_messages, parse_summary_to_blocks
+from app.utils.file_export import prepare_export_response, generate_pdf_file_from_blocks
+
 import hashlib
 import logging
 
@@ -452,31 +455,67 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
         logger.error(f"Error processing document upload: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
-
+    
 @router.get("/export-chat")
 async def export_chat(request: Request, format: str = Query(..., regex="^(txt|pdf|docx)$")):
     """
-    Export the current chat context as a downloadable file in txt, pdf, or docx format.
+    Export the current chat context in the requested format.
     """
     try:
         session_id = get_or_create_session_for_request(request)
         session = session_manager.get_session(session_id)
 
         if not session.messages:
-            return {"error": "No messages to export in current session."}
+            return {"error": "No messages in this session."}
 
-        # Generate the file using utility
-        file_stream, filename, media_type = export_chat_as_file(session.messages, format)
-
-        return StreamingResponse(
-            file_stream,
-            media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
-        )
+        return prepare_export_response(session.messages, format)
 
     except Exception as e:
         logger.error(f"Error exporting chat: {str(e)}")
         return {"error": "Failed to export chat.", "detail": str(e)}
+    
+    
+@router.get("/chat-summary")
+async def chat_summary(
+    request: Request,
+    format: str = Query("text", regex="^(txt|pdf|docx)$")
+):
+    """
+    Generate and return a summary of the current session chat.
+    Can return as plain txt, PDF, or DOCX.
+    """
+    try:
+        session_id = get_or_create_session_for_request(request)
+        session = session_manager.get_session(session_id)
+
+        if not session.messages:
+            return {"error": "No messages in this session."}
+
+        llm = next(iter(chat_orchestrator.personas.values())).llm
+        summary_text = await generate_summary_from_messages(session.messages, llm)
+
+        if format == "txt":
+            return prepare_export_response(summary_text, "txt", filename_prefix="chat_summary")
+
+        elif format == "docx":
+            return prepare_export_response(summary_text, "docx", filename_prefix="chat_summary")
+
+        elif format == "pdf":
+            # Parse and render using block formatting
+            blocks = [{"type": "heading", "text": "Chat Summary"}] + parse_summary_to_blocks(summary_text)
+
+            file_stream = generate_pdf_file_from_blocks(blocks)
+            return StreamingResponse(
+                file_stream,
+                media_type="application/pdf",
+                headers={"Content-Disposition": "attachment; filename=chat_summary.pdf"}
+            )
+
+    except Exception as e:
+        logger.error(f"Error in chat-summary endpoint: {str(e)}")
+        return {"error": "Summary generation failed", "detail": str(e)}
+
+
 
 
 # Add new endpoint to get document statistics
