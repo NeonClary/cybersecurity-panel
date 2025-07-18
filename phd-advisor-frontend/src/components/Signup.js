@@ -91,17 +91,35 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // For demo purposes, we'll just navigate to home
-      // In real implementation, handle user registration here
-      console.log('Signup attempt:', formData);
-      onNavigateToHome?.();
+      const response = await fetch('http://localhost:8000/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          password: formData.password,
+          academicStage: formData.academicStage,
+          researchArea: formData.researchArea
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store the token and user info
+        localStorage.setItem('authToken', data.access_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        onNavigateToHome?.(data.user, data.access_token);
+      } else {
+        setErrors({ submit: data.detail || 'Signup failed. Please try again.' });
+      }
       
     } catch (error) {
       console.error('Signup error:', error);
-      setErrors({ submit: 'Registration failed. Please try again.' });
+      setErrors({ submit: 'Signup failed. Please try again.' });
     } finally {
       setIsLoading(false);
     }
