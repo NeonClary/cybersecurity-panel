@@ -440,6 +440,102 @@
   color: var(--text-secondary);
 }
 
+.chat-page-with-sidebar {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main-chat-area {
+  flex: 1;
+  margin-left: 300px; /* Width of sidebar */
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  transition: margin-left 0.3s ease;
+}
+
+/* Session title display in header */
+.session-title-display {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: var(--bg-secondary, #f3f4f6);
+  border-radius: 6px;
+  margin-right: 8px;
+}
+
+.dark .session-title-display {
+  background: var(--bg-secondary-dark, #374151);
+}
+
+.session-title-display span {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, #111827);
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dark .session-title-display span {
+  color: var(--text-primary-dark, #f9fafb);
+}
+
+/* Optional header sign out button */
+.header-signout-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary, #6b7280);
+  transition: all 0.2s ease;
+  margin-right: 8px;
+}
+
+.header-signout-btn:hover {
+  background: var(--bg-secondary, #f3f4f6);
+  color: #ef4444;
+}
+
+.dark .header-signout-btn:hover {
+  background: var(--bg-secondary-dark, #374151);
+}
+
+/* Loading session indicator */
+.loading-session {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  color: var(--text-secondary, #6b7280);
+  font-size: 14px;
+}
+
+.dark .loading-session {
+  color: var(--text-secondary-dark, #9ca3af);
+}
+
+.loading-session .loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-light, #e5e7eb);
+  border-top: 2px solid var(--primary-color, #3b82f6);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.dark .loading-session .loading-spinner {
+  border-color: var(--border-dark, #374151);
+  border-top-color: var(--primary-color, #3b82f6);
+}
+
 /* Document Indicator Styles */
 .document-indicator {
   display: flex;
@@ -714,5 +810,9 @@
     left: -20px;
     width: auto;
     min-width: unset;
+  }
+
+  .main-chat-area {
+    margin-left: 0;
   }
 }
