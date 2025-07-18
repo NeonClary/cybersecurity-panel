@@ -5,19 +5,35 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import router
-import logging
+from contextlib import asynccontextmanager
 
+# Import the new database functions
+from app.core.database import connect_to_mongo, close_mongo_connection
+
+# Import all route modules
+from app.api.routes import router as main_router
+from app.api.routes.auth import router as auth_router
+from app.api.routes.chat_sessions import router as chat_sessions_router
+
+import logging
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await connect_to_mongo()
+    yield
+    # Shutdown
+    await close_mongo_connection()
 
 app = FastAPI(
     title="Multi-LLM Chatbot Backend",
-    version="1.0.0"  # Updated version
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(
@@ -28,18 +44,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
+# Include all routers
+app.include_router(main_router)
+app.include_router(auth_router, prefix="/auth", tags=["authentication"])
+app.include_router(chat_sessions_router, prefix="/api", tags=["chat-sessions"])
 
 @app.get("/")
 def root():
     return {
-        "message": "Multi-LLM PhD Advisor Backend is up and running",
-        "version": "1.0.0",
+        "message": "Multi-LLM PhD Advisor Backend with Authentication",
+        "version": "2.0.0",
         "features": [
-            "Improved Session Management", 
-            "Unified Context Handling",
+            "User Authentication", 
+            "Persistent Chat Sessions",
+            "MongoDB Integration",
             "Ollama Support", 
-            "Gemini API Support", 
-            "Provider Switching"
+            "Gemini API Support"
         ]
     }
