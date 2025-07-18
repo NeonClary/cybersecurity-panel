@@ -5,8 +5,8 @@ from app.core.session_manager import get_session_manager
 from app.core.rag_manager import get_rag_manager
 from app.api.utils import get_or_create_session_for_request
 from fastapi.responses import StreamingResponse
-from app.utils.chat_summary import generate_summary_from_messages, parse_summary_to_blocks
-from app.utils.file_export import prepare_export_response
+from app.utils.chat_summary import generate_summary_from_messages, parse_summary_to_blocks, format_summary_for_text_export
+from app.utils.file_export import prepare_export_response, generate_pdf_file_from_blocks
 from app.core.session_manager import get_session_manager
 from app.api.utils import get_or_create_session_for_request
 from app.core.bootstrap import chat_orchestrator
@@ -200,7 +200,14 @@ async def export_chat(request: Request, format: str = Query(..., regex="^(txt|pd
         return {"error": "Failed to export chat.", "detail": str(e)}
 
 @router.get("/chat-summary")
-async def chat_summary(request: Request, format: str = Query("text", regex="^(txt|pdf|docx)$")):
+async def chat_summary(
+    request: Request,
+    format: str = Query("text", regex="^(txt|pdf|docx)$")
+):
+    """
+    Generate and return a summary of the current session chat.
+    Can return as plain txt, PDF, or DOCX.
+    """
     try:
         session_id = get_or_create_session_for_request(request)
         session = session_manager.get_session(session_id)
@@ -208,22 +215,24 @@ async def chat_summary(request: Request, format: str = Query("text", regex="^(tx
         if not session.messages:
             return {"error": "No messages in this session."}
 
-        llm = next(iter(session_manager.get_session(session_id).messages), {}).get("llm")
-        if not llm:
-            llm = next(iter(session_manager.sessions.values())).messages[0].get("llm")
-
         llm = next(iter(chat_orchestrator.personas.values())).llm
         summary_text = await generate_summary_from_messages(session.messages, llm)
 
         if format == "txt":
-            return prepare_export_response(summary_text, "txt", filename_prefix="chat_summary")
+            # Use improved formatting for text export
+            formatted_summary = format_summary_for_text_export(summary_text)
+            return prepare_export_response(formatted_summary, "txt", filename_prefix="chat_summary")
 
         elif format == "docx":
-            return prepare_export_response(summary_text, "docx", filename_prefix="chat_summary")
+            # Use improved formatting for DOCX export
+            formatted_summary = format_summary_for_text_export(summary_text)
+            return prepare_export_response(formatted_summary, "docx", filename_prefix="chat_summary")
 
         elif format == "pdf":
+            # Parse and render using block formatting
             blocks = [{"type": "heading", "text": "Chat Summary"}] + parse_summary_to_blocks(summary_text)
-            file_stream = prepare_export_response(summary_text, "pdf", filename_prefix="chat_summary").body_iterator
+
+            file_stream = generate_pdf_file_from_blocks(blocks)
             return StreamingResponse(
                 file_stream,
                 media_type="application/pdf",
