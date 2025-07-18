@@ -6,7 +6,7 @@ from app.core.rag_manager import get_rag_manager
 from app.api.utils import get_or_create_session_for_request
 from fastapi.responses import StreamingResponse
 from app.utils.chat_summary import generate_summary_from_messages, parse_summary_to_blocks, format_summary_for_text_export
-from app.utils.file_export import prepare_export_response
+from app.utils.file_export import prepare_export_response, generate_pdf_file_from_blocks
 from app.core.session_manager import get_session_manager
 from app.api.utils import get_or_create_session_for_request
 from app.core.bootstrap import chat_orchestrator
