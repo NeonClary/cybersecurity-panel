@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Body
+from fastapi import APIRouter, Request, HTTPException, UploadFile, File, Body, Depends
 from fastapi import Query
 from app.utils.document_extractor import extract_text_from_file
 from app.core.session_manager import get_session_manager
@@ -10,14 +10,148 @@ from app.utils.file_export import prepare_export_response, generate_pdf_file_fro
 from app.core.session_manager import get_session_manager
 from app.api.utils import get_or_create_session_for_request
 from app.core.bootstrap import chat_orchestrator
+from app.core.auth import get_current_active_user
+from app.core.database import get_database
+from app.models.user import User
+from bson import ObjectId
 import logging
+import re
+from html import unescape
+
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 session_manager = get_session_manager()
-get_rag_manager = get_rag_manager  # avoid circular import issues
+get_rag_manager = get_rag_manager
+
+
+def sanitize_html_content(content):
+    """
+    Clean up HTML content by removing or fixing malformed tags.
+    This prevents PDF export errors caused by invalid HTML structure.
+    """
+    if not content:
+        return content
+    
+    try:
+        logger.debug(f"Sanitizing content (first 200 chars): {content[:200]}")
+        
+        # First, unescape HTML entities
+        content = unescape(content)
+        
+        # More aggressive approach: Strip ALL HTML tags first, then apply simple formatting
+        # This prevents malformed HTML from causing issues
+        
+        # Remove all HTML tags completely (most aggressive approach)
+        content = re.sub(r'<[^>]*>', '', content)
+        
+        # Clean up multiple spaces and normalize whitespace
+        content = re.sub(r'\s+', ' ', content)
+        content = content.strip()
+        
+        # Remove any remaining HTML entities that might have been missed
+        content = re.sub(r'&[a-zA-Z0-9#]+;', '', content)
+        
+        # Remove any remaining angle brackets that might cause issues
+        content = content.replace('<', '').replace('>', '')
+        
+        logger.debug(f"Sanitized content (first 200 chars): {content[:200]}")
+        return content
+        
+    except Exception as e:
+        logger.error(f"Error sanitizing HTML content: {str(e)}")
+        # Ultra-fallback: return only alphanumeric and basic punctuation
+        try:
+            import string
+            allowed_chars = string.ascii_letters + string.digits + string.punctuation + ' \n\r\t'
+            cleaned = ''.join(c for c in content if c in allowed_chars)
+            return re.sub(r'\s+', ' ', cleaned).strip()
+        except:
+            return "Content could not be sanitized for export"
+
+def convert_messages_for_export(messages):
+    """
+    Convert stored message format to export-compatible format.
+    Stored format uses 'type', export functions expect 'role' and specific structure.
+    """
+    converted_messages = []
+    
+    for i, msg in enumerate(messages):
+        try:
+            # Get and sanitize content
+            raw_content = msg.get('content', '')
+            sanitized_content = sanitize_html_content(raw_content)
+            
+            # Debug logging for problematic content
+            if i < 5 or '<' in raw_content or '>' in raw_content:  # Log first few messages and any with HTML
+                logger.debug(f"Message {i}: Original length: {len(raw_content)}, Sanitized length: {len(sanitized_content)}")
+                if raw_content != sanitized_content:
+                    logger.debug(f"Content changed during sanitization for message {msg.get('id', 'unknown')}")
+            
+            # Create base converted message
+            converted_msg = {
+                'id': msg.get('id', 'unknown'),
+                'timestamp': msg.get('timestamp', ''),
+                'content': sanitized_content,
+            }
+            
+            # Convert type to role and handle different message types
+            msg_type = msg.get('type', 'unknown')
+            
+            if msg_type == 'user':
+                converted_msg['role'] = 'user'
+                # Add reply context if present
+                if 'replyTo' in msg:
+                    reply_to = msg['replyTo']
+                    converted_msg['content'] = f"[Reply to {reply_to.get('advisorName', 'advisor')}] {converted_msg['content']}"
+                
+            elif msg_type == 'advisor':
+                converted_msg['role'] = 'assistant'
+                # Include advisor information
+                advisor_name = msg.get('advisorName', msg.get('persona', 'Advisor'))
+                converted_msg['advisor_name'] = advisor_name
+                converted_msg['advisor_id'] = msg.get('advisorId', msg.get('persona_id', 'unknown'))
+                
+                # Mark special response types
+                if msg.get('isReply'):
+                    converted_msg['content'] = f"[{advisor_name} replies] {converted_msg['content']}"
+                elif msg.get('isExpansion'):
+                    converted_msg['content'] = f"[{advisor_name} expands] {converted_msg['content']}"
+                else:
+                    converted_msg['content'] = f"[{advisor_name}] {converted_msg['content']}"
+                
+            elif msg_type == 'system':
+                converted_msg['role'] = 'system'
+                
+            elif msg_type == 'document_upload':
+                converted_msg['role'] = 'system'
+                converted_msg['content'] = f"📄 {converted_msg['content']}"
+                
+            elif msg_type == 'error':
+                converted_msg['role'] = 'system'
+                converted_msg['content'] = f"❌ Error: {converted_msg['content']}"
+                
+            else:
+                # Unknown type, treat as system message
+                converted_msg['role'] = 'system'
+                converted_msg['content'] = f"[{msg_type}] {converted_msg['content']}"
+            
+            converted_messages.append(converted_msg)
+            
+        except Exception as e:
+            logger.error(f"Error converting message {msg.get('id', 'unknown')}: {str(e)}")
+            # Add a fallback message to maintain conversation flow
+            converted_messages.append({
+                'id': msg.get('id', 'unknown'),
+                'role': 'system',
+                'content': f"[Message conversion error: {str(e)}]",
+                'timestamp': msg.get('timestamp', '')
+            })
+    
+    logger.info(f"Converted {len(messages)} messages for export")
+    return converted_messages
 
 
 @router.post("/upload-document")
@@ -185,61 +319,190 @@ async def get_document_insights(filename: str, request: Request):
         raise HTTPException(status_code=500, detail=f"Error analyzing document: {str(e)}")
     
 @router.get("/export-chat")
-async def export_chat(request: Request, format: str = Query(..., regex="^(txt|pdf|docx)$")):
+async def export_chat(
+    request: Request, 
+    format: str = Query(..., regex="^(txt|pdf|docx)$"),
+    chat_session_id: str = Query(None, description="Optional: specific chat session ID to export"),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Export chat messages. 
+    If chat_session_id is provided, exports that specific stored chat session.
+    Otherwise, exports the current in-memory session.
+    """
     try:
-        session_id = get_or_create_session_for_request(request)
-        session = session_manager.get_session(session_id)
+        messages = []
+        
+        if chat_session_id:
+            # Export specific stored chat session
+            db = get_database()
+            session_data = await db.chat_sessions.find_one({
+                "_id": ObjectId(chat_session_id),
+                "user_id": current_user.id,
+                "is_active": True
+            })
+            
+            if not session_data:
+                raise HTTPException(
+                    status_code=404, 
+                    detail="Chat session not found or you don't have permission to access it"
+                )
+            
+            raw_messages = session_data.get("messages", [])
+            # Convert stored message format to export-compatible format
+            messages = convert_messages_for_export(raw_messages)
+        else:
+            # Export current in-memory session (existing behavior)
+            session_id = get_or_create_session_for_request(request)
+            session = session_manager.get_session(session_id)
+            # In-memory messages might already be in the right format, but convert to be safe
+            messages = convert_messages_for_export(session.messages)
 
-        if not session.messages:
+        if not messages:
             return {"error": "No messages in this session."}
 
-        return prepare_export_response(session.messages, format)
+        try:
+            return prepare_export_response(messages, format)
+        except Exception as export_error:
+            logger.error(f"Error in prepare_export_response: {str(export_error)}")
+            # Try with a simplified version of messages if the export fails
+            try:
+                # Create simplified messages with just basic text content
+                simplified_messages = []
+                for msg in messages:
+                    simplified_msg = {
+                        'id': msg.get('id', 'unknown'),
+                        'role': msg.get('role', 'system'),
+                        'content': str(msg.get('content', '')).replace('\n', ' ').strip(),
+                        'timestamp': msg.get('timestamp', '')
+                    }
+                    if 'advisor_name' in msg:
+                        simplified_msg['advisor_name'] = msg['advisor_name']
+                    simplified_messages.append(simplified_msg)
+                
+                return prepare_export_response(simplified_messages, format)
+            except Exception as fallback_error:
+                logger.error(f"Fallback export also failed: {str(fallback_error)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Export failed due to content formatting issues. Please try a different format or contact support."
+                )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error exporting chat: {str(e)}")
-        return {"error": "Failed to export chat.", "detail": str(e)}
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to export chat: {str(e)}"
+        )
 
 @router.get("/chat-summary")
 async def chat_summary(
     request: Request,
-    format: str = Query("text", regex="^(txt|pdf|docx)$")
+    format: str = Query("text", regex="^(txt|pdf|docx)$"),
+    chat_session_id: str = Query(None, description="Optional: specific chat session ID to summarize"),
+    current_user: User = Depends(get_current_active_user)
 ):
     """
-    Generate and return a summary of the current session chat.
+    Generate and return a summary of chat messages.
+    If chat_session_id is provided, summarizes that specific stored chat session.
+    Otherwise, summarizes the current in-memory session.
     Can return as plain txt, PDF, or DOCX.
     """
     try:
-        session_id = get_or_create_session_for_request(request)
-        session = session_manager.get_session(session_id)
+        messages = []
+        
+        if chat_session_id:
+            # Summarize specific stored chat session
+            db = get_database()
+            session_data = await db.chat_sessions.find_one({
+                "_id": ObjectId(chat_session_id),
+                "user_id": current_user.id,
+                "is_active": True
+            })
+            
+            if not session_data:
+                raise HTTPException(
+                    status_code=404, 
+                    detail="Chat session not found or you don't have permission to access it"
+                )
+            
+            raw_messages = session_data.get("messages", [])
+            # Convert stored message format for summary generation
+            messages = convert_messages_for_export(raw_messages)
+        else:
+            # Summarize current in-memory session (existing behavior)
+            session_id = get_or_create_session_for_request(request)
+            session = session_manager.get_session(session_id)
+            # Convert in-memory messages
+            messages = convert_messages_for_export(session.messages)
 
-        if not session.messages:
+        if not messages:
             return {"error": "No messages in this session."}
 
-        llm = next(iter(chat_orchestrator.personas.values())).llm
-        summary_text = await generate_summary_from_messages(session.messages, llm)
+        try:
+            llm = next(iter(chat_orchestrator.personas.values())).llm
+            summary_text = await generate_summary_from_messages(messages, llm)
 
-        if format == "txt":
-            # Use improved formatting for text export
-            formatted_summary = format_summary_for_text_export(summary_text)
-            return prepare_export_response(formatted_summary, "txt", filename_prefix="chat_summary")
+            if format == "txt":
+                # Use improved formatting for text export
+                formatted_summary = format_summary_for_text_export(summary_text)
+                return prepare_export_response(formatted_summary, "txt", filename_prefix="chat_summary")
 
-        elif format == "docx":
-            # Use improved formatting for DOCX export
-            formatted_summary = format_summary_for_text_export(summary_text)
-            return prepare_export_response(formatted_summary, "docx", filename_prefix="chat_summary")
+            elif format == "docx":
+                # Use improved formatting for DOCX export
+                formatted_summary = format_summary_for_text_export(summary_text)
+                return prepare_export_response(formatted_summary, "docx", filename_prefix="chat_summary")
 
-        elif format == "pdf":
-            # Parse and render using block formatting
-            blocks = [{"type": "heading", "text": "Chat Summary"}] + parse_summary_to_blocks(summary_text)
+            elif format == "pdf":
+                # Parse and render using block formatting
+                blocks = [{"type": "heading", "text": "Chat Summary"}] + parse_summary_to_blocks(summary_text)
 
-            file_stream = generate_pdf_file_from_blocks(blocks)
-            return StreamingResponse(
-                file_stream,
-                media_type="application/pdf",
-                headers={"Content-Disposition": "attachment; filename=chat_summary.pdf"}
-            )
+                file_stream = generate_pdf_file_from_blocks(blocks)
+                return StreamingResponse(
+                    file_stream,
+                    media_type="application/pdf",
+                    headers={"Content-Disposition": "attachment; filename=chat_summary.pdf"}
+                )
+        except Exception as summary_error:
+            logger.error(f"Error generating summary: {str(summary_error)}")
+            # Try with simplified content
+            try:
+                # Create a basic text summary if AI summary fails
+                basic_summary = "Chat Summary\n\n"
+                for msg in messages:
+                    if msg.get('role') == 'user':
+                        basic_summary += f"User: {msg.get('content', '')[:200]}...\n\n"
+                    elif msg.get('role') == 'assistant':
+                        advisor_name = msg.get('advisor_name', 'Advisor')
+                        basic_summary += f"{advisor_name}: {msg.get('content', '')[:200]}...\n\n"
+                
+                if format == "txt":
+                    return prepare_export_response(basic_summary, "txt", filename_prefix="chat_summary")
+                elif format == "docx":
+                    return prepare_export_response(basic_summary, "docx", filename_prefix="chat_summary")
+                elif format == "pdf":
+                    blocks = [{"type": "heading", "text": "Chat Summary"}, {"type": "paragraph", "text": basic_summary}]
+                    file_stream = generate_pdf_file_from_blocks(blocks)
+                    return StreamingResponse(
+                        file_stream,
+                        media_type="application/pdf",
+                        headers={"Content-Disposition": "attachment; filename=chat_summary.pdf"}
+                    )
+            except Exception as fallback_error:
+                logger.error(f"Fallback summary export also failed: {str(fallback_error)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Summary generation failed due to content formatting issues. Please try a different format."
+                )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in chat-summary endpoint: {str(e)}")
-        return {"error": "Summary generation failed", "detail": str(e)}
+        raise HTTPException(
+            status_code=500,
+            detail=f"Summary generation failed: {str(e)}"
+        )
 

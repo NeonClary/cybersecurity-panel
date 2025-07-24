@@ -650,7 +650,11 @@ const handleNewChat = async (sessionId = null) => {
                 </button>
                 
                 {/* Export Button */}
-                <ExportButton hasMessages={hasConversationMessages} />
+                <ExportButton 
+                  hasMessages={hasConversationMessages} 
+                  currentSessionId={currentSessionId}
+                  authToken={authToken}
+                />
                 
                 {/* Provider Dropdown */}
                 <ProviderDropdown 
