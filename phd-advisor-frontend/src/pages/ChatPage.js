@@ -560,6 +560,12 @@ const handleNewChat = async (sessionId = null) => {
     setReplyingTo(null);
   };
 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  const handleSidebarToggle = (isCollapsed) => {
+    setIsSidebarCollapsed(isCollapsed);
+  };
+
   const hasMessages = messages.length > 0;
   const hasConversationMessages = messages.filter(m => m.type !== 'system' && m.type !== 'document_upload').length > 0;
 
@@ -573,9 +579,10 @@ const handleNewChat = async (sessionId = null) => {
         onNewChat={handleNewChat}
         onSignOut={onSignOut}
         authToken={authToken}
+        onSidebarToggle={handleSidebarToggle}
       />
       
-      <div className="main-chat-area">
+      <div className={`main-chat-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="modern-chat-page">
           {/* Floating Header */}
           <div className="floating-header">
@@ -661,7 +668,9 @@ const handleNewChat = async (sessionId = null) => {
           {/* Main Content */}
           <div className="chat-content">
             {!hasMessages ? (
-              <SuggestionsPanel onSuggestionClick={handleSendMessage} />
+              <div className="welcome-state">
+                <SuggestionsPanel onSuggestionClick={handleSendMessage} />
+              </div>
             ) : (
               <div className="messages-container">
                 {/* Add loading session indicator */}

@@ -1,12 +1,9 @@
-
 /* Modern Chat Page Layout */
 .modern-chat-page {
-  height: 100%; 
-  background: var(--bg-gradient);
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  position: relative;
-  overflow: hidden; /* Prevent body overflow */
+  overflow: hidden;
 }
 
 [data-theme="dark"] .modern-chat-page {
@@ -159,11 +156,12 @@
   display: flex;
   flex-direction: column;
   padding-top: 24px;
-  padding-bottom: 140px; /* Space for floating input */
+  padding-bottom: 140px; 
   padding-left: 16px;
   padding-right: 16px;
-  overflow: hidden; /* Critical for proper scrolling */
-  min-height: 0; /* Allow flex child to shrink */
+  overflow: visible; 
+  min-height: 0; 
+  height: 100vh; 
 }
 
 .export-dropdown {
@@ -174,14 +172,20 @@
 .welcome-state {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding-top: 40px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
 }
 
 .suggestions-container {
   width: 100%;
   max-width: 1200px;
+  margin: 0 auto;
+  flex-shrink: 0;
 }
 
 /* Chat State */
@@ -191,6 +195,17 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+  height: 100%; 
+}
+
+.chat-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  /* Add bottom padding to prevent content being hidden behind floating input */
+  padding-bottom: 140px;
 }
 
 .messages-area {
@@ -200,14 +215,15 @@
 }
 
 .messages-scroll {
-  height: 100%; /* Use full height of parent */
+  height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 20px;
   padding-bottom: 40px;
-  /* Ensure smooth scrolling with proper background */
   background: var(--bg-gradient);
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .messages-container {
@@ -215,15 +231,18 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 0; /* Critical for flex layout */
-  background: var(--bg-gradient); /* Ensure dark mode background */
+  min-height: 0;
+  height: 100%;
+  background: var(--bg-gradient);
 }
 
 .messages-list {
   flex: 1;
   overflow: hidden;
-  min-height: 0; /* Allow proper shrinking */
+  min-height: 0;
+  height: 100%;
 }
+
 
 [data-theme="dark"] .messages-scroll,
 [data-theme="dark"] .messages-container,
@@ -521,6 +540,7 @@
   color: var(--text-secondary);
 }
 
+/* MAIN LAYOUT WITH SIDEBAR - FIXED */
 .chat-page-with-sidebar {
   display: flex;
   height: 100vh;
@@ -530,12 +550,17 @@
 
 .main-chat-area {
   flex: 1;
-  margin-left: 300px; /* Width of sidebar */
+  margin-left: 300px; /* Width of sidebar when expanded */
   display: flex;
   flex-direction: column;
   height: 100vh;
   transition: margin-left 0.3s ease;
   overflow: hidden;
+}
+
+/* FIXED: Chat area expansion when sidebar is collapsed */
+.main-chat-area.sidebar-collapsed {
+  margin-left: 70px; /* Width of sidebar when collapsed */
 }
 
 /* Session title display in header */
@@ -902,6 +927,10 @@
   }
 
   .main-chat-area {
+    margin-left: 0;
+  }
+
+  .main-chat-area.sidebar-collapsed {
     margin-left: 0;
   }
 }
