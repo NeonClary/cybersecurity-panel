@@ -12,6 +12,7 @@ import { advisors, getAdvisorColors } from '../data/advisors';
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/ChatPage.css';
 import '../styles/EnhancedChatInput.css';
+import AdvisorStatusDropdown from '../components/AdvisorStatusDropdown';
 
 const ChatPage = ({ user, authToken, onNavigateToHome, onSignOut }) => {
   const [messages, setMessages] = useState([]);
@@ -246,11 +247,13 @@ const handleNewChat = async (sessionId = null) => {
   }
 };
 
+  
+
   const handleFileUploaded = async (fileInfo) => {
   const documentMessage = {
     id: generateMessageId(),
     type: 'document_upload',
-    content: `Document uploaded: ${fileInfo.filename}`,
+    content: `Document uploaded: ${fileInfo.name}`,
     timestamp: new Date()
   };
   
@@ -268,7 +271,7 @@ const handleNewChat = async (sessionId = null) => {
 
     // Create user message
     const userMessage = {
-      id: generateMessageId(), // This uses your existing function
+      id: generateMessageId(),
       type: 'user',
       content: inputMessage,
       timestamp: new Date()
@@ -303,7 +306,6 @@ const handleNewChat = async (sessionId = null) => {
     setThinkingAdvisors(['system']);
 
     try {
-      // Your existing API call logic here...
       const response = await fetch('http://localhost:8000/chat-sequential', {
         method: 'POST',
         headers: {
@@ -321,8 +323,21 @@ const handleNewChat = async (sessionId = null) => {
 
       const data = await response.json();
 
-      if (data.type === 'sequential_responses' && data.responses) {
-        // Create advisor messages
+      // Handle clarification needed case
+      if (data.type === 'clarification_needed') {
+        const clarificationMessage = {
+          id: generateMessageId(),
+          type: 'clarification',
+          content: data.message,
+          suggestions: data.suggestions || [],
+          timestamp: new Date()
+        };
+
+        setMessages(prev => [...prev, clarificationMessage]);
+        await saveMessageToSession(clarificationMessage);
+
+      } else if (data.type === 'sequential_responses' && data.responses) {
+        // Handle normal advisor responses
         const advisorMessages = data.responses.map((advisor) => ({
           id: generateMessageId(),
           type: 'advisor',
@@ -332,7 +347,6 @@ const handleNewChat = async (sessionId = null) => {
           timestamp: new Date()
         }));
 
-        // Add to local state
         setMessages(prev => [...prev, ...advisorMessages]);
 
         // Save each advisor message to database
@@ -556,6 +570,16 @@ const handleNewChat = async (sessionId = null) => {
     }
   };
 
+  const handleInputSubmit = async (inputMessage) => {
+  if (replyingTo) {
+    // This is a reply to a specific message
+    await handleReplyToAdvisor(inputMessage, replyingTo);
+  } else {
+    // This is a regular message
+    await handleSendMessage(inputMessage);
+  }
+};
+
   const cancelReply = () => {
     setReplyingTo(null);
   };
@@ -602,35 +626,12 @@ const handleNewChat = async (sessionId = null) => {
             </div>
             
             <div className="header-right">
-              <div className="advisor-pills">
-                {Object.entries(advisors).map(([id, advisor]) => {
-                  const Icon = advisor.icon;
-                  const colors = getAdvisorColors(id, isDark);
-                  const isThinking = thinkingAdvisors.includes(id);
-                  
-                  return (
-                    <div 
-                      key={id} 
-                      className={`advisor-pill ${isThinking ? 'thinking' : ''}`}
-                      style={{ 
-                        '--advisor-color': colors.color,
-                        '--advisor-bg': colors.bgColor
-                      }}
-                      title={`${advisor.name} - ${advisor.expertise}`}
-                    >
-                      <Icon size={16} />
-                      <span>{advisor.name}</span>
-                      {isThinking && (
-                        <div className="thinking-dots">
-                          <div className="dot"></div>
-                          <div className="dot"></div>
-                          <div className="dot"></div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+              <AdvisorStatusDropdown 
+                advisors={advisors}
+                thinkingAdvisors={thinkingAdvisors}
+                getAdvisorColors={getAdvisorColors}
+                isDark={isDark}
+              />
               
               <div className="header-controls">
                 {/* Add session title display */}
@@ -737,6 +738,37 @@ const handleNewChat = async (sessionId = null) => {
                             </div>
                           </div>
                         )}
+
+                        {message.type === 'clarification' && (
+                          <div className="clarification-message-container">
+                            <div className="clarification-message">
+                              <div className="clarification-header">
+                                <MessageCircle size={16} />
+                                <span>I need a bit more information</span>
+                              </div>
+                              <p>{message.content}</p>
+                              
+                              {message.suggestions && message.suggestions.length > 0 && (
+                                <div className="clarification-suggestions">
+                                  <p className="suggestions-label">Here are some ways you could be more specific:</p>
+                                  <div className="suggestions-list">
+                                    {message.suggestions.map((suggestion, index) => (
+                                      <button
+                                        key={index}
+                                        className="suggestion-button"
+                                        onClick={() => handleSendMessage(suggestion)}
+                                      >
+                                        {suggestion}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        
                       </div>
                     ))}
 
@@ -781,7 +813,7 @@ const handleNewChat = async (sessionId = null) => {
             )}
             
             <EnhancedChatInput 
-              onSendMessage={handleSendMessage}
+              onSendMessage={handleInputSubmit}
               onFileUploaded={handleFileUploaded}
               uploadedDocuments={uploadedDocuments}
               isLoading={isLoading}
