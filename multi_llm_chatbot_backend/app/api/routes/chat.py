@@ -34,26 +34,53 @@ class PersonaQuery(BaseModel):
 @router.post("/chat-sequential")
 async def chat_sequential_enhanced(message: ChatMessage, request: Request):
     """
-    Enhanced sequential chat with intelligent persona ordering.
-    Returns responses in the order determined by LLM-based relevance ranking.
+    Enhanced sequential chat with orchestrator clarification for vague queries.
     """
     try:
         # Get or create session
         session_id = get_or_create_session_for_request(request, message.session_id)
         
-        # Add user message to session first (needed for persona ranking)
+        # STEP 1: Check if clarification is needed using orchestrator's logic
         session = session_manager.get_session(session_id)
+        
+        # Debug logging
+        user_messages_count = len([msg for msg in session.messages if msg.get('role') == 'user'])
+        logger.info(f"Session {session_id} has {user_messages_count} user messages before processing")
+        logger.info(f"Input to analyze: '{message.user_input}'")
+        
+        # Check if this needs clarification BEFORE adding the message
+        needs_clarification = chat_orchestrator._needs_clarification(session, message.user_input)
+        
+        logger.info(f"Clarification needed: {needs_clarification}")
+        
+        # Add user message to session for context (after clarification check)
         session.append_message("user", message.user_input)
         
-        # Get intelligently ordered personas based on context
+        if needs_clarification:
+            # Generate clarification question
+            clarification_question = await chat_orchestrator._generate_clarification_question(session)
+            
+            logger.info(f"Clarification needed for session {session_id}: '{message.user_input}'")
+            
+            return {
+                "type": "clarification_needed",
+                "message": clarification_question,
+                "suggestions": chat_orchestrator._get_clarification_suggestions(),
+                "session_id": session_id
+            }
+        
+        # STEP 2: No clarification needed - proceed with intelligent persona ordering
+        # (user message already added to session above)
+        
+        # Get intelligently ordered personas based on context (TOP 3 ONLY)
         top_personas = await chat_orchestrator.get_top_personas(
             session_id=session_id, 
-            k=3  # Get top 3 most relevant personas
+            k=3  # Limit to top 3 most relevant personas
         )
         
         logger.info(f"Intelligent persona order for session {session_id}: {top_personas}")
         
-        # Generate responses from personas in the intelligent order
+        # Generate responses from ONLY the top 3 personas
         responses = []
         
         for persona_id in top_personas:
@@ -66,19 +93,11 @@ async def chat_sequential_enhanced(message: ChatMessage, request: Request):
                     response_length=message.response_length or "medium"
                 )
                 
-                
                 if "persona_name" in persona_result and "response" in persona_result:
                     responses.append({
                         "persona": persona_result["persona_name"],
                         "persona_id": persona_result["persona_id"],
                         "response": persona_result["response"]
-                    })
-                elif persona_result.get("type") == "single_persona_response" and "persona" in persona_result:
-                    persona_data = persona_result["persona"]
-                    responses.append({
-                        "persona": persona_data["persona_name"],
-                        "persona_id": persona_data["persona_id"],
-                        "response": persona_data["response"]
                     })
                 else:
                     # Fallback response
@@ -97,7 +116,6 @@ async def chat_sequential_enhanced(message: ChatMessage, request: Request):
                     "response": "I encountered an error while processing your question. Please try again."
                 })
         
-        #  response format
         return {
             "type": "sequential_responses",
             "responses": responses
@@ -168,10 +186,9 @@ async def chat_with_specific_advisor(persona_id: str, input: UserInput, request:
             "response": "I'm having trouble generating a response right now. Please try again."
         }
 
-# Reply to advisor endpoint (SAME INTERFACE)
 @router.post("/reply-to-advisor")
 async def reply_to_advisor(reply: ReplyToAdvisor, request: Request):
-    """Reply to a specific advisor - SAME INTERFACE"""
+    """Reply to a specific advisor with proper context"""
     try:
         if reply.advisor_id not in chat_orchestrator.personas:
             raise HTTPException(status_code=404, detail=f"Advisor '{reply.advisor_id}' not found")
@@ -179,14 +196,32 @@ async def reply_to_advisor(reply: ReplyToAdvisor, request: Request):
         # Get session using compatibility layer
         session_id = get_or_create_session_for_request(request)
         
-        # Use new orchestrator
+        # Get the session to access conversation history
+        session = session_manager.get_session(session_id)
+        
+        # Find the original message being replied to for context
+        original_message = None
+        if reply.original_message_id:
+            # Look through session history to find the original message
+            for msg in session.messages:
+                if getattr(msg, 'id', None) == reply.original_message_id:
+                    original_message = msg.content
+                    break
+        
+        # Create context-aware input that includes the reply context
+        contextual_input = reply.user_input
+        if original_message:
+            contextual_input = f"[Replying to your previous message: '{original_message[:100]}...'] {reply.user_input}"
+        
+        # Use orchestrator with context
         result = await chat_orchestrator.chat_with_persona(
-            user_input=reply.user_input,
+            user_input=contextual_input,
             persona_id=reply.advisor_id,
             session_id=session_id
         )
         
-        if result["type"] == "single_persona_response":
+        # Handle response structure
+        if result.get("type") == "single_persona_response" and "persona" in result:
             persona_data = result["persona"]
             return {
                 "type": "advisor_reply",
@@ -195,11 +230,19 @@ async def reply_to_advisor(reply: ReplyToAdvisor, request: Request):
                 "response": persona_data["response"],
                 "original_message_id": reply.original_message_id
             }
+        elif "persona_id" in result and "response" in result:
+            return {
+                "type": "advisor_reply",
+                "persona": result["persona_name"],
+                "persona_id": result["persona_id"],
+                "response": result["response"],
+                "original_message_id": reply.original_message_id
+            }
         else:
             return {
                 "type": "error",
                 "persona": "System",
-                "response": result.get("message", "I'm having trouble generating a reply right now. Please try again.")
+                "response": "I'm having trouble generating a reply right now. Please try again."
             }
         
     except HTTPException:

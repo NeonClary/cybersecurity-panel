@@ -146,28 +146,43 @@ class ImprovedChatOrchestrator:
         if len(user_messages) > 1:
             return False
         
-        # Check for vague patterns
+        # Check for vague patterns - FIXED to handle "I am" vs "I'm"
         vague_patterns = [
             r"^(help|advice|guidance|assistance)$",
-            r"i'?m (stuck|lost|confused|not sure)",
+            r"i'?m (stuck|lost|confused|not sure)",  # matches "I'm confused"
+            r"i am (stuck|lost|confused|not sure)",  # matches "I am confused" 
             r"(what should i|how do i|where do i start)",
             r"i need (help|advice|guidance)",
-            r"(any|some) (advice|suggestions|ideas)"
+            r"(any|some) (advice|suggestions|ideas)",
+            r"don'?t know (what|how|where)",
+            r"(stuck|struggling) with",
+            r"unsure about"
         ]
         
         user_lower = user_input.lower().strip()
         
+        # Add debug logging to see what's happening
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Checking clarification for: '{user_input}' (lowercase: '{user_lower}')")
+        
         for pattern in vague_patterns:
             if re.search(pattern, user_lower):
+                logger.info(f"CLARIFICATION TRIGGERED: Pattern '{pattern}' matched input '{user_input}'")
                 return True
         
         # Check if input is too short and vague
-        if len(user_input.split()) < 6 and not any(
+        word_count = len(user_input.split())
+        has_specific_keywords = any(
             keyword in user_lower for keyword in 
             ['methodology', 'theory', 'data', 'analysis', 'research', 'thesis', 'dissertation']
-        ):
+        )
+        
+        if word_count < 6 and not has_specific_keywords:
+            logger.info(f"CLARIFICATION TRIGGERED: Short input ({word_count} words) without specific keywords")
             return True
         
+        logger.info(f"NO CLARIFICATION: Input has {word_count} words, specific keywords: {has_specific_keywords}")
         return False
     
     async def _generate_clarification_question(self, session: ConversationContext) -> str:
