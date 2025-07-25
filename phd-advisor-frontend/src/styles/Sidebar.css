@@ -513,6 +513,56 @@
   margin-left: 8px;
 }
 
+.new-chat-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.collapsed-new-chat:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.loading-sessions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top: 2px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Style for creating new chat state */
+.new-chat-button span {
+  transition: all 0.2s ease;
+}
+
+.new-chat-button:disabled span {
+  opacity: 0.7;
+}
+
+/* Ensure active session remains highlighted during creation */
+.session-item.active {
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 8px;
+}
+
 .session-menu-button {
   opacity: 0;
   padding: 6px;

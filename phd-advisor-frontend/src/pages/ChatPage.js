@@ -116,64 +116,85 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onSignOut }) => {
   };
 
   const createNewSession = async (firstMessage = null) => {
-  try {
-    const title = firstMessage 
-      ? `${firstMessage.substring(0, 30)}...` 
-      : `Chat ${new Date().toLocaleDateString()}`;
+    try {
+      const title = firstMessage 
+        ? `${firstMessage.substring(0, 30)}...` 
+        : `Chat ${new Date().toLocaleDateString()}`;
 
-    const response = await fetch('http://localhost:8000/api/chat-sessions', {
+      const response = await fetch('http://localhost:8000/api/chat-sessions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ title })
+      });
+
+      if (response.ok) {
+        const newSession = await response.json();
+        
+        // Update state immediately
+        setCurrentSessionId(newSession.id);
+        setCurrentSessionTitle(newSession.title);
+        
+        console.log('MongoDB session created:', newSession.id);
+        return newSession.id;
+      } else {
+        console.error('Failed to create new session');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error creating new session:', error);
+      return null;
+    }
+  };
+
+
+// Load an existing chat session
+const loadChatSession = async (sessionId) => {
+  if (!sessionId || isLoadingSession) return;
+  setIsLoadingSession(true);
+  try {
+    // Use the new switch-chat endpoint that syncs context
+    const response = await fetch('http://localhost:8000/switch-chat', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ title })
+      body: JSON.stringify({
+        chat_session_id: sessionId
+      })
     });
 
     if (response.ok) {
-      const newSession = await response.json();
-      setCurrentSessionId(newSession.id);
-      setCurrentSessionTitle(newSession.title);
-      return newSession.id;
-    } else {
-      console.error('Failed to create new session');
-      return null;
-    }
-  } catch (error) {
-    console.error('Error creating new session:', error);
-    return null;
-  }
-};
-
-// Load an existing chat session
-const loadChatSession = async (sessionId) => {
-  if (!sessionId || isLoadingSession) return;
-
-  setIsLoadingSession(true);
-  try {
-    const response = await fetch(`http://localhost:8000/api/chat-sessions/${sessionId}`, {
-      headers: {
-        'Authorization': `Bearer ${authToken}`,
-        'Content-Type': 'application/json'
+      const result = await response.json();
+      if (result.status === 'success') {
+        setCurrentSessionId(sessionId);
+        setCurrentSessionTitle(''); // Will be set from MongoDB data
+        
+        // Load the messages from the synced context
+        const formattedMessages = result.context.messages.map(msg => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+        
+        setMessages(formattedMessages);
+        setReplyingTo(null);
+        setThinkingAdvisors([]);
+        
+        // Also get the session title from MongoDB
+        const sessionResponse = await fetch(`http://localhost:8000/api/chat-sessions/${sessionId}`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        if (sessionResponse.ok) {
+          const sessionData = await sessionResponse.json();
+          setCurrentSessionTitle(sessionData.title);
+        }
       }
-    });
-
-    if (response.ok) {
-      const session = await response.json();
-      setCurrentSessionId(session.id);
-      setCurrentSessionTitle(session.title);
-      
-      // Convert stored messages back to proper format
-      const formattedMessages = session.messages.map(msg => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp)
-      }));
-      
-      setMessages(formattedMessages);
-      setReplyingTo(null);
-      setThinkingAdvisors([]);
-    } else {
-      console.error('Failed to load session');
     }
   } catch (error) {
     console.error('Error loading session:', error);
@@ -234,16 +255,67 @@ const handleSelectSession = async (sessionId) => {
 // Handle creating new chat from sidebar
 const handleNewChat = async (sessionId = null) => {
   if (sessionId) {
-    // If specific session ID provided, load it
+    // Loading existing session
     await loadChatSession(sessionId);
+    return; // Return early for existing session loading
   } else {
-    // Create a completely new session
-    setMessages([]);
-    setCurrentSessionId(null);
-    setCurrentSessionTitle('');
-    setReplyingTo(null);
-    setThinkingAdvisors([]);
-    setUploadedDocuments([]);
+    // Creating completely new chat with fresh context
+    try {
+      // Step 1: Reset memory session
+      const response = await fetch('http://localhost:8000/new-chat', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: `Chat ${new Date().toLocaleDateString()}`
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.status === 'success') {
+          // Step 2: Immediately create MongoDB session
+          const newSessionId = await createNewSession(`Chat ${new Date().toLocaleDateString()}`);
+          
+          if (newSessionId) {
+            // Reset all state to fresh with the new session
+            setMessages([]);
+            setCurrentSessionId(newSessionId); // Set the new session ID immediately
+            setCurrentSessionTitle(`Chat ${new Date().toLocaleDateString()}`);
+            setReplyingTo(null);
+            setThinkingAdvisors([]);
+            setUploadedDocuments([]);
+            
+            console.log('New chat created with MongoDB session:', newSessionId);
+            
+            // Wait a bit to ensure state has updated
+            await new Promise(resolve => setTimeout(resolve, 100));
+            return newSessionId; // Return the session ID for the sidebar
+          } else {
+            throw new Error('Failed to create MongoDB session');
+          }
+        } else {
+          throw new Error('Failed to create memory session');
+        }
+      } else {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+    } catch (error) {
+      console.error('Error creating new chat:', error);
+      
+      // Fallback to local reset
+      setMessages([]);
+      setCurrentSessionId(null);
+      setCurrentSessionTitle('');
+      setReplyingTo(null);
+      setThinkingAdvisors([]);
+      setUploadedDocuments([]);
+      
+      // Re-throw the error so the sidebar knows something went wrong
+      throw error;
+    }
   }
 };
 
@@ -313,7 +385,8 @@ const handleNewChat = async (sessionId = null) => {
         },
         body: JSON.stringify({
           user_input: inputMessage,
-          response_length: 'medium'
+          response_length: 'medium',
+          chat_session_id: currentSessionId // Include current session ID
         }),
       });
 
@@ -383,78 +456,89 @@ const handleNewChat = async (sessionId = null) => {
   };
 
   const handleReplyToAdvisor = async (inputMessage, replyContext) => {
-    const replyMessage = {
-      id: generateMessageId(),
-      type: 'user',
-      content: inputMessage,
-      replyTo: {
-        advisorId: replyContext.advisorId,
-        advisorName: replyContext.advisorName,
-        messageId: replyContext.messageId
+  // Ensure we have a session before proceeding
+  let sessionId = currentSessionId;
+  if (!sessionId) {
+    sessionId = await createNewSession(inputMessage);
+    if (!sessionId) {
+      console.error('Failed to create session for reply');
+      return;
+    }
+  }
+
+  const replyMessage = {
+    id: generateMessageId(),
+    type: 'user',
+    content: inputMessage,
+    replyTo: {
+      advisorId: replyContext.advisorId,
+      advisorName: replyContext.advisorName,
+      messageId: replyContext.messageId
+    },
+    timestamp: new Date()
+  };
+
+  setMessages(prev => [...prev, replyMessage]);
+  
+  // Save reply message to database with explicit session ID
+  await saveMessageToSession(replyMessage, sessionId);
+  
+  setIsLoading(true);
+  setThinkingAdvisors([replyContext.advisorId]);
+
+  try {
+    const response = await fetch('http://localhost:8000/reply-to-advisor', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      timestamp: new Date()
-    };
+      body: JSON.stringify({
+        user_input: inputMessage,
+        advisor_id: replyContext.advisorId,
+        original_message_id: replyContext.messageId,
+        chat_session_id: sessionId // Use confirmed session ID
+      }),
+    });
 
-    setMessages(prev => [...prev, replyMessage]);
-    
-    // Save reply message to database
-    await saveMessageToSession(replyMessage);
-    
-    setIsLoading(true);
-    setThinkingAdvisors([replyContext.advisorId]);
-
-    try {
-      const response = await fetch('http://localhost:8000/reply-to-advisor', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_input: inputMessage,
-          advisor_id: replyContext.advisorId,
-          original_message_id: replyContext.messageId
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.type === 'advisor_reply') {
-        const replyResponseMessage = {
-          id: generateMessageId(),
-          type: 'advisor',
-          advisorId: data.persona_id,
-          advisorName: data.persona,
-          content: data.response,
-          isReply: true,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, replyResponseMessage]);
-        
-        // Save advisor reply to database
-        await saveMessageToSession(replyResponseMessage);
-      }
-
-    } catch (error) {
-      console.error('Error replying to advisor:', error);
-      const errorMessage = {
-        id: generateMessageId(),
-        type: 'error',
-        content: 'Sorry, I encountered an error with your reply. Please try again.',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-      
-      // Save error message to database
-      await saveMessageToSession(errorMessage);
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
     }
 
-    setIsLoading(false);
-    setThinkingAdvisors([]);
-  };
+    const data = await response.json();
+
+    if (data.type === 'advisor_reply') {
+      const replyResponseMessage = {
+        id: generateMessageId(),
+        type: 'advisor',
+        advisorId: data.persona_id,
+        advisorName: data.persona,
+        content: data.response,
+        isReply: true,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, replyResponseMessage]);
+      
+      // Save advisor reply to database
+      await saveMessageToSession(replyResponseMessage, sessionId);
+    }
+
+  } catch (error) {
+    console.error('Error replying to advisor:', error);
+    const errorMessage = {
+      id: generateMessageId(),
+      type: 'error',
+      content: 'Sorry, I encountered an error with your reply. Please try again.',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, errorMessage]);
+    
+    // Save error message to database
+    await saveMessageToSession(errorMessage, sessionId);
+  }
+
+  setIsLoading(false);
+  setThinkingAdvisors([]);
+};
 
   const handleCopyMessage = (messageId, content) => {
     // Optional: Show a toast notification or add to message history

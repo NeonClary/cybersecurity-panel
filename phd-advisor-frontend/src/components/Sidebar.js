@@ -28,6 +28,7 @@ const Sidebar = ({
   const [isLoading, setIsLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false); // Add loading state for new chat creation
 
   useEffect(() => {
     if (authToken) {
@@ -41,6 +42,17 @@ const Sidebar = ({
       onSidebarToggle(isCollapsed);
     }
   }, [isCollapsed, onSidebarToggle]);
+
+  // Add effect to refresh when currentSessionId changes (new session created)
+  useEffect(() => {
+    if (currentSessionId && authToken) {
+      // Small delay to ensure the session is saved to database
+      const timer = setTimeout(() => {
+        fetchChatSessions();
+      }, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [currentSessionId, authToken]);
 
   const fetchChatSessions = async () => {
     try {
@@ -65,25 +77,21 @@ const Sidebar = ({
   };
 
   const handleNewChat = async () => {
+    setIsCreatingNewChat(true);
+    
     try {
-      const response = await fetch('http://localhost:8000/api/chat-sessions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          title: `Chat ${new Date().toLocaleDateString()}`
-        })
-      });
-
-      if (response.ok) {
-        const newSession = await response.json();
-        setChatSessions(prev => [newSession, ...prev]);
-        onNewChat(newSession.id);
-      }
+      // Call the parent's new chat handler and wait for it to complete
+      await onNewChat();
+      
+      // Refresh the sessions list immediately after new chat is created
+      // The parent should have updated currentSessionId by now
+      await fetchChatSessions();
+      
     } catch (error) {
       console.error('Error creating new chat:', error);
+      // Optionally show an error message to the user
+    } finally {
+      setIsCreatingNewChat(false);
     }
   };
 
@@ -187,9 +195,13 @@ const Sidebar = ({
               </div>
             </div>
 
-            <button className="new-chat-button" onClick={handleNewChat}>
+            <button 
+              className="new-chat-button" 
+              onClick={handleNewChat}
+              disabled={isCreatingNewChat}
+            >
               <Plus size={16} />
-              <span>New Chat</span>
+              <span>{isCreatingNewChat ? 'Creating...' : 'New Chat'}</span>
             </button>
           </>
         )}
@@ -204,7 +216,12 @@ const Sidebar = ({
             >
               <ChevronRight size={20} />
             </button>
-            <button className="collapsed-new-chat" onClick={handleNewChat} title="New Chat">
+            <button 
+              className="collapsed-new-chat" 
+              onClick={handleNewChat} 
+              title="New Chat"
+              disabled={isCreatingNewChat}
+            >
               <Plus size={20} />
             </button>
           </div>
@@ -233,6 +250,11 @@ const Sidebar = ({
           <div className="loading-sessions">
             <div className="loading-spinner"></div>
             {!isCollapsed && <span>Loading chats...</span>}
+          </div>
+        ) : isCreatingNewChat ? (
+          <div className="loading-sessions">
+            <div className="loading-spinner"></div>
+            {!isCollapsed && <span>Creating new chat...</span>}
           </div>
         ) : filteredSessions.length === 0 ? (
           <div className="no-sessions">
