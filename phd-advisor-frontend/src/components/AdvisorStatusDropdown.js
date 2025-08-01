@@ -4,7 +4,18 @@ import { Users, ChevronDown } from 'lucide-react';
 const AdvisorStatusDropdown = ({ advisors, thinkingAdvisors, getAdvisorColors, isDark }) => {
   const [isOpen, setIsOpen] = useState(false);
   
-  // Safety checks
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (isOpen && !event.target.closest('.advisor-status-dropdown')) {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
   if (!advisors || typeof advisors !== 'object') {
     return null;
   }
@@ -18,18 +29,6 @@ const AdvisorStatusDropdown = ({ advisors, thinkingAdvisors, getAdvisorColors, i
   const handleToggle = () => {
     setIsOpen(!isOpen);
   };
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (isOpen && !event.target.closest('.advisor-status-dropdown')) {
-        setIsOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
 
   return (
     <div className="advisor-status-dropdown">
