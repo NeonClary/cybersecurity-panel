@@ -1,17 +1,37 @@
+# Core FastAPI framework
 fastapi
-uvicorn
+uvicorn[standard]
+python-multipart
+
+# HTTP client for LLM APIs
 httpx
+
+# Document processing
 PyPDF2
 docx2txt
+python-docx
+
+# Environment configuration
 python-dotenv
+
+# Vector database and embeddings
 chromadb
 sentence-transformers
+
+# Natural language processing
 nltk
 tiktoken
+
+# PDF generation and export
 reportlab
-docx
+
+# Database (MongoDB)
 pymongo
 motor
+
+# Authentication and security
 passlib[bcrypt]
 python-jose[cryptography]
-python-multipart
+
+# Data validation (required for EmailStr in Pydantic)
+email-validator
