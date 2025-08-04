@@ -299,6 +299,9 @@ const AdvisorStatusDropdown = ({ advisors, thinkingAdvisors, getAdvisorColors, i
         
         /* Responsive Design */
         @media (max-width: 768px) {
+          .advisor-status-dropdown {
+            display: none;
+          }
           .advisor-dropdown-panel {
             right: -20px;
             left: -20px;
