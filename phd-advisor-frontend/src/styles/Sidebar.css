@@ -593,6 +593,21 @@
   position: relative;
 }
 
+.mobile-sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 150;
+  display: none;
+}
+
+.mobile-sidebar-overlay.visible {
+  display: block;
+}
+
 .session-item.collapsed:hover::after {
   content: attr(title);
   position: absolute;
@@ -627,17 +642,19 @@
     width: 280px;
     transform: translateX(-100%);
     transition: transform 0.3s ease, width 0.3s ease;
+    z-index: 200; /* Higher z-index for mobile */
   }
   
   .sidebar.collapsed {
     width: 70px;
+    transform: translateX(-100%); /* Keep hidden when collapsed on mobile */
   }
   
-  .sidebar.open {
+  .sidebar.mobile-open {
     transform: translateX(0);
   }
-  
-  .sidebar-toggle {
-    display: none; /* Hide toggle on mobile, use overlay instead */
+
+  .mobile-sidebar-overlay.visible {
+    display: block;
   }
 }

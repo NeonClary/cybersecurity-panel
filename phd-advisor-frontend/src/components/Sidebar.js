@@ -21,20 +21,36 @@ const Sidebar = ({
   onNewChat, 
   onSignOut,
   authToken,
-  onSidebarToggle // New prop to notify parent of sidebar state
+  onSidebarToggle,
+  isMobileOpen = false,
+  onMobileToggle
 }) => {
   const [chatSessions, setChatSessions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false); // Add loading state for new chat creation
+  const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
 
   useEffect(() => {
     if (authToken) {
       fetchChatSessions();
     }
   }, [authToken]);
+
+  useEffect(() => {
+    const handleOverlayClick = (e) => {
+      // Only close if clicking the overlay itself, not the sidebar
+      if (e.target.classList.contains('mobile-sidebar-overlay')) {
+        onMobileToggle(false);
+      }
+    };
+
+    if (isMobileOpen) {
+      document.addEventListener('click', handleOverlayClick);
+      return () => document.removeEventListener('click', handleOverlayClick);
+    }
+  }, [isMobileOpen, onMobileToggle]);
 
   // Notify parent when sidebar state changes
   useEffect(() => {
@@ -53,6 +69,7 @@ const Sidebar = ({
       return () => clearTimeout(timer);
     }
   }, [currentSessionId, authToken]);
+
 
   const fetchChatSessions = async () => {
     try {
@@ -145,159 +162,168 @@ const Sidebar = ({
   };
 
   return (
-    <div className={`sidebar ${isCollapsed ? 'collapsed' : ''}`}>
-      {/* Header */}
-      <div className="sidebar-header">
-        {!isCollapsed && (
-          <>
-            <div className="user-section">
-              <div className="user-info">
-                <div className="user-avatar">
-                  <User size={20} />
+    <>
+      <div className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${isMobileOpen ? 'mobile-open' : ''}`}>
+        {/* Header */}
+        <div className="sidebar-header">
+          {!isCollapsed && (
+            <>
+              <div className="user-section">
+                <div className="user-info">
+                  <div className="user-avatar">
+                    <User size={20} />
+                  </div>
+                  <div className="user-details">
+                    <span className="user-name">{user.firstName} {user.lastName}</span>
+                    <span className="user-email">{user.email}</span>
+                  </div>
                 </div>
-                <div className="user-details">
-                  <span className="user-name">{user.firstName} {user.lastName}</span>
-                  <span className="user-email">{user.email}</span>
-                </div>
-              </div>
-              
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {/* Toggle button next to user menu when expanded */}
-                <button 
-                  className="sidebar-toggle"
-                  onClick={toggleSidebar} 
-                  title="Collapse sidebar"
-                >
-                  <ChevronLeft size={16} />
-                </button>
                 
-                <div className="user-menu-container">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {/* Toggle button next to user menu when expanded */}
                   <button 
-                    className="user-menu-button"
-                    onClick={() => setShowUserMenu(!showUserMenu)}
+                    className="sidebar-toggle"
+                    onClick={toggleSidebar} 
+                    title="Collapse sidebar"
                   >
-                    <MoreVertical size={16} />
+                    <ChevronLeft size={16} />
                   </button>
                   
-                  {showUserMenu && (
-                    <div className="user-menu">
-                      <button className="user-menu-item">
-                        <Settings size={16} />
-                        <span>Settings</span>
-                      </button>
-                      <button className="user-menu-item sign-out" onClick={onSignOut}>
-                        <LogOut size={16} />
-                        <span>Sign Out</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <button 
-              className="new-chat-button" 
-              onClick={handleNewChat}
-              disabled={isCreatingNewChat}
-            >
-              <Plus size={16} />
-              <span>{isCreatingNewChat ? 'Creating...' : 'New Chat'}</span>
-            </button>
-          </>
-        )}
-
-        {isCollapsed && (
-          <div className="collapsed-header">
-            {/* Toggle button replaces user avatar when collapsed */}
-            <button 
-              className="collapsed-toggle-avatar"
-              onClick={toggleSidebar} 
-              title="Expand sidebar"
-            >
-              <ChevronRight size={20} />
-            </button>
-            <button 
-              className="collapsed-new-chat" 
-              onClick={handleNewChat} 
-              title="New Chat"
-              disabled={isCreatingNewChat}
-            >
-              <Plus size={20} />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Search - only show when expanded */}
-      {!isCollapsed && (
-        <div className="sidebar-search">
-          <div className="search-container">
-            <Search size={16} className="search-icon" />
-            <input
-              type="text"
-              placeholder="Search chats..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Chat Sessions */}
-      <div className="chat-sessions">
-        {isLoading ? (
-          <div className="loading-sessions">
-            <div className="loading-spinner"></div>
-            {!isCollapsed && <span>Loading chats...</span>}
-          </div>
-        ) : isCreatingNewChat ? (
-          <div className="loading-sessions">
-            <div className="loading-spinner"></div>
-            {!isCollapsed && <span>Creating new chat...</span>}
-          </div>
-        ) : filteredSessions.length === 0 ? (
-          <div className="no-sessions">
-            {!isCollapsed && (searchTerm ? 'No chats found' : 'No chats yet')}
-          </div>
-        ) : (
-          <div className="sessions-list">
-            {filteredSessions.map((session) => (
-              <div
-                key={session.id}
-                className={`session-item ${currentSessionId === session.id ? 'active' : ''} ${isCollapsed ? 'collapsed' : ''}`}
-                onClick={() => onSelectSession(session.id)}
-                title={isCollapsed ? session.title : ''}
-              >
-                <div className="session-content">
-                  <div className="session-icon">
-                    <MessageSquare size={16} />
-                  </div>
-                  {!isCollapsed && (
-                    <div className="session-details">
-                      <div className="session-title">{session.title}</div>
-                      <div className="session-meta">
-                        <span className="session-date">{formatDate(session.updated_at)}</span>
-                        <span className="session-messages">{session.message_count} messages</span>
+                  <div className="user-menu-container">
+                    <button 
+                      className="user-menu-button"
+                      onClick={() => setShowUserMenu(!showUserMenu)}
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    
+                    {showUserMenu && (
+                      <div className="user-menu">
+                        <button className="user-menu-item">
+                          <Settings size={16} />
+                          <span>Settings</span>
+                        </button>
+                        <button className="user-menu-item sign-out" onClick={onSignOut}>
+                          <LogOut size={16} />
+                          <span>Sign Out</span>
+                        </button>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-                
-                {!isCollapsed && (
-                  <button
-                    className="session-menu-button"
-                    onClick={(e) => handleDeleteSession(session.id, e)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
               </div>
-            ))}
+
+              <button 
+                className="new-chat-button" 
+                onClick={handleNewChat}
+                disabled={isCreatingNewChat}
+              >
+                <Plus size={16} />
+                <span>{isCreatingNewChat ? 'Creating...' : 'New Chat'}</span>
+              </button>
+            </>
+          )}
+
+          {isCollapsed && (
+            <div className="collapsed-header">
+              {/* Toggle button replaces user avatar when collapsed */}
+              <button 
+                className="collapsed-toggle-avatar"
+                onClick={toggleSidebar} 
+                title="Expand sidebar"
+              >
+                <ChevronRight size={20} />
+              </button>
+              <button 
+                className="collapsed-new-chat" 
+                onClick={handleNewChat} 
+                title="New Chat"
+                disabled={isCreatingNewChat}
+              >
+                <Plus size={20} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Search - only show when expanded */}
+        {!isCollapsed && (
+          <div className="sidebar-search">
+            <div className="search-container">
+              <Search size={16} className="search-icon" />
+              <input
+                type="text"
+                placeholder="Search chats..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="search-input"
+              />
+            </div>
           </div>
         )}
+
+        {/* Chat Sessions */}
+        <div className="chat-sessions">
+          {isLoading ? (
+            <div className="loading-sessions">
+              <div className="loading-spinner"></div>
+              {!isCollapsed && <span>Loading chats...</span>}
+            </div>
+          ) : isCreatingNewChat ? (
+            <div className="loading-sessions">
+              <div className="loading-spinner"></div>
+              {!isCollapsed && <span>Creating new chat...</span>}
+            </div>
+          ) : filteredSessions.length === 0 ? (
+            <div className="no-sessions">
+              {!isCollapsed && (searchTerm ? 'No chats found' : 'No chats yet')}
+            </div>
+          ) : (
+            <div className="sessions-list">
+              {filteredSessions.map((session) => (
+                <div
+                  key={session.id}
+                  className={`session-item ${currentSessionId === session.id ? 'active' : ''} ${isCollapsed ? 'collapsed' : ''}`}
+                  onClick={() => onSelectSession(session.id)}
+                  title={isCollapsed ? session.title : ''}
+                >
+                  <div className="session-content">
+                    <div className="session-icon">
+                      <MessageSquare size={16} />
+                    </div>
+                    {!isCollapsed && (
+                      <div className="session-details">
+                        <div className="session-title">{session.title}</div>
+                        <div className="session-meta">
+                          <span className="session-date">{formatDate(session.updated_at)}</span>
+                          <span className="session-messages">{session.message_count} messages</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {!isCollapsed && (
+                    <button
+                      className="session-menu-button"
+                      onClick={(e) => handleDeleteSession(session.id, e)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+      
+      {isMobileOpen && (
+        <div 
+          className="mobile-sidebar-overlay visible" 
+          onClick={() => onMobileToggle(false)}
+        />
+      )}
+    </>
   );
 };
 
