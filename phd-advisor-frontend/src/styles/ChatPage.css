@@ -986,18 +986,56 @@
   font-size: 12px;
 }
 
+.mobile-menu-button {
+  display: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-menu-button:hover {
+  background: var(--accent-primary);
+  color: white;
+}
+
 /* Responsive Design for Chat Page */
 @media (max-width: 768px) {
   .floating-header {
     padding: 12px 16px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap; 
+    gap: 8px;
+  }
+  
+  .header-left {
     gap: 12px;
+    flex: 0; /* Don't let it grow */
+    min-width: 0;
+  }
+  
+  /* Hide brand elements on mobile to reduce clutter */
+  .header-left .modern-home-btn,
+  .header-left .header-brand {
+    display: none;
   }
   
   .header-right {
-    gap: 12px;
+    gap: 8px;
+    flex: 1; /* Let header-right take available space */
+    justify-content: flex-end; /* Align items to the right */
+    flex-shrink: 0;
   }
   
+  /* Ensure mobile menu button is visible */
+  .mobile-menu-button {
+    display: flex;
+  }
   
   .main-content {
     padding: 24px 12px 120px 12px; /* Adjusted for mobile */
@@ -1030,12 +1068,6 @@
     font-size: 13px;
   }
 
-  .export-dropdown {
-    right: -20px;
-    left: -20px;
-    width: auto;
-    min-width: unset;
-  }
 
   .main-chat-area {
     margin-left: 0;
@@ -1063,4 +1095,17 @@
     padding: 10px 14px;
     font-size: 12px;
   }
+
+  .brand-text h1 {
+    font-size: 16px;
+  }
+  
+  .brand-text p {
+    font-size: 11px;
+  }
+
+  .session-title-display{
+    display: none;
+  }
+
 }

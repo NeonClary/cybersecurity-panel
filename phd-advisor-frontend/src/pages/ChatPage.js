@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Home, MessageCircle, Reply, X, Sparkles, Users, Settings2, FileText , LogOut} from 'lucide-react';
+import { Home, MessageCircle, Reply, X, Sparkles, Users, Settings2, FileText , LogOut, Menu} from 'lucide-react';
 import EnhancedChatInput from '../components/EnhancedChatInput';
 import MessageBubble from '../components/MessageBubble';
 import ThinkingIndicator from '../components/ThinkingIndicator';
@@ -30,11 +30,16 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onSignOut }) => {
   const [currentSessionTitle, setCurrentSessionTitle] = useState('');
   const [isSavingSession, setIsSavingSession] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleMobileMenuToggle = () => {
+    setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
   useEffect(() => {
@@ -688,6 +693,8 @@ const handleNewChat = async (sessionId = null) => {
         onSignOut={onSignOut}
         authToken={authToken}
         onSidebarToggle={handleSidebarToggle}
+        isMobileOpen={isMobileMenuOpen}
+        onMobileToggle={setIsMobileMenuOpen}
       />
       
       <div className={`main-chat-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -695,6 +702,12 @@ const handleNewChat = async (sessionId = null) => {
           {/* Floating Header */}
           <div className="floating-header">
             <div className="header-left">
+              <button 
+                className="mobile-menu-button"
+                onClick={handleMobileMenuToggle}
+              >
+                <Menu size={20} />
+              </button>
               <button onClick={onNavigateToHome} className="modern-home-btn">
                 <Home size={20} />
               </button>
