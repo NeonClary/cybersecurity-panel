@@ -3,7 +3,7 @@ import { Upload, FileText, File, X, CheckCircle, AlertCircle } from 'lucide-reac
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/FileUpload.css'
 
-const FileUpload = ({ onFileUploaded, isUploading, onUploadStart }) => {
+const FileUpload = ({ onFileUploaded, isUploading, onUploadStart, currentChatSessionId = null, authToken = null  }) => {
   const [dragActive, setDragActive] = useState(false);
   const [uploadStatus, setUploadStatus] = useState(null); // 'success', 'error', null
   const [uploadMessage, setUploadMessage] = useState('');
@@ -44,8 +44,24 @@ const FileUpload = ({ onFileUploaded, isUploading, onUploadStart }) => {
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:8000/upload-document', {
+      // FIXED: Build URL with chat_session_id parameter if available
+      let uploadUrl = 'http://localhost:8000/upload-document';
+      if (currentChatSessionId) {
+        uploadUrl += `?chat_session_id=${currentChatSessionId}`;
+        console.log(`Uploading to specific chat session: ${currentChatSessionId}`);
+      } else {
+        console.log('Uploading to new/current session');
+      }
+
+      // FIXED: Include auth token in headers if available
+      const headers = {};
+      if (authToken) {
+        headers['Authorization'] = `Bearer ${authToken}`;
+      }
+
+      const response = await fetch(uploadUrl, {
         method: 'POST',
+        headers: headers, // Add auth headers
         body: formData,
       });
 
@@ -54,6 +70,14 @@ const FileUpload = ({ onFileUploaded, isUploading, onUploadStart }) => {
         setUploadStatus('success');
         setUploadMessage(`${file.name} uploaded successfully and added to context.`);
         onFileUploaded && onFileUploaded(file, data);
+        
+        // FIXED: Log upload result for debugging
+        console.log('Document upload result:', {
+          filename: data.filename,
+          session_id: data.session_id,
+          chat_session_id: data.chat_session_id,
+          chunks_created: data.chunks_created
+        });
         
         // Auto-clear success message after 5 seconds
         setTimeout(() => {

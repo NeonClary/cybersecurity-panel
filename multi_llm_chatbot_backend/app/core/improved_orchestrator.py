@@ -297,15 +297,51 @@ class ImprovedChatOrchestrator:
         Enhanced document retrieval with document awareness and better attribution
         """
         try:
+            # Add comprehensive logging to track session ID usage
+            logger.info(f"Retrieving documents for session_id: {session_id}")
+            logger.info(f"User input: {user_input[:100]}...")
+            
             rag_manager = get_rag_manager()
+            
+            # Check what documents are available for this session with detailed logging
+            doc_stats = rag_manager.get_document_stats(session_id)
+            logger.info(f"Available documents for {session_id}: {doc_stats.get('total_documents', 0)} documents, {doc_stats.get('total_chunks', 0)} chunks")
+            
+            # Log document details for debugging
+            if doc_stats.get('documents'):
+                for doc in doc_stats['documents']:
+                    logger.info(f"  - Document: {doc.get('filename', 'unknown')} ({doc.get('chunks', 0)} chunks)")
+            
+            # If no documents found and this looks like a chat session, log warning
+            if doc_stats.get('total_documents', 0) == 0:
+                if session_id.startswith('chat_'):
+                    logger.warning(f"No documents found for chat session {session_id} - this may indicate session ID mismatch during upload")
+                    
+                    # Try alternative session ID formats for debugging
+                    alternative_formats = [
+                        session_id.replace('chat_', ''),  # Remove chat_ prefix
+                        session_id,  # Keep as is
+                    ]
+                    
+                    for alt_session_id in alternative_formats:
+                        if alt_session_id != session_id:
+                            alt_stats = rag_manager.get_document_stats(alt_session_id)
+                            if alt_stats.get('total_documents', 0) > 0:
+                                logger.warning(f"Found documents under alternative session ID {alt_session_id}: {alt_stats}")
+                else:
+                    logger.info(f"No documents found for new session {session_id} - this is normal for new chats")
+                
+                return ""  # No documents available
             
             # Extract document hints from user query
             document_hint = self._extract_document_hint_from_query(user_input)
+            logger.info(f"Document hint extracted from query: {document_hint}")
             
             # Get persona-specific context for better retrieval
             persona_context = self._get_enhanced_persona_context_keywords(persona_id)
             
             # Search for relevant chunks with document awareness
+            logger.info(f"Searching with persona context: {persona_context[:100]}...")
             relevant_chunks = rag_manager.search_documents_with_context(
                 query=user_input,
                 session_id=session_id,
@@ -316,15 +352,31 @@ class ImprovedChatOrchestrator:
             
             logger.info(f"Retrieved {len(relevant_chunks)} chunks for {persona_id}")
             
+            # Log relevance scores for debugging
+            if relevant_chunks:
+                for i, chunk in enumerate(relevant_chunks):
+                    relevance = chunk.get("relevance_score", 0)
+                    doc_source = chunk.get("document_source", {})
+                    filename = doc_source.get("filename", "unknown")
+                    logger.info(f"  Chunk {i+1}: {filename} (relevance: {relevance:.3f})")
+            
             if not relevant_chunks:
-                logger.info(f"No relevant documents found for query: {user_input[:50]}...")
+                logger.info(f"No relevant document chunks found for query: {user_input[:50]}...")
                 return ""
             
             # Format retrieved content with enhanced attribution
-            return self._format_document_context_with_attribution(relevant_chunks, persona_id)
+            formatted_context = self._format_document_context_with_attribution(relevant_chunks, persona_id)
+            
+            # Log final context length
+            logger.info(f"Final document context length: {len(formatted_context)} characters")
+            
+            return formatted_context
             
         except Exception as e:
-            logger.error(f"Error retrieving documents for {persona_id}: {str(e)}")
+            logger.error(f"Error retrieving documents for {persona_id} in session {session_id}: {str(e)}")
+            logger.error(f"Error type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return ""
 
     def _extract_document_hint_from_query(self, query: str) -> Optional[str]:
@@ -579,34 +631,73 @@ When analyzing the document context:
         """
         return self._get_enhanced_persona_context_keywords(persona_id)
     
-    async def chat_with_persona(self, persona_id: str, user_input: str, session_id: str, response_length: str = "medium") -> Dict[str, Any]:
+    async def chat_with_persona(self, user_input: str, persona_id: str, session_id: str, response_length: str = "medium") -> Dict[str, Any]:
         """
-        Chat with a specific persona directly
+        Chat with a specific persona directly - FIXED for consistent document access
         """
         try:
             persona = self.get_persona(persona_id)
             if not persona:
                 return {
                     "error": f"Persona {persona_id} not found",
-                    "available_personas": list(self.personas.keys())
+                    "available_personas": list(self.personas.keys()),
+                    "persona_id": persona_id,
+                    "persona_name": "Unknown"
                 }
             
+            # Ensure session exists and log session info
             session = self.session_manager.get_session(session_id)
+            logger.info(f"Chat with {persona_id} using session {session_id}")
+            
+            # Add user message to session
             session.append_message("user", user_input)
             
-            # Generate response from single persona
+            # Use the same session_id for document retrieval
+            logger.info(f"Generating response for {persona_id} with session {session_id}")
+            
+            # Generate response from single persona using consistent session ID
             response_data = await self._generate_single_persona_response(session, persona, response_length)
             
             # Add response to session
             session.append_message(persona_id, response_data["response"])
             
-            return response_data
+            # Ensure response data includes all necessary fields
+            return {
+                "persona_id": persona_id,
+                "persona_name": persona.name,
+                "response": response_data.get("response", "I'm having trouble generating a response."),
+                "used_documents": response_data.get("used_documents", False),
+                "document_chunks_used": response_data.get("document_chunks_used", 0),
+                "response_length": response_length,
+                "context_quality": response_data.get("context_quality", "unknown"),
+                "session_id": session_id,
+                "type": "single_persona_response",
+                "persona": {
+                    "persona_id": persona_id,
+                    "persona_name": persona.name,
+                    "response": response_data.get("response", "I'm having trouble generating a response."),
+                    "used_documents": response_data.get("used_documents", False),
+                    "document_chunks_used": response_data.get("document_chunks_used", 0)
+                }
+            }
             
         except Exception as e:
-            logger.error(f"Error in chat_with_persona: {str(e)}")
+            logger.error(f"Error in chat_with_persona for {persona_id}: {str(e)}")
+            logger.error(f"Session ID: {session_id}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            
             return {
                 "error": f"Error processing request: {str(e)}",
-                "persona_id": persona_id
+                "persona_id": persona_id,
+                "persona_name": self.personas.get(persona_id, {}).name if persona_id in self.personas else "Unknown",
+                "response": "I encountered an error while processing your request. Please try again.",
+                "used_documents": False,
+                "document_chunks_used": 0,
+                "response_length": response_length,
+                "context_quality": "error",
+                "session_id": session_id,
+                "type": "error"
             }
         
 

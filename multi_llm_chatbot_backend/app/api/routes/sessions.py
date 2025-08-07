@@ -23,28 +23,48 @@ async def get_context(
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Get context for current session - ENHANCED
-    Now properly handles different chat sessions
+    Get context for current session - ENHANCED with document access fix
+    Now properly handles different chat sessions and ensures document access
     """
     try:
-        # Determine which session to get context for
+        # Determine which session to get context for with consistent session ID format
         if chat_session_id:
-            # Getting context for a specific chat session
-            session_id = await get_or_create_session_for_request_async(
-                request,
-                chat_session_id=chat_session_id,
-                user_id=str(current_user.id)
-            )
+            # Getting context for a specific chat session - use consistent format
+            session_id = f"chat_{chat_session_id}"
+            logger.info(f"Getting context for specific chat session: {session_id}")
+            
+            # Ensure session is loaded in memory
+            if session_id not in session_manager.sessions:
+                logger.info(f"Chat session {session_id} not in memory, loading from database")
+                loaded_session_id = await get_or_create_session_for_request_async(
+                    request,
+                    chat_session_id=chat_session_id,
+                    user_id=str(current_user.id)
+                )
+                session_id = loaded_session_id
+                logger.info(f"Loaded session ID: {session_id}")
         else:
             # Getting context for current session
             session_id = await get_or_create_session_for_request_async(request)
+            logger.info(f"Getting context for current session: {session_id}")
         
         session = session_manager.get_session(session_id)
         rag_stats = session.get_rag_stats()
         
-        logger.info(f"Retrieved context for session {session_id}: {len(session.messages)} messages")
+        #  Enhanced logging for document access debugging
+        logger.info(f"Retrieved context for session {session_id}:")
+        logger.info(f"  - Messages: {len(session.messages)}")
+        logger.info(f"  - Documents: {rag_stats.get('total_documents', 0)}")
+        logger.info(f"  - Chunks: {rag_stats.get('total_chunks', 0)}")
+        logger.info(f"  - Uploaded files: {len(session.uploaded_files)}")
         
-        return {
+        # Log document details if available
+        if rag_stats.get('documents'):
+            for doc in rag_stats['documents']:
+                logger.info(f"  - Available document: {doc.get('filename', 'unknown')} ({doc.get('chunks', 0)} chunks)")
+        
+        # Include session debugging info in response
+        context_response = {
             "session_id": session_id,
             "chat_session_id": chat_session_id,
             "messages": session.messages,
@@ -60,16 +80,39 @@ async def get_context(
                 "total_upload_size": session.total_upload_size,
                 "created_at": session.created_at.isoformat(),
                 "last_accessed": session.last_accessed.isoformat()
+            },
+            # Add debugging info
+            "debug_info": {
+                "session_format": "chat_session" if chat_session_id else "new_session",
+                "session_in_memory": session_id in session_manager.sessions,
+                "document_access_working": rag_stats.get("total_documents", 0) > 0
             }
         }
         
+        return context_response
+        
     except Exception as e:
-        logger.error(f"Error getting context: {str(e)}")
+        logger.error(f"Error getting context for session_id {session_id if 'session_id' in locals() else 'unknown'}: {str(e)}")
+        logger.error(f"Chat session ID: {chat_session_id}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        
         return {
-            "session_id": None,
+            "session_id": session_id if 'session_id' in locals() else None,
+            "chat_session_id": chat_session_id,
             "messages": [], 
-            "rag_info": {"total_documents": 0, "total_chunks": 0},
-            "error": str(e)
+            "rag_info": {"total_documents": 0, "total_chunks": 0, "documents": []},
+            "context_stats": {
+                "message_count": 0,
+                "user_messages": 0,
+                "uploaded_files": [],
+                "total_upload_size": 0
+            },
+            "error": str(e),
+            "debug_info": {
+                "error_occurred": True,
+                "error_type": type(e).__name__
+            }
         }
 
 @router.post("/reset-session")

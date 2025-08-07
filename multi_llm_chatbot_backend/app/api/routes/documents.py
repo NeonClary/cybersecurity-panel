@@ -155,9 +155,21 @@ def convert_messages_for_export(messages):
 
 
 @router.post("/upload-document")
-async def upload_document(file: UploadFile = File(...), request: Request = None):
+async def upload_document(
+    file: UploadFile = File(...), 
+    request: Request = None,
+    chat_session_id: str = Query(None, description="Chat session ID if uploading to specific chat")
+):
     try:
-        session_id = get_or_create_session_for_request(request)
+        if chat_session_id:
+            # If uploading to a specific chat, use chat_{id} format
+            session_id = f"chat_{chat_session_id}"
+            logger.info(f"Uploading document to specific chat session: {session_id}")
+        else:
+            # For new/temporary chats, use regular session management
+            session_id = get_or_create_session_for_request(request)
+            logger.info(f"Uploading document to new session: {session_id}")
+        
         session = session_manager.get_session(session_id)
 
         MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -177,10 +189,12 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
         }
         file_type = file_type_map.get(file.content_type, "unknown")
 
+        # Pass the consistent session_id to RAG manager
+        logger.info(f"Adding document {file.filename} to session {session_id}")
         rag_result = rag_manager.add_document(
             content=content,
             filename=file.filename,
-            session_id=session_id,
+            session_id=session_id,  # This now uses the consistent format
             file_type=file_type
         )
 
@@ -198,6 +212,7 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
             f"Document uploaded: '{doc_title}' ({file.filename}) - {rag_result['chunks_created']} sections processed, ~{rag_result['total_tokens']} tokens analyzed. You can now ask questions about this document by referencing it by name."
         )
 
+        # Return session info for frontend tracking
         return {
             "message": f"Document '{file.filename}' uploaded and processed successfully.",
             "filename": file.filename,
@@ -205,7 +220,9 @@ async def upload_document(file: UploadFile = File(...), request: Request = None)
             "chunks_created": rag_result['chunks_created'],
             "total_tokens": rag_result['total_tokens'],
             "file_type": file_type,
-            "can_reference_by_name": True
+            "can_reference_by_name": True,
+            "session_id": session_id,  # Include session ID for debugging
+            "chat_session_id": chat_session_id  # Include original chat session ID
         }
 
     except HTTPException:

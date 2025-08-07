@@ -326,22 +326,32 @@ const handleNewChat = async (sessionId = null) => {
 
   
 
-  const handleFileUploaded = async (fileInfo) => {
-  const documentMessage = {
-    id: generateMessageId(),
-    type: 'document_upload',
-    content: `Document uploaded: ${fileInfo.name}`,
-    timestamp: new Date()
+  const handleFileUploaded = async (file, uploadResult) => {
+    // FIXED: Use the upload result data for better messaging
+    const documentMessage = {
+      id: generateMessageId(),
+      type: 'document_upload',
+      content: `Document uploaded: ${uploadResult.filename || file.name} (${uploadResult.chunks_created || 0} sections processed)`,
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, documentMessage]);
+    setUploadedDocuments(prev => [...prev, file]);
+    
+    // FIXED: Log document access info
+    console.log('File uploaded to session:', {
+      filename: uploadResult.filename,
+      session_id: uploadResult.session_id,
+      chat_session_id: uploadResult.chat_session_id,
+      current_session_id: currentSessionId
+    });
+    
+    // Save document upload message to database if we have a current session
+    if (currentSessionId) {
+      await saveMessageToSession(documentMessage);
+    }
   };
-  
-  setMessages(prev => [...prev, documentMessage]);
-  setUploadedDocuments(prev => [...prev, fileInfo]);
-  
-  // Save document upload message to database if we have a current session
-  if (currentSessionId) {
-    await saveMessageToSession(documentMessage);
-  }
-};
+
 
   const handleSendMessage = async (inputMessage) => {
     if (!inputMessage.trim()) return;
@@ -914,6 +924,8 @@ const handleNewChat = async (sessionId = null) => {
               onFileUploaded={handleFileUploaded}
               uploadedDocuments={uploadedDocuments}
               isLoading={isLoading}
+              currentSessionId={currentSessionId}
+              authToken={authToken}
               placeholder={
                 replyingTo 
                   ? `Reply to ${replyingTo.advisorName}...`
