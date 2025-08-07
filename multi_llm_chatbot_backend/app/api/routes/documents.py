@@ -3,12 +3,11 @@ from fastapi import Query
 from app.utils.document_extractor import extract_text_from_file
 from app.core.session_manager import get_session_manager
 from app.core.rag_manager import get_rag_manager
-from app.api.utils import get_or_create_session_for_request
+from app.api.utils import get_or_create_session_for_request_async
 from fastapi.responses import StreamingResponse
 from app.utils.chat_summary import generate_summary_from_messages, parse_summary_to_blocks, format_summary_for_text_export
 from app.utils.file_export import prepare_export_response, generate_pdf_file_from_blocks
 from app.core.session_manager import get_session_manager
-from app.api.utils import get_or_create_session_for_request
 from app.core.bootstrap import chat_orchestrator
 from app.core.auth import get_current_active_user
 from app.core.database import get_database
@@ -167,7 +166,7 @@ async def upload_document(
             logger.info(f"Uploading document to specific chat session: {session_id}")
         else:
             # For new/temporary chats, use regular session management
-            session_id = get_or_create_session_for_request(request)
+            session_id = await get_or_create_session_for_request_async(request)  # FIXED: Added await
             logger.info(f"Uploading document to new session: {session_id}")
         
         session = session_manager.get_session(session_id)
@@ -235,7 +234,7 @@ async def upload_document(
 @router.post("/search-documents")
 async def search_documents(request: Request, query: str = Body(..., embed=True), persona: str = Body("", embed=True)):
     try:
-        session_id = get_or_create_session_for_request(request)
+        session_id = await get_or_create_session_for_request_async(request)  # FIXED: Added await
         rag_manager = get_rag_manager()
 
         persona_contexts = {
@@ -267,7 +266,7 @@ async def search_documents(request: Request, query: str = Body(..., embed=True),
 @router.get("/document-stats")
 async def get_document_stats(request: Request):
     try:
-        session_id = get_or_create_session_for_request(request)
+        session_id = await get_or_create_session_for_request_async(request)  # FIXED: Added await
         rag_manager = get_rag_manager()
         return rag_manager.get_document_stats(session_id)
     except Exception as e:
@@ -278,7 +277,7 @@ async def get_document_stats(request: Request):
 @router.get("/uploaded-files")
 async def get_uploaded_filenames(request: Request):
     try:
-        session_id = get_or_create_session_for_request(request)
+        session_id = await get_or_create_session_for_request_async(request)  # FIXED: Added await
         session = session_manager.get_session(session_id)
         return {"files": session.uploaded_files}
     except Exception as e:
@@ -289,7 +288,7 @@ async def get_uploaded_filenames(request: Request):
 @router.get("/document-insights/{filename}")
 async def get_document_insights(filename: str, request: Request):
     try:
-        session_id = get_or_create_session_for_request(request)
+        session_id = await get_or_create_session_for_request_async(request)  # FIXED: Added await
         rag_manager = get_rag_manager()
         stats = rag_manager.get_document_stats(session_id)
         document_info = next((doc for doc in stats.get("documents", []) if doc["filename"] == filename), None)
@@ -370,7 +369,7 @@ async def export_chat(
             messages = convert_messages_for_export(raw_messages)
         else:
             # Export current in-memory session (existing behavior)
-            session_id = get_or_create_session_for_request(request)
+            session_id = await get_or_create_session_for_request_async(request)  # FIXED: Added await
             session = session_manager.get_session(session_id)
             # In-memory messages might already be in the right format, but convert to be safe
             messages = convert_messages_for_export(session.messages)
@@ -450,7 +449,7 @@ async def chat_summary(
             messages = convert_messages_for_export(raw_messages)
         else:
             # Summarize current in-memory session (existing behavior)
-            session_id = get_or_create_session_for_request(request)
+            session_id = await get_or_create_session_for_request_async(request)  # FIXED: Added await
             session = session_manager.get_session(session_id)
             # Convert in-memory messages
             messages = convert_messages_for_export(session.messages)
@@ -522,4 +521,3 @@ async def chat_summary(
             status_code=500,
             detail=f"Summary generation failed: {str(e)}"
         )
-

@@ -82,48 +82,6 @@ async def load_chat_session_into_context(chat_session_id: str, user_id: str) -> 
         logger.error(f"Error loading chat session into context: {e}")
         return None
 
-def get_or_create_session_for_request(
-    request: Request, 
-    session_id_override: Optional[str] = None,
-    chat_session_id: Optional[str] = None,
-    user_id: Optional[str] = None
-) -> str:
-    """
-    Enhanced session management that properly handles chat switching
-    
-    Args:
-        request: FastAPI request object
-        session_id_override: Explicit session ID to use
-        chat_session_id: MongoDB chat session ID (for existing chats)
-        user_id: User ID (for loading existing chats)
-    """
-    
-    # Case 1: Loading an existing chat session
-    if chat_session_id and user_id:
-        try:
-            # We need to handle this in the calling function since this isn't async
-            # Return a special identifier that the calling function can handle
-            return f"load_chat_{chat_session_id}"
-            
-        except Exception as e:
-            logger.error(f"Error handling chat session load: {e}")
-            # Fall through to create new session
-    
-    # Case 2: Explicit session ID provided
-    if session_id_override:
-        return session_id_override
-
-    # Case 3: Check for session header
-    session_header = request.headers.get("X-Session-ID")
-    if session_header:
-        return session_header
-
-    # Case 4: Create a truly new session (don't fall back to IP)
-    # This ensures each new chat gets its own context
-    new_session_id = session_manager.create_session()
-    logger.info(f"Created new session: {new_session_id}")
-    return new_session_id
-
 async def get_or_create_session_for_request_async(
     request: Request, 
     session_id_override: Optional[str] = None,

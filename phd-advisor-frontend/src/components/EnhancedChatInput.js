@@ -100,8 +100,8 @@ const EnhancedChatInput = ({
       {showUpload && (
         <div className="floating-upload-section">
           <FileUpload 
-            onFileUploaded={onFileUploaded}
-            isUploading={isLoading}
+            onFileUploaded={handleFileUploaded}
+            isUploading={isUploading}
             currentChatSessionId={currentChatSessionId}  
             authToken={authToken}
             onUploadStart={handleUploadStart}
