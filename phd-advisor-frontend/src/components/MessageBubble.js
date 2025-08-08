@@ -31,8 +31,8 @@ const MessageBubble = ({
     }
   };
 
-  const handleExpand = (messageId, advisorId) => {
-    if (onExpand) onExpand(messageId, advisorId);
+  const handleExpand = (messageId, persona_id) => {
+    if (onExpand) onExpand(messageId, persona_id);
   };
 
   const handleInfoToggle = () => {
@@ -320,9 +320,9 @@ const MessageBubble = ({
   }
 
   if (message.type === 'advisor') {
-    const advisor = advisors[message.advisorId];
+    const advisor = advisors[message.persona_id];
     const Icon = advisor.icon;
-    const colors = getAdvisorColors(message.advisorId, isDark);
+    const colors = getAdvisorColors(message.persona_id, isDark);
     const isCopied = copiedStates[message.id];
 
     return (
@@ -425,7 +425,7 @@ const MessageBubble = ({
                 <div className="tooltip-container">
                   <button 
                     className="action-button"
-                    onClick={() => handleExpand(message.id, message.advisorId)}
+                    onClick={() => handleExpand(message.id, message.persona_id)}
                     onMouseEnter={() => showTooltipWithDelay('expand')}
                     onMouseLeave={hideTooltip}
                     style={{ 

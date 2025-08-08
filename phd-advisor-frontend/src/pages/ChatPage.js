@@ -393,11 +393,17 @@ const handleNewChat = async (sessionId = null) => {
     setThinkingAdvisors(['system']);
 
     try {
+      const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
+      };
+      
+
+      console.log('Sending message with session ID:', currentSessionId); // Debug log
+
       const response = await fetch('http://localhost:8000/chat-sequential', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: JSON.stringify({
           user_input: inputMessage,
           response_length: 'medium',
@@ -406,68 +412,50 @@ const handleNewChat = async (sessionId = null) => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      // Rest of the function remains the same...
       const data = await response.json();
-
-      // Handle clarification needed case
-      if (data.type === 'clarification_needed') {
-        const clarificationMessage = {
-          id: generateMessageId(),
-          type: 'clarification',
-          content: data.message,
-          suggestions: data.suggestions || [],
-          timestamp: new Date()
-        };
-
-        setMessages(prev => [...prev, clarificationMessage]);
-        await saveMessageToSession(clarificationMessage);
-
-      } else if (data.type === 'sequential_responses' && data.responses) {
-        // Handle normal advisor responses
-        const advisorMessages = data.responses.map((advisor) => ({
+      
+      // Process responses...
+      if (data.responses && Array.isArray(data.responses)) {
+        const newResponses = data.responses.map(response => ({
           id: generateMessageId(),
           type: 'advisor',
-          advisorId: advisor.persona_id,
-          advisorName: advisor.persona,
-          content: advisor.response,
-          timestamp: new Date()
+          advisor: response.persona_id,
+          content: response.content,
+          timestamp: new Date(),
+          advisorName: response.persona_name || response.persona_id,
+          used_documents: response.used_documents || false,
+          document_chunks_used: response.document_chunks_used || 0
         }));
 
-        setMessages(prev => [...prev, ...advisorMessages]);
-
-        // Save each advisor message to database
-        for (const advisorMessage of advisorMessages) {
-          await saveMessageToSession(advisorMessage);
+        setMessages(prev => [...prev, ...newResponses]);
+        
+        // Save advisor responses to database
+        for (const response of newResponses) {
+          await saveMessageToSession(response);
         }
-
-      } else if (data.type === 'error') {
-        const errorMessage = {
-          id: generateMessageId(),
-          type: 'error',
-          content: data.responses?.[0]?.response || 'An error occurred. Please try again.',
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorMessage]);
-        await saveMessageToSession(errorMessage);
+        
+        // Log session debug info if available
+        if (data.session_debug) {
+          console.log('Session debug info:', data.session_debug);
+        }
       }
 
     } catch (error) {
       console.error('Error sending message:', error);
-      const errorMessage = {
+      setMessages(prev => [...prev, {
         id: generateMessageId(),
         type: 'error',
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: `Failed to send message: ${error.message}`,
         timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-      await saveMessageToSession(errorMessage);
+      }]);
+    } finally {
+      setIsLoading(false);
+      setThinkingAdvisors([]);
     }
-
-    setIsLoading(false);
-    setThinkingAdvisors([]);
-    setReplyingTo(null);
   };
 
   const handleReplyToAdvisor = async (inputMessage, replyContext) => {
@@ -486,7 +474,7 @@ const handleNewChat = async (sessionId = null) => {
     type: 'user',
     content: inputMessage,
     replyTo: {
-      advisorId: replyContext.advisorId,
+      advisorId: replyContext.persona_id,
       advisorName: replyContext.advisorName,
       messageId: replyContext.messageId
     },
@@ -499,7 +487,7 @@ const handleNewChat = async (sessionId = null) => {
   await saveMessageToSession(replyMessage, sessionId);
   
   setIsLoading(true);
-  setThinkingAdvisors([replyContext.advisorId]);
+  setThinkingAdvisors([replyContext.persona_id]);
 
   try {
     const response = await fetch('http://localhost:8000/reply-to-advisor', {
@@ -509,7 +497,7 @@ const handleNewChat = async (sessionId = null) => {
       },
       body: JSON.stringify({
         user_input: inputMessage,
-        advisor_id: replyContext.advisorId,
+        advisor_id: replyContext.persona_id,
         original_message_id: replyContext.messageId,
         chat_session_id: sessionId // Use confirmed session ID
       }),
@@ -650,9 +638,9 @@ const handleNewChat = async (sessionId = null) => {
   };
 
   const handleReplyToMessage = (message) => {
-    const advisor = advisors[message.advisorId];
+    const advisor = advisors[message.persona_id];
     setReplyingTo({
-      advisorId: message.advisorId,
+      advisorId: message.persona_id,
       messageId: message.id,
       advisorName: advisor.name
     });
@@ -660,9 +648,9 @@ const handleNewChat = async (sessionId = null) => {
 
   const handleMessageClick = (message) => {
     if (message.type === 'advisor') {
-      const advisor = advisors[message.advisorId];
+      const advisor = advisors[message.persona_id];
       setReplyingTo({
-        advisorId: message.advisorId,
+        advisorId: message.persona_id,
         messageId: message.id,
         advisorName: advisor.name
       });
@@ -924,7 +912,7 @@ const handleNewChat = async (sessionId = null) => {
               onFileUploaded={handleFileUploaded}
               uploadedDocuments={uploadedDocuments}
               isLoading={isLoading}
-              currentSessionId={currentSessionId}
+              currentChatSessionId={currentSessionId}
               authToken={authToken}
               placeholder={
                 replyingTo 
