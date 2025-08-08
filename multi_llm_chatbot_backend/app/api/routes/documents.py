@@ -157,7 +157,8 @@ def convert_messages_for_export(messages):
 async def upload_document(
     file: UploadFile = File(...), 
     request: Request = None,
-    chat_session_id: str = Query(None, description="Chat session ID if uploading to specific chat")
+    chat_session_id: str = Query(None, description="Chat session ID if uploading to specific chat"),
+    current_user: User = Depends(get_current_active_user)  # ADDED: Require authentication
 ):
     try:
         if chat_session_id:
@@ -166,8 +167,13 @@ async def upload_document(
             logger.info(f"Uploading document to specific chat session: {session_id}")
         else:
             # For new/temporary chats, use regular session management
-            session_id = await get_or_create_session_for_request_async(request)  # FIXED: Added await
+            session_id = await get_or_create_session_for_request_async(request)
             logger.info(f"Uploading document to new session: {session_id}")
+        
+        # Add debug logging to track session IDs
+        logger.info(f"Document upload - chat_session_id parameter: {chat_session_id}")
+        logger.info(f"Document upload - final session_id: {session_id}")
+        logger.info(f"Document upload - user_id: {current_user.id}")
         
         session = session_manager.get_session(session_id)
 
@@ -193,7 +199,7 @@ async def upload_document(
         rag_result = rag_manager.add_document(
             content=content,
             filename=file.filename,
-            session_id=session_id,  # This now uses the consistent format
+            session_id=session_id,
             file_type=file_type
         )
 
@@ -220,8 +226,9 @@ async def upload_document(
             "total_tokens": rag_result['total_tokens'],
             "file_type": file_type,
             "can_reference_by_name": True,
-            "session_id": session_id,  # Include session ID for debugging
-            "chat_session_id": chat_session_id  # Include original chat session ID
+            "session_id": session_id,
+            "chat_session_id": chat_session_id,
+            "user_id": str(current_user.id)  # ADDED: Include user ID for debugging
         }
 
     except HTTPException:

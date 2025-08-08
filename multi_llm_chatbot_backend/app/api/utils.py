@@ -8,78 +8,94 @@ import logging
 logger = logging.getLogger(__name__)
 session_manager = get_session_manager()
 
-async def load_chat_session_into_context(chat_session_id: str, user_id: str) -> Optional[str]:
+async def load_chat_session_into_context(chat_session_id: str, user_id: str) -> str:
     """
-    Load a MongoDB chat session into in-memory context
-    Returns the in-memory session_id to use
+    Load a chat session from MongoDB into memory context - ENHANCED DEBUG VERSION
     """
     try:
         db = get_database()
         
-        # Get the chat session from MongoDB
+        # Add enhanced debugging
+        logger.info(f"=== LOADING CHAT SESSION DEBUG ===")
+        logger.info(f"Attempting to load chat_session_id: {chat_session_id}")
+        logger.info(f"For user_id: {user_id}")
+        
+        # Try to find the session with enhanced debugging
         chat_session = await db.chat_sessions.find_one({
             "_id": ObjectId(chat_session_id),
-            "user_id": user_id,
-            "is_active": True
+            "user_id": ObjectId(user_id),
+            "deleted_at": {"$exists": False}
         })
         
         if not chat_session:
             logger.warning(f"Chat session {chat_session_id} not found for user {user_id}")
+            
+            # Debug: Check if session exists for any user
+            try:
+                session_exists = await db.chat_sessions.find_one({"_id": ObjectId(chat_session_id)})
+                if session_exists:
+                    logger.warning(f"Session exists but for different user: {session_exists.get('user_id')}")
+                    logger.warning(f"Expected user: {user_id}")
+                    logger.warning(f"Session user: {session_exists.get('user_id')}")
+                    logger.warning(f"User ID types - Expected: {type(user_id)}, Found: {type(session_exists.get('user_id'))}")
+                else:
+                    logger.warning(f"Session {chat_session_id} does not exist in database at all")
+            except Exception as debug_error:
+                logger.error(f"Error during session debug: {debug_error}")
+            
+            # Debug: List recent sessions for this user
+            try:
+                recent_sessions = await db.chat_sessions.find(
+                    {"user_id": ObjectId(user_id), "deleted_at": {"$exists": False}}
+                ).limit(5).to_list(5)
+                logger.info(f"Recent sessions for user {user_id}: {[str(s['_id']) for s in recent_sessions]}")
+            except Exception as debug_error:
+                logger.error(f"Error listing recent sessions: {debug_error}")
+            
             return None
+
+        logger.info(f"✅ Found chat session: {chat_session.get('title', 'Untitled')}")
+        logger.info(f"✅ Message count: {len(chat_session.get('messages', []))}")
         
-        # Create or get in-memory session with a unique ID based on chat session
+        # Create consistent memory session ID  
         memory_session_id = f"chat_{chat_session_id}"
+        logger.info(f"✅ Creating memory session: {memory_session_id}")
+        
+        # Get session manager and create memory session
+        session_manager = get_session_manager()
         memory_session = session_manager.get_session(memory_session_id)
         
-        # Clear existing messages and load from MongoDB
-        memory_session.clear_messages()
+        # Clear any existing data
+        memory_session.clear_all_data()
         
-        # Load all messages from the chat session with proper format conversion
-        messages = chat_session.get("messages", [])
-        for message in messages:
-            # Convert MongoDB message format to session manager format
-            # MongoDB format: {type: 'user'/'advisor', content: '', advisorId: '', ...}
-            # Session format: {role: '', content: '', timestamp: ''}
-            
-            msg_type = message.get("type", "user")
-            content = message.get("content", "")
-            timestamp = message.get("timestamp", "")
-            
-            # Map message types to roles for session manager
-            if msg_type == "user":
-                role = "user"
-            elif msg_type == "advisor":
-                role = "assistant"
-                # For advisor messages, include advisor info in content if needed
-                advisor_name = message.get("advisorName", "")
-                if advisor_name:
-                    # Store advisor info as metadata that can be retrieved
-                    role = f"advisor_{message.get('advisorId', 'unknown')}"
-            elif msg_type == "system":
-                role = "system"
-            elif msg_type == "error":
-                role = "system"
-            elif msg_type == "document_upload":
-                role = "system"
-            elif msg_type == "clarification":
-                role = "system"
-            else:
-                role = "user"  # Default fallback
-            
-            # Add the message to session with original structure preserved
-            memory_session.append_message(role, content)
-            
-            # Store original message metadata for frontend reconstruction
-            if not hasattr(memory_session, 'original_messages'):
-                memory_session.original_messages = []
-            
-            memory_session.original_messages.append(message)
+        # Load messages into memory session
+        messages = chat_session.get('messages', [])
+        for msg_data in messages:
+            try:
+                message = {
+                    'id': msg_data.get('id', 'unknown'),
+                    'role': 'user' if msg_data.get('type') == 'user' else 'assistant',
+                    'content': msg_data.get('content', ''),
+                    'timestamp': msg_data.get('timestamp', '')
+                }
+                memory_session.append_message(message['role'], message['content'])
+                
+                # Store original message for export
+                if not hasattr(memory_session, 'original_messages'):
+                    memory_session.original_messages = []
+                
+                memory_session.original_messages.append(message)
+            except Exception as msg_error:
+                logger.error(f"Error loading message: {msg_error}")
+                continue
         
         logger.info(f"Loaded {len(messages)} messages into session {memory_session_id}")
         return memory_session_id
         
     except Exception as e:
         logger.error(f"Error loading chat session into context: {e}")
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return None
 
 async def get_or_create_session_for_request_async(
