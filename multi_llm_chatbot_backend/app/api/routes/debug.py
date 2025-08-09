@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Request, Query
 from app.core.session_manager import get_session_manager
 from app.core.rag_manager import get_rag_manager
-from app.api.utils import get_or_create_session_for_request
 from app.core.bootstrap import chat_orchestrator
 import logging
+
+from app.api.old_routes import get_or_create_session_for_request
 
 logger = logging.getLogger(__name__)
 

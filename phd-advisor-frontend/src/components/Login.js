@@ -53,13 +53,27 @@ const Login = ({ onNavigateToSignup, onNavigateToHome }) => {
     setIsLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // For demo purposes, we'll just navigate to home
-      // In real implementation, handle authentication here
-      console.log('Login attempt:', formData);
-      onNavigateToHome?.();
+      const response = await fetch('http://localhost:8000/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: formData.email,
+          password: formData.password
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Store the token and user info
+        localStorage.setItem('authToken', data.access_token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        onNavigateToHome?.(data.user, data.access_token);
+      } else {
+        setErrors({ submit: data.detail || 'Login failed. Please try again.' });
+      }
       
     } catch (error) {
       console.error('Login error:', error);

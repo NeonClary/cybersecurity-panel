@@ -359,13 +359,13 @@
 /* Responsive Design */
 @media (max-width: 768px) {
   .export-dropdown {
-    right: -20px;
-    left: -20px;
+    right: -40px;
+    left: -40px;
     width: auto;
     min-width: unset;
   }
   
-  .export-format-button {
+   .export-format-button {
     padding: 16px 20px;
   }
   
@@ -373,6 +373,15 @@
     width: 36px;
     height: 36px;
   }
+
+  .export-button {
+    padding: 6px 12px; 
+    font-size: 13px; 
+  }
+  
+  /* .export-text {
+    display: none;
+  } */
 }
 
 /* Focus states for accessibility */

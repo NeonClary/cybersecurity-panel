@@ -551,8 +551,38 @@
 
 .advisor-message-text {
   line-height: 1.6;
-  margin: 0;
 }
+
+.advisor-message-text > div:last-child p:last-child {
+  margin-bottom: 0; /* Remove bottom margin from last paragraph */
+}
+
+.advisor-message-text strong {
+  font-weight: 600;
+}
+
+.advisor-message-text em {
+  font-style: italic;
+}
+
+.advisor-message-text ul,
+.advisor-message-text ol {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+}
+
+.advisor-message-text li {
+  margin-bottom: 0.25rem;
+}
+
+.advisor-message-text p {
+  margin-bottom: 0.75rem;
+}
+
+.advisor-message-text p:last-child {
+  margin-bottom: 0;
+}
+
 
 /* Updated Message Actions Styles */
 .message-actions {
@@ -1098,6 +1128,10 @@
   .suggestion-button {
     padding: 10px 14px;
     font-size: 13px;
+  }
+
+  .advisor-message-text {
+    font-size: 14px;
   }
 
   /* Basic ChatInput mobile styles */

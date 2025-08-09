@@ -6,7 +6,9 @@ const EnhancedChatInput = ({
   onSendMessage, 
   onFileUploaded,
   uploadedDocuments = [],
-  isLoading, 
+  isLoading,
+  currentChatSessionId,
+  authToken, 
   placeholder = "Ask your advisors anything about your PhD journey..." 
 }) => {
   const [inputMessage, setInputMessage] = useState('');
@@ -100,6 +102,8 @@ const EnhancedChatInput = ({
           <FileUpload 
             onFileUploaded={handleFileUploaded}
             isUploading={isUploading}
+            currentChatSessionId={currentChatSessionId}  
+            authToken={authToken}
             onUploadStart={handleUploadStart}
           />
         </div>

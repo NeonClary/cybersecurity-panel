@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
@@ -8,43 +8,78 @@ import './styles/components.css';
 function App() {
   const [currentView, setCurrentView] = useState('home');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authToken, setAuthToken] = useState(null);
+
+  // Check for existing authentication on app start
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    const userData = localStorage.getItem('user');
+    
+    if (token && userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setAuthToken(token);
+        setUser(parsedUser);
+        setIsAuthenticated(true);
+        setCurrentView('chat');
+      } catch (error) {
+        // Clear invalid data
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+      }
+    }
+  }, []);
 
   const navigateToAuth = () => {
-  setCurrentView('auth');
-};
+    setCurrentView('auth');
+  };
 
-const navigateToHome = () => {
-  setCurrentView('home');
-  setIsAuthenticated(false); // Reset auth when going home
-  // Reset session when going home
-  fetch('http://localhost:8000/reset-session', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    }
-  }).catch(console.error);
-};
+  const navigateToHome = () => {
+    setCurrentView('home');
+    setIsAuthenticated(false);
+    setUser(null);
+    setAuthToken(null);
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+  };
 
-const handleAuthSuccess = () => {
-  setIsAuthenticated(true);
-  setCurrentView('chat');
-};
+  const handleAuthSuccess = (userData, token) => {
+    setUser(userData);
+    setAuthToken(token);
+    setIsAuthenticated(true);
+    setCurrentView('chat');
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    setUser(null);
+    setAuthToken(null);
+    setIsAuthenticated(false);
+    setCurrentView('home');
+  };
 
   return (
-  <ThemeProvider>
-    <div className="App">
-      {currentView === 'home' && (
-        <HomePage onNavigateToChat={navigateToAuth} />
-      )}
-      {currentView === 'auth' && (
-        <AuthPage onAuthSuccess={handleAuthSuccess} />
-      )}
-      {currentView === 'chat' && (
-        <ChatPage onNavigateToHome={navigateToHome} />
-      )}
-    </div>
-  </ThemeProvider>
-);
+    <ThemeProvider>
+      <div className="App">
+        {currentView === 'home' && (
+          <HomePage onNavigateToChat={navigateToAuth} />
+        )}
+        {currentView === 'auth' && (
+          <AuthPage onAuthSuccess={handleAuthSuccess} />
+        )}
+        {currentView === 'chat' && isAuthenticated && (
+          <ChatPage 
+            user={user}
+            authToken={authToken}
+            onNavigateToHome={navigateToHome}
+            onSignOut={handleSignOut}
+          />
+        )}
+      </div>
+    </ThemeProvider>
+  );
 }
 
 export default App;
