@@ -181,7 +181,8 @@ const loadChatSession = async (sessionId) => {
         // Load the messages from the synced context
         const formattedMessages = result.context.messages.map(msg => ({
           ...msg,
-          timestamp: new Date(msg.timestamp)
+          timestamp: new Date(msg.timestamp),
+          persona_id: msg.persona_id || msg.advisor || msg.advisorId
         }));
         
         setMessages(formattedMessages);
@@ -423,7 +424,7 @@ const handleNewChat = async (sessionId = null) => {
         const newResponses = data.responses.map(response => ({
           id: generateMessageId(),
           type: 'advisor',
-          advisor: response.persona_id,
+          persona_id: response.persona_id,
           content: response.content,
           timestamp: new Date(),
           advisorName: response.persona_name || response.persona_id,
@@ -497,7 +498,7 @@ const handleNewChat = async (sessionId = null) => {
       },
       body: JSON.stringify({
         user_input: inputMessage,
-        advisor_id: replyContext.persona_id,
+        advisor_id: replyContext.advisorId,
         original_message_id: replyContext.messageId,
         chat_session_id: sessionId // Use confirmed session ID
       }),
@@ -513,7 +514,7 @@ const handleNewChat = async (sessionId = null) => {
       const replyResponseMessage = {
         id: generateMessageId(),
         type: 'advisor',
-        advisorId: data.persona_id,
+        persona_id: data.persona_id,
         advisorName: data.persona,
         content: data.response,
         isReply: true,
@@ -595,7 +596,7 @@ const handleNewChat = async (sessionId = null) => {
         const expandedMessage = {
           id: generateMessageId(),
           type: 'advisor',
-          advisorId: advisorId,
+          persona_id: advisorId,
           advisorName: advisor.name,
           content: data.response,
           isExpansion: true,
@@ -642,7 +643,8 @@ const handleNewChat = async (sessionId = null) => {
     setReplyingTo({
       advisorId: message.persona_id,
       messageId: message.id,
-      advisorName: advisor.name
+      advisorName: advisor.name,
+      persona_id: message.persona_id
     });
   };
 
@@ -652,7 +654,8 @@ const handleNewChat = async (sessionId = null) => {
       setReplyingTo({
         advisorId: message.persona_id,
         messageId: message.id,
-        advisorName: advisor.name
+        advisorName: advisor.name,
+        persona_id: message.persona_id
       });
     }
   };
