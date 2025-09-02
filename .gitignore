@@ -5,8 +5,17 @@
 multi_llm_chatbot_backend/.env
 multi_llm_chatbot_backend/chroma_db/
 multi_llm_chatbot_backend/chromadb_storage/
+multi_llm_chatbot_backend/.dockerignore
+multi_llm_chatbot_backend/.env.deploy
+multi_llm_chatbot_backend/Dockerfile
+
+
 
 # frontend
+phd-advisor-frontend/.env.production
+phd-advisor-frontend/.firebase/
+phd-advisor-frontend/.firebaserc
+phd-advisor-frontend/firebase.json
 
 # Ignore all __pycache__ folders
 **/__pycache__/
