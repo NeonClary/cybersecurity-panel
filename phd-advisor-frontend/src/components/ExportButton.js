@@ -63,7 +63,7 @@ const ExportButton = ({ hasMessages = false, currentSessionId = null, authToken 
       const endpoint = selectedTypeData.endpoint;
       
       // Build the URL with session ID if available
-      let url = `http://localhost:8000/${endpoint}?format=${format}`;
+      let url = `${process.env.REACT_APP_API_URL}/${endpoint}?format=${format}`;
       if (currentSessionId) {
         url += `&chat_session_id=${currentSessionId}`;
       }

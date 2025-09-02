@@ -44,7 +44,7 @@ const FileUpload = ({ onFileUploaded, isUploading, onUploadStart, currentChatSes
     formData.append('file', file);
 
     try {
-      let uploadUrl = 'http://localhost:8000/upload-document';
+      let uploadUrl = `${process.env.REACT_APP_API_URL}/upload-document`;
       
       console.log('=== DOCUMENT UPLOAD DEBUG ===');
       console.log('currentChatSessionId:', currentChatSessionId);

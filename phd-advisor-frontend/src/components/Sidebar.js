@@ -73,7 +73,7 @@ const Sidebar = ({
 
   const fetchChatSessions = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/chat-sessions', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions`, {
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
@@ -117,7 +117,7 @@ const Sidebar = ({
     
     if (window.confirm('Are you sure you want to delete this chat?')) {
       try {
-        const response = await fetch(`http://localhost:8000/api/chat-sessions/${sessionId}`, {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/${sessionId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${authToken}`,

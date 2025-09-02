@@ -52,7 +52,7 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onSignOut }) => {
 
   const fetchCurrentProvider = async () => {
     try {
-      const response = await fetch('http://localhost:8000/current-provider');
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/current-provider`);
       if (response.ok) {
         const data = await response.json();
         setCurrentProvider(data.current_provider);
@@ -70,7 +70,7 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onSignOut }) => {
 
     setIsProviderSwitching(true);
     try {
-      const response = await fetch('http://localhost:8000/switch-provider', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/switch-provider`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -126,7 +126,7 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onSignOut }) => {
         ? `${firstMessage.substring(0, 30)}...` 
         : `Chat ${new Date().toLocaleDateString()}`;
 
-      const response = await fetch('http://localhost:8000/api/chat-sessions', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -161,7 +161,7 @@ const loadChatSession = async (sessionId) => {
   setIsLoadingSession(true);
   try {
     // Use the new switch-chat endpoint that syncs context
-    const response = await fetch('http://localhost:8000/switch-chat', {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/switch-chat`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,
@@ -190,7 +190,7 @@ const loadChatSession = async (sessionId) => {
         setThinkingAdvisors([]);
         
         // Also get the session title from MongoDB
-        const sessionResponse = await fetch(`http://localhost:8000/api/chat-sessions/${sessionId}`, {
+        const sessionResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/${sessionId}`, {
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json'
@@ -214,7 +214,7 @@ const saveMessageToSession = async (message) => {
   if (!currentSessionId || !authToken) return;
 
   try {
-    await fetch(`http://localhost:8000/api/chat-sessions/${currentSessionId}/messages`, {
+    await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/${currentSessionId}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,
@@ -238,7 +238,7 @@ const updateSessionTitle = async (sessionId, newTitle) => {
   if (!sessionId || !authToken) return;
 
   try {
-    await fetch(`http://localhost:8000/api/chat-sessions/${sessionId}`, {
+    await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/${sessionId}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${authToken}`,
@@ -268,7 +268,7 @@ const handleNewChat = async (sessionId = null) => {
     // Creating completely new chat with fresh context
     try {
       // Step 1: Reset memory session
-      const response = await fetch('http://localhost:8000/new-chat', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/new-chat`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -402,7 +402,7 @@ const handleNewChat = async (sessionId = null) => {
 
       console.log('Sending message with session ID:', currentSessionId); // Debug log
 
-      const response = await fetch('http://localhost:8000/chat-sequential', {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/chat-sequential`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify({
@@ -491,7 +491,7 @@ const handleNewChat = async (sessionId = null) => {
   setThinkingAdvisors([replyContext.persona_id]);
 
   try {
-    const response = await fetch('http://localhost:8000/reply-to-advisor', {
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/reply-to-advisor`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -575,7 +575,7 @@ const handleNewChat = async (sessionId = null) => {
     setThinkingAdvisors([advisorId]);
 
     try {
-      const response = await fetch(`http://localhost:8000/chat/${advisorId}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/chat/${advisorId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
