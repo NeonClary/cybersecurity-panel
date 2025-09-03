@@ -3,6 +3,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
 import AuthPage from './pages/AuthPage';
+import CanvasPage from './pages/CanvasPage';
 import './styles/components.css';
 
 function App() {
@@ -34,6 +35,16 @@ function App() {
   const navigateToAuth = () => {
     setCurrentView('auth');
   };
+
+  const navigateToCanvas = () => {
+    setCurrentView('canvas');
+  };
+
+  const navigateToChat = () => {
+    setCurrentView('chat');
+  };
+
+  
 
   const navigateToHome = () => {
     setCurrentView('home');
@@ -69,11 +80,20 @@ function App() {
         {currentView === 'auth' && (
           <AuthPage onAuthSuccess={handleAuthSuccess} />
         )}
+        {currentView === 'canvas' && isAuthenticated && (
+          <CanvasPage 
+            user={user}
+            authToken={authToken}
+            onNavigateToChat={navigateToChat}
+            onSignOut={handleSignOut}
+          />
+        )}
         {currentView === 'chat' && isAuthenticated && (
           <ChatPage 
             user={user}
             authToken={authToken}
             onNavigateToHome={navigateToHome}
+            onNavigateToCanvas={navigateToCanvas}
             onSignOut={handleSignOut}
           />
         )}
