@@ -27,10 +27,19 @@ async def connect_to_mongo():
         
         # Test connection
         await db.client.admin.command('ping')
+
+        # Create indexes for better performance
+
         logger.info(f"Successfully connected to MongoDB database: {db_name}")
         
         # Create indexes for better performance
         await create_indexes()
+        try:
+            from app.core.canvas_database import setup_canvas_collections
+            await setup_canvas_collections(db)  # Pass db directly
+            logger.info("Canvas database initialization completed")
+        except Exception as canvas_error:
+            logger.error(f"Canvas database initialization failed: {canvas_error}")
         
     except ConnectionFailure as e:
         logger.error(f"Failed to connect to MongoDB: {e}")
