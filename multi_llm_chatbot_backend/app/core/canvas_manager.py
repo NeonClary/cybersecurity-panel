@@ -19,7 +19,7 @@ class CanvasManager:
     
     def get_database(self):
         """Lazy database connection to avoid circular imports"""
-        if not self._db:
+        if self._db is None:
             # Import here to avoid circular import
             from app.core.database import get_database
             self._db = get_database()
