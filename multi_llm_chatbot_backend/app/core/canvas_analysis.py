@@ -68,15 +68,32 @@ class CanvasAnalysisService:
             insights = []
             
             for message in messages:
-                if message.get("type") == "assistant" and "responses" in message:
-                    # Handle multi-persona responses
+                # Handle the actual stored message format from your database
+                msg_type = message.get("type", "")
+                
+                if msg_type == "advisor":
+                    # This is the format used in your database
+                    content = message.get("content", "")
+                    persona_id = message.get("advisorName", message.get("persona", "advisor"))
+                    message_id = message.get("id", str(message.get("_id", "")))
+                    
+                    if content and len(content.strip()) > 20:  # Only process substantial content
+                        persona_insights = await self._extract_insights_from_content(
+                            content, persona_id, message_id, chat_session_id
+                        )
+                        insights.extend(persona_insights)
+                        logger.debug(f"Extracted {len(persona_insights)} insights from {persona_id} message")
+                        
+                elif msg_type == "assistant" and "responses" in message:
+                    # Handle multi-persona responses (if this format exists)
                     for response in message.get("responses", []):
                         persona_insights = await self._extract_insights_from_persona_response(
                             response, message.get("id"), chat_session_id
                         )
                         insights.extend(persona_insights)
+                        
                 elif message.get("role") == "assistant" and message.get("content"):
-                    # Handle single response format
+                    # Handle converted message format (from export functions)
                     persona_insights = await self._extract_insights_from_content(
                         message.get("content", ""), "assistant", 
                         message.get("id"), chat_session_id
@@ -85,13 +102,15 @@ class CanvasAnalysisService:
             
             # Remove duplicates and low-confidence insights
             unique_insights = self._deduplicate_insights(insights)
-            high_confidence_insights = [i for i in unique_insights if i.confidence_score >= 0.6]
+            high_confidence_insights = [i for i in unique_insights if i.confidence_score >= 0.5]  # Lowered threshold
             
             logger.info(f"Extracted {len(high_confidence_insights)} insights from {len(messages)} messages")
             return high_confidence_insights
             
         except Exception as e:
             logger.error(f"Error extracting insights from messages: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
             return []
     
     async def _extract_insights_from_persona_response(self, response: Dict, message_id: str, chat_session_id: str) -> List[CanvasInsight]:
@@ -103,7 +122,7 @@ class CanvasAnalysisService:
     
     async def _extract_insights_from_content(self, content: str, persona_id: str, message_id: str, chat_session_id: str) -> List[CanvasInsight]:
         """Extract actionable insights from content using LLM analysis"""
-        if not content or len(content.strip()) < 50:
+        if not content or len(content.strip()) < 30:  # Lowered minimum length
             return []
         
         try:
@@ -126,15 +145,23 @@ class CanvasAnalysisService:
             """
             
             if self.llm_client:
-                llm_response = await self.llm_client.generate(
-                    system_prompt="You are an expert at extracting actionable PhD guidance from advisor responses.",
-                    context=[{"role": "user", "content": extraction_prompt}],
-                    temperature=0.3,
-                    max_tokens=500
-                )
-                
                 try:
-                    insights_data = json.loads(llm_response.strip())
+                    llm_response = await self.llm_client.generate(
+                        system_prompt="You are an expert at extracting actionable PhD guidance from advisor responses.",
+                        context=[{"role": "user", "content": extraction_prompt}],
+                        temperature=0.3,
+                        max_tokens=500
+                    )
+                    
+                    # Clean the response to extract just the JSON
+                    llm_response = llm_response.strip()
+                    if llm_response.startswith('```json'):
+                        llm_response = llm_response[7:]
+                    if llm_response.endswith('```'):
+                        llm_response = llm_response[:-3]
+                    llm_response = llm_response.strip()
+                    
+                    insights_data = json.loads(llm_response)
                     insights = []
                     
                     for item in insights_data:
@@ -149,10 +176,16 @@ class CanvasAnalysisService:
                             )
                             insights.append(insight)
                     
+                    logger.debug(f"LLM extracted {len(insights)} insights from {persona_id}")
                     return insights
                     
-                except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse LLM insights response for {persona_id}")
+                except json.JSONDecodeError as je:
+                    logger.warning(f"Failed to parse LLM insights response for {persona_id}: {je}")
+                    logger.debug(f"Raw LLM response: {llm_response}")
+                    # Fallback to rule-based extraction
+                    return self._extract_insights_rule_based(content, persona_id, message_id, chat_session_id)
+                except Exception as llm_error:
+                    logger.warning(f"LLM extraction failed for {persona_id}: {llm_error}")
                     # Fallback to rule-based extraction
                     return self._extract_insights_rule_based(content, persona_id, message_id, chat_session_id)
             
@@ -178,7 +211,7 @@ class CanvasAnalysisService:
         
         for sentence in sentences:
             sentence = sentence.strip()
-            if len(sentence) < 20:  # Skip very short sentences
+            if len(sentence) < 15:  # Lowered minimum length
                 continue
                 
             # Check if sentence contains actionable language
@@ -198,6 +231,7 @@ class CanvasAnalysisService:
                 )
                 insights.append(insight)
         
+        logger.debug(f"Rule-based extracted {len(insights)} insights from {persona_id}")
         return insights[:3]  # Limit to 3 insights per message to avoid noise
     
     def _extract_keywords_from_sentence(self, sentence: str) -> List[str]:
@@ -226,157 +260,42 @@ class CanvasAnalysisService:
         return dict(categorized)
     
     def _determine_section(self, insight: CanvasInsight) -> str:
-        """Determine which canvas section an insight belongs to"""
+        """Determine which section an insight belongs to"""
         content_lower = insight.content.lower()
-        keywords_lower = [kw.lower() for kw in insight.keywords]
+        keywords_lower = [k.lower() for k in insight.keywords]
         all_text = content_lower + " " + " ".join(keywords_lower)
         
         # Score each section based on keyword matches
         section_scores = {}
+        for section, keywords in self.section_keywords.items():
+            score = sum(1 for keyword in keywords if keyword in all_text)
+            if score > 0:
+                section_scores[section] = score
         
-        for section_key, section_keywords in self.section_keywords.items():
-            score = 0
-            for keyword in section_keywords:
-                if keyword in all_text:
-                    score += 1
-            
-            # Bonus for persona-specific insights
-            persona_bonuses = {
-                "methodologist": {"methodology": 2, "data_analysis": 1},
-                "theorist": {"theoretical_framework": 2, "literature_review": 1},
-                "pragmatist": {"next_steps": 2, "research_progress": 1},
-                "socratic": {"theoretical_framework": 1, "challenges_obstacles": 1},
-                "motivator": {"motivation_mindset": 2, "career_development": 1},
-                "critic": {"challenges_obstacles": 1, "writing_communication": 1},
-                "empathetic": {"motivation_mindset": 2},
-                "visionary": {"career_development": 1, "research_progress": 1}
-            }
-            
-            if insight.source_persona in persona_bonuses:
-                score += persona_bonuses[insight.source_persona].get(section_key, 0)
-            
-            section_scores[section_key] = score
-        
-        # Return section with highest score, default to general category
-        best_section = max(section_scores, key=section_scores.get) if section_scores else "research_progress"
-        
-        # If no keywords matched, categorize by persona type
-        if section_scores[best_section] == 0:
-            persona_defaults = {
-                "methodologist": "methodology",
-                "theorist": "theoretical_framework", 
-                "pragmatist": "next_steps",
-                "socratic": "theoretical_framework",
-                "motivator": "motivation_mindset",
-                "critic": "challenges_obstacles",
-                "empathetic": "motivation_mindset",
-                "visionary": "career_development",
-                "storyteller": "writing_communication",
-                "minimalist": "next_steps"
-            }
-            best_section = persona_defaults.get(insight.source_persona, "research_progress")
-        
-        return best_section
+        # Return the section with highest score, or default
+        if section_scores:
+            return max(section_scores, key=section_scores.get)
+        else:
+            return "general_notes"  # Default section
+    
+    def prioritize_insights(self, insights: List[CanvasInsight]) -> List[CanvasInsight]:
+        """Sort insights by priority (confidence score and recency)"""
+        return sorted(insights, key=lambda x: (x.confidence_score, x.extracted_at), reverse=True)
     
     def _deduplicate_insights(self, insights: List[CanvasInsight]) -> List[CanvasInsight]:
-        """Remove duplicate insights based on semantic similarity"""
+        """Remove duplicate or very similar insights"""
         if not insights:
-            return []
+            return insights
         
         unique_insights = []
-        seen_contents = set()
+        seen_content = set()
         
         for insight in insights:
             # Simple deduplication based on content similarity
-            content_normalized = re.sub(r'\s+', ' ', insight.content.lower().strip())
+            content_key = insight.content.lower().strip()[:100]  # First 100 chars
             
-            # Check for substantial overlap with existing insights
-            is_duplicate = False
-            for seen_content in seen_contents:
-                if self._calculate_similarity(content_normalized, seen_content) > 0.8:
-                    is_duplicate = True
-                    break
-            
-            if not is_duplicate:
+            if content_key not in seen_content:
+                seen_content.add(content_key)
                 unique_insights.append(insight)
-                seen_contents.add(content_normalized)
         
         return unique_insights
-    
-    def _calculate_similarity(self, text1: str, text2: str) -> float:
-        """Calculate simple similarity between two texts"""
-        words1 = set(text1.split())
-        words2 = set(text2.split())
-        
-        if not words1 or not words2:
-            return 0.0
-        
-        intersection = words1.intersection(words2)
-        union = words1.union(words2)
-        
-        return len(intersection) / len(union) if union else 0.0
-
-    def prioritize_insights(self, insights: List[CanvasInsight]) -> List[CanvasInsight]:
-        """Prioritize insights based on relevance and actionability"""
-        
-        def calculate_priority_score(insight: CanvasInsight) -> float:
-            score = insight.confidence_score
-            
-            # Boost score for actionable language
-            actionable_terms = ["should", "need to", "must", "plan", "goal", "deadline", "complete"]
-            content_lower = insight.content.lower()
-            for term in actionable_terms:
-                if term in content_lower:
-                    score += 0.1
-            
-            # Boost score for specific vs generic advice
-            specific_terms = ["chapter", "data", "analysis", "method", "theory", "timeline"]
-            for term in specific_terms:
-                if term in content_lower:
-                    score += 0.05
-            
-            # Boost score for certain personas
-            persona_boosts = {
-                "pragmatist": 0.1,    # Action-oriented insights are valuable
-                "methodologist": 0.08, # Methodological insights are important
-                "critic": 0.06        # Critical feedback is valuable
-            }
-            score += persona_boosts.get(insight.source_persona, 0)
-            
-            return min(score, 1.0)  # Cap at 1.0
-        
-        # Calculate scores and sort
-        for insight in insights:
-            insight.confidence_score = calculate_priority_score(insight)
-        
-        return sorted(insights, key=lambda x: x.confidence_score, reverse=True)
-
-    async def generate_section_summary(self, section: CanvasSection) -> str:
-        """Generate a summary for a canvas section using LLM"""
-        if not section.insights or not self.llm_client:
-            return f"Key insights for {section.title}"
-        
-        try:
-            insights_text = "\n".join([f"- {insight.content}" for insight in section.insights])
-            
-            prompt = f"""
-            Create a 1-2 sentence summary of these PhD insights for the section "{section.title}":
-            
-            {insights_text}
-            
-            The summary should be concise, professional, and suitable for sharing with an advisor.
-            Return only the summary text, no other content.
-            """
-            
-            summary = await self.llm_client.generate(
-                system_prompt="You create concise summaries of academic insights.",
-                context=[{"role": "user", "content": prompt}],
-                temperature=0.2,
-                max_tokens=100
-            )
-            
-            return summary.strip()
-            
-        except Exception as e:
-            logger.error(f"Error generating section summary: {e}")
-            return f"Key insights and guidance for {section.title}"
