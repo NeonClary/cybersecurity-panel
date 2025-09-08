@@ -6,28 +6,21 @@ logger = logging.getLogger(__name__)
 async def setup_canvas_collections(db: AsyncIOMotorDatabase):
     """Setup MongoDB collections and indexes for PhD Canvas"""
     try:
-        # Create indexes for phd_canvases collection
-        canvas_indexes = [
-            # User lookup index
-            ("user_id", 1),
-            # Query optimization indexes  
-            [("user_id", 1), ("last_updated", -1)],
-            [("user_id", 1), ("created_at", -1)],
-            ("last_updated", -1),  # For cleanup operations
-        ]
-        
         collection = db.phd_canvases
         
-        # Create indexes
-        for index in canvas_indexes:
-            if isinstance(index, list):
-                # Compound index
-                await collection.create_index(index)
-                logger.info(f"Created compound index: {str(index)}")
-            else:
-                # Simple index
-                await collection.create_index(index)
-                logger.info(f"Created index: {str(index)}")
+        # Create simple indexes
+        await collection.create_index("user_id")
+        logger.info("Created index on user_id")
+        
+        await collection.create_index("last_updated", background=True)
+        logger.info("Created index on last_updated")
+        
+        # Create compound indexes
+        await collection.create_index([("user_id", 1), ("last_updated", -1)])
+        logger.info("Created compound index on user_id and last_updated")
+        
+        await collection.create_index([("user_id", 1), ("created_at", -1)])
+        logger.info("Created compound index on user_id and created_at")
         
         # Ensure TTL index for old canvases (optional cleanup after 2 years)
         await collection.create_index(
@@ -39,7 +32,7 @@ async def setup_canvas_collections(db: AsyncIOMotorDatabase):
         logger.info("PhD Canvas database setup completed successfully")
         
     except Exception as e:
-        logger.error(f"Error setting up canvas collections: {e}")
+        logger.error("Error setting up canvas collections: %s", str(e))
         raise
 
 async def cleanup_old_canvas_data(db: AsyncIOMotorDatabase):
@@ -67,9 +60,9 @@ async def cleanup_old_canvas_data(db: AsyncIOMotorDatabase):
         if orphaned_canvases:
             orphaned_ids = [canvas["_id"] for canvas in orphaned_canvases]
             result = await db.phd_canvases.delete_many({"_id": {"$in": orphaned_ids}})
-            logger.info(f"Cleaned up {result.deleted_count} orphaned canvas records")
+            logger.info("Cleaned up %d orphaned canvas records", result.deleted_count)
         else:
             logger.info("No orphaned canvas records found")
             
     except Exception as e:
-        logger.error(f"Error during canvas cleanup: {e}")
+        logger.error("Error during canvas cleanup: %s", str(e))
