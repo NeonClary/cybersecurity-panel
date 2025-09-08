@@ -95,18 +95,26 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
   const [isProcessingFirstTime, setIsProcessingFirstTime] = useState(false);
 
   useEffect(() => {
+    let pollInterval = null;
+    
     const initializeCanvas = async () => {
       await fetchCanvas();
       await fetchStats();
       await triggerAutoUpdate();
       
-      // After initial load, check if we need to populate empty canvas
       setTimeout(() => {
         checkForEmptyCanvasWithChats();
-      }, 2000); // Wait 2 seconds after initial load
+      }, 2000);
     };
     
     initializeCanvas();
+    
+    // Cleanup on unmount
+    return () => {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+      }
+    };
   }, []);
 
   const fetchCanvas = async () => {
@@ -161,11 +169,9 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
   // Check if user has chats but empty canvas
   const checkForEmptyCanvasWithChats = async () => {
     try {
-      // Check if canvas is empty (no insights)
       const isEmpty = !canvasData || canvasData.total_insights === 0;
       
       if (isEmpty) {
-        // Check if user has any chat sessions
         const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/count`, {
           headers: {
             'Authorization': `Bearer ${authToken}`,
@@ -175,16 +181,20 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
         
         if (response.ok) {
           const { count } = await response.json();
-          
           if (count > 0) {
-            // User has chats but empty canvas - trigger full refresh
             console.log(`User has ${count} chats but empty canvas. Triggering full refresh.`);
             await handleFullRefresh();
           }
+        } else {
+          console.error('Failed to fetch chat sessions count:', response.status);
+          // Don't trigger refresh if count fails
+          return;
         }
       }
     } catch (error) {
       console.error('Error checking for empty canvas with chats:', error);
+      // Stop the polling if there's an error
+      return;
     }
   };
 

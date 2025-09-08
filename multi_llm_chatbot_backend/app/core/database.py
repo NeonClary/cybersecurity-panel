@@ -36,7 +36,7 @@ async def connect_to_mongo():
         await create_indexes()
         try:
             from app.core.canvas_database import setup_canvas_collections
-            await setup_canvas_collections(db)  # Pass db directly
+            await setup_canvas_collections(db.database)  # Pass db directly
             logger.info("Canvas database initialization completed")
         except Exception as canvas_error:
             logger.error(f"Canvas database initialization failed: {canvas_error}")

@@ -23,11 +23,11 @@ async def setup_canvas_collections(db: AsyncIOMotorDatabase):
             if isinstance(index, list):
                 # Compound index
                 await collection.create_index(index)
-                logger.info(f"Created compound index: {index}")
+                logger.info(f"Created compound index: {str(index)}")
             else:
                 # Simple index
                 await collection.create_index(index)
-                logger.info(f"Created index: {index}")
+                logger.info(f"Created index: {str(index)}")
         
         # Ensure TTL index for old canvases (optional cleanup after 2 years)
         await collection.create_index(
@@ -73,4 +73,3 @@ async def cleanup_old_canvas_data(db: AsyncIOMotorDatabase):
             
     except Exception as e:
         logger.error(f"Error during canvas cleanup: {e}")
-
