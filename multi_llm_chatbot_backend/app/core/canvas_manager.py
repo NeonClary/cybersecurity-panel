@@ -5,7 +5,6 @@ from bson import ObjectId
 
 from app.models.phd_canvas import PhdCanvas, CanvasInsight, UpdateCanvasRequest
 from app.core.canvas_analysis import CanvasAnalysisService
-# Remove this import: from app.core.database import get_database
 from app.core.bootstrap import llm
 
 logger = logging.getLogger(__name__)
@@ -62,6 +61,17 @@ class CanvasManager:
             canvas = await self.get_or_create_canvas(user_id)
             
             logger.info(f"Updating canvas for user {user_id}, force_full={request.force_full_update}")
+            
+            # IMPORTANT: Auto-detect if this should be a full update for first-time canvas
+            is_first_time_update = (
+                canvas.last_chat_processed is None and 
+                canvas.total_insights == 0 and
+                not request.force_full_update
+            )
+            
+            if is_first_time_update:
+                logger.info(f"Auto-detecting first-time canvas update for user {user_id}. Converting to full update.")
+                request.force_full_update = True
             
             # Determine which chats to process
             if request.force_full_update:
@@ -193,12 +203,22 @@ class CanvasManager:
                     {"updated_at": {"$gt": since}}
                 ]
             else:
-                # If no since time, get chats from last 7 days as default
-                one_week_ago = datetime.utcnow() - timedelta(days=7)
-                query_filter["created_at"] = {"$gte": one_week_ago}
+                # IMPORTANT FIX: If no since time and this is being called for incremental update,
+                # we should still get more chats for proper first-time processing
+                # The caller should handle the force_full_update logic properly
+                
+                # For now, get chats from last 30 days instead of 7 as a safer fallback
+                # But ideally, first-time canvas should always use force_full_update=True
+                one_month_ago = datetime.utcnow() - timedelta(days=30)
+                query_filter["created_at"] = {"$gte": one_month_ago}
+                
+                logger.warning(f"Getting new chat sessions for user {user_id} with no 'since' timestamp. "
+                             f"This should only happen for incremental updates. Consider using force_full_update=True for first-time canvas.")
             
+            # Increase limit for incremental updates to catch more historical chats
+            limit = 100  # Increased from 50
             cursor = db.chat_sessions.find(query_filter).sort("created_at", -1)
-            chat_sessions = await cursor.to_list(length=50)  # Limit for incremental updates
+            chat_sessions = await cursor.to_list(length=limit)
             
             return chat_sessions
             

@@ -175,26 +175,55 @@ async def trigger_auto_update(
         if not canvas.auto_update:
             return {"message": "Auto-update is disabled for this canvas"}
         
+        # Check if this is a first-time canvas (never processed any chats)
+        is_first_time_canvas = (
+            canvas.last_chat_processed is None and 
+            canvas.total_insights == 0
+        )
+        
         # Check if we need to update (has been more than 1 hour since last update)
         from datetime import timedelta
-        needs_update = (
+        needs_regular_update = (
             canvas.last_updated is None or 
             (datetime.utcnow() - canvas.last_updated) > timedelta(hours=1)
         )
         
-        if needs_update:
-            logger.info(f"Auto-updating canvas for user {current_user.id}")
+        if is_first_time_canvas:
+            logger.info(f"First-time canvas detected for user {current_user.id}, triggering full update")
             
-            # Queue incremental update in background
+            # For first-time canvas, always do full update to process all historical chats
+            background_tasks.add_task(
+                _background_canvas_update,
+                str(current_user.id),
+                UpdateCanvasRequest(force_full_update=True)
+            )
+            
+            return {
+                "message": "First-time canvas update initiated", 
+                "status": "processing",
+                "type": "full_update"
+            }
+            
+        elif needs_regular_update:
+            logger.info(f"Regular auto-updating canvas for user {current_user.id}")
+            
+            # For existing canvas, do incremental update
             background_tasks.add_task(
                 _background_canvas_update,
                 str(current_user.id),
                 UpdateCanvasRequest(force_full_update=False)
             )
             
-            return {"message": "Canvas update queued", "status": "updating"}
+            return {
+                "message": "Canvas update queued", 
+                "status": "updating",
+                "type": "incremental_update"
+            }
         else:
-            return {"message": "Canvas is up to date", "status": "current"}
+            return {
+                "message": "Canvas is up to date", 
+                "status": "current"
+            }
             
     except Exception as e:
         logger.error(f"Error triggering auto-update for user {current_user.id}: {e}")

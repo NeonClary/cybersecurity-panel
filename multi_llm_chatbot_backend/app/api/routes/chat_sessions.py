@@ -222,6 +222,30 @@ async def save_message_to_session(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not save message"
         )
+    
+@router.get("/chat-sessions/count")
+async def get_chat_sessions_count(
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get count of user's chat sessions"""
+    try:
+        db = get_database()
+        user_object_id = ObjectId(str(current_user.id))
+        
+        count = await db.chat_sessions.count_documents({
+            "user_id": user_object_id,
+            "is_active": {"$ne": False},
+            "deleted_at": {"$exists": False}
+        })
+        
+        return {"count": count}
+        
+    except Exception as e:
+        logger.error(f"Error counting chat sessions for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to count chat sessions"
+        )
 
 @router.delete("/chat-sessions/{session_id}")
 async def delete_chat_session(

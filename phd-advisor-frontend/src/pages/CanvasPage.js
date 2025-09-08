@@ -92,11 +92,21 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
   const [expandedSections, setExpandedSections] = useState({});
   const [stats, setStats] = useState({});
   const [isPrintView, setIsPrintView] = useState(false);
+  const [isProcessingFirstTime, setIsProcessingFirstTime] = useState(false);
 
   useEffect(() => {
-    fetchCanvas();
-    fetchStats();
-    triggerAutoUpdate();
+    const initializeCanvas = async () => {
+      await fetchCanvas();
+      await fetchStats();
+      await triggerAutoUpdate();
+      
+      // After initial load, check if we need to populate empty canvas
+      setTimeout(() => {
+        checkForEmptyCanvasWithChats();
+      }, 2000); // Wait 2 seconds after initial load
+    };
+    
+    initializeCanvas();
   }, []);
 
   const fetchCanvas = async () => {
@@ -148,15 +158,87 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
     }
   };
 
+  // Check if user has chats but empty canvas
+  const checkForEmptyCanvasWithChats = async () => {
+    try {
+      // Check if canvas is empty (no insights)
+      const isEmpty = !canvasData || canvasData.total_insights === 0;
+      
+      if (isEmpty) {
+        // Check if user has any chat sessions
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/count`, {
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const { count } = await response.json();
+          
+          if (count > 0) {
+            // User has chats but empty canvas - trigger full refresh
+            console.log(`User has ${count} chats but empty canvas. Triggering full refresh.`);
+            await handleFullRefresh();
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error checking for empty canvas with chats:', error);
+    }
+  };
+
   const triggerAutoUpdate = async () => {
     try {
-      await fetch(`${process.env.REACT_APP_API_URL}/api/phd-canvas/auto-update`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/phd-canvas/auto-update`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json'
         }
       });
+      
+      if (response.ok) {
+        const result = await response.json();
+        
+        // If this is a first-time canvas update, show appropriate message
+        if (result.type === 'full_update') {
+          console.log('First-time canvas detected. Processing all your chats...');
+          
+          // Show loading state
+          setIsProcessingFirstTime(true);
+          setIsUpdating(true);
+          
+          // Poll for updates every 10 seconds for up to 3 minutes
+          let attempts = 0;
+          const maxAttempts = 18; // 3 minutes / 10 seconds
+          
+          const pollForUpdates = setInterval(async () => {
+            attempts++;
+            
+            try {
+              await fetchCanvas();
+              
+              // If canvas now has insights, stop polling
+              if (canvasData && canvasData.total_insights > 0) {
+                clearInterval(pollForUpdates);
+                setIsUpdating(false);
+                setIsProcessingFirstTime(false);
+                console.log('Canvas successfully populated with insights!');
+              }
+              
+              // Stop polling after max attempts
+              if (attempts >= maxAttempts) {
+                clearInterval(pollForUpdates);
+                setIsUpdating(false);
+                setIsProcessingFirstTime(false);
+              }
+            } catch (error) {
+              console.error('Error polling for updates:', error);
+            }
+          }, 10000);
+        }
+      }
     } catch (error) {
       console.error('Error triggering auto-update:', error);
     }
@@ -174,15 +256,52 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
       });
 
       if (response.ok) {
-        // Wait a moment then refresh the canvas
+        const result = await response.json();
+        console.log('Full refresh initiated:', result);
+        
+        // Poll for updates
         setTimeout(() => {
           fetchCanvas();
           fetchStats();
-        }, 2000);
+        }, 5000);
+        
+        setTimeout(() => {
+          setIsUpdating(false);
+        }, 10000);
       }
     } catch (error) {
       console.error('Error refreshing canvas:', error);
-    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleFullRefresh = async () => {
+    setIsUpdating(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/phd-canvas/refresh`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Full refresh initiated:', result);
+        
+        // Poll for updates
+        setTimeout(() => {
+          fetchCanvas();
+          fetchStats();
+        }, 5000);
+        
+        setTimeout(() => {
+          setIsUpdating(false);
+        }, 10000);
+      }
+    } catch (error) {
+      console.error('Error refreshing canvas:', error);
       setIsUpdating(false);
     }
   };
@@ -296,13 +415,41 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
           <div className="empty-canvas">
             <FileText className="empty-canvas-icon" />
             <h2>Your Canvas is Empty</h2>
-            <p>Start chatting with your AI advisors to populate your PhD Canvas with insights and guidance!</p>
-            <button 
-              className="start-chatting-button"
-              onClick={onNavigateToChat}
-            >
-              Start Chatting
-            </button>
+            {isUpdating || isProcessingFirstTime ? (
+              <div>
+                <p>
+                  {isProcessingFirstTime 
+                    ? 'Processing your chat history to populate insights...' 
+                    : 'Updating canvas with latest insights...'
+                  }
+                </p>
+                <div className="loading-spinner">
+                  <RefreshCw className="spinning" />
+                </div>
+                <p className="processing-note">
+                  This may take a few minutes for extensive chat history.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p>Start chatting with your AI advisors to populate your PhD Canvas with insights!</p>
+                <div className="empty-canvas-actions">
+                  <button 
+                    className="start-chatting-button"
+                    onClick={onNavigateToChat}
+                  >
+                    Start Chatting
+                  </button>
+                  <button 
+                    className="refresh-button secondary"
+                    onClick={handleFullRefresh}
+                  >
+                    <RefreshCw className="action-icon" />
+                    Process Existing Chats
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="sections-container">
