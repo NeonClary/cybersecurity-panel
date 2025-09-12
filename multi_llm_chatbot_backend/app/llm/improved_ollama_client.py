@@ -1,5 +1,6 @@
 import httpx
 from typing import List
+import re
 from app.llm.llm_client import LLMClient
 from app.core.context_manager import get_context_manager
 import logging
@@ -40,7 +41,7 @@ class ImprovedOllamaClient(LLMClient):
                     "top_k": 40,
                     "num_predict": max_tokens,
                     "repeat_penalty": 1.1,
-                    "stop": ["\n\nStudent:", "\n\nUser:", "Question:", "Student:"]
+                    "stop": ["</END>", "\n\nStudent:", "\n\nUser:", "Question:", "Student:"]
                 }
             }
             
@@ -93,10 +94,17 @@ class ImprovedOllamaClient(LLMClient):
         for pattern in fluff_patterns:
             response = response.replace(pattern, "").strip()
         
-        # Normalize whitespace
+        """# Normalize whitespace
         response = ' '.join(response.split())
         
+        return response"""
+        # Preserve Markdown line breaks; trim right-side spaces; collapse very long blank runs
+        response = response.replace("\r\n", "\n").replace("\r", "\n")
+        lines = [ln.rstrip() for ln in response.split("\n")]
+
+        response = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
         return response
+
 
     def _is_poor_quality(self, response: str) -> bool:
         """Check if response quality is poor"""
