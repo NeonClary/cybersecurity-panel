@@ -2,6 +2,8 @@ import logging
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from bson import ObjectId
+import asyncio
+import hashlib
 
 from app.models.phd_canvas import PhdCanvas, CanvasInsight, UpdateCanvasRequest
 from app.core.canvas_analysis import CanvasAnalysisService
@@ -15,6 +17,8 @@ class CanvasManager:
     def __init__(self):
         self.analysis_service = CanvasAnalysisService(llm_client=llm)
         self._db = None
+        # Add lock dictionary to prevent concurrent updates for the same user
+        self._update_locks = {}
     
     def get_database(self):
         """Lazy database connection to avoid circular imports"""
@@ -56,113 +60,154 @@ class CanvasManager:
     
     async def update_canvas(self, user_id: str, request: UpdateCanvasRequest) -> PhdCanvas:
         """Update canvas with latest insights from chat sessions"""
-        try:
-            db = self.get_database()
-            canvas = await self.get_or_create_canvas(user_id)
-            
-            logger.info(f"Updating canvas for user {user_id}, force_full={request.force_full_update}")
-            
-            # IMPORTANT: Auto-detect if this should be a full update for first-time canvas
-            is_first_time_update = (
-                canvas.last_chat_processed is None and 
-                canvas.total_insights == 0 and
-                not request.force_full_update
-            )
-            
-            if is_first_time_update:
-                logger.info(f"Auto-detecting first-time canvas update for user {user_id}. Converting to full update.")
-                request.force_full_update = True
-            
-            # Determine which chats to process
-            if request.force_full_update:
-                # Process all chats
-                chat_sessions = await self._get_all_user_chat_sessions(user_id)
-                logger.info(f"Force full update: processing {len(chat_sessions)} total chat sessions")
-            else:
-                # Process only chats created/updated after last canvas update
-                chat_sessions = await self._get_new_chat_sessions(user_id, canvas.last_chat_processed)
-                logger.info(f"Incremental update: processing {len(chat_sessions)} new chat sessions since {canvas.last_chat_processed}")
-            
-            if not chat_sessions:
-                logger.info("No new chat sessions to process")
+        
+        # Get or create a lock for this user
+        if user_id not in self._update_locks:
+            self._update_locks[user_id] = asyncio.Lock()
+        
+        # Check if an update is already in progress
+        if self._update_locks[user_id].locked():
+            logger.warning(f"Canvas update already in progress for user {user_id}, skipping duplicate request")
+            # Return current canvas without updating
+            return await self.get_or_create_canvas(user_id)
+        
+        # Acquire lock to prevent concurrent updates
+        async with self._update_locks[user_id]:
+            try:
+                db = self.get_database()
+                canvas = await self.get_or_create_canvas(user_id)
+                
+                logger.info(f"Updating canvas for user {user_id}, force_full={request.force_full_update}")
+                
+                # IMPORTANT: Auto-detect if this should be a full update for first-time canvas
+                is_first_time_update = (
+                    canvas.last_chat_processed is None and 
+                    canvas.total_insights == 0 and
+                    not request.force_full_update
+                )
+                
+                if is_first_time_update:
+                    logger.info(f"Auto-detecting first-time canvas update for user {user_id}. Converting to full update.")
+                    request.force_full_update = True
+                
+                # Store the timestamp BEFORE we start processing
+                update_started_at = datetime.utcnow()
+                
+                # Determine which chats to process
+                if request.force_full_update:
+                    # Process all chats
+                    chat_sessions = await self._get_all_user_chat_sessions(user_id)
+                    logger.info(f"Force full update: processing {len(chat_sessions)} total chat sessions")
+                else:
+                    # Process only chats created/updated after last canvas update
+                    chat_sessions = await self._get_new_chat_sessions(user_id, canvas.last_chat_processed)
+                    logger.info(f"Incremental update: processing {len(chat_sessions)} new chat sessions since {canvas.last_chat_processed}")
+                
+                if not chat_sessions:
+                    logger.info("No new chat sessions to process")
+                    return canvas
+                
+                # Filter chat sessions if specific ones requested
+                if request.include_chat_sessions:
+                    chat_sessions = [
+                        chat for chat in chat_sessions 
+                        if str(chat["_id"]) in request.include_chat_sessions
+                    ]
+                    logger.info(f"Filtered to {len(chat_sessions)} specifically requested chat sessions")
+                
+                # Track processed chat+message combinations to prevent duplicates
+                processed_sources = set()
+                
+                # Get existing processed sources from canvas
+                for section in canvas.sections.values():
+                    for insight in section.insights:
+                        if insight.source_chat_session and insight.source_message_id:
+                            processed_sources.add((insight.source_chat_session, insight.source_message_id))
+                
+                # Process each chat session for insights
+                all_new_insights = []
+                processed_chat_ids = []
+                
+                for chat_session in chat_sessions:
+                    try:
+                        chat_id = str(chat_session["_id"])
+                        messages = chat_session.get("messages", [])
+                        
+                        if not messages:
+                            continue
+                        
+                        # Check if we've already processed these messages
+                        messages_to_process = []
+                        for msg in messages:
+                            msg_id = msg.get('id', '')
+                            if (chat_id, msg_id) not in processed_sources:
+                                messages_to_process.append(msg)
+                        
+                        if not messages_to_process:
+                            logger.info(f"All messages from chat {chat_id} already processed, skipping")
+                            continue
+                        
+                        logger.info(f"Processing {len(messages_to_process)} new messages from chat {chat_id}")
+                        
+                        # Extract insights from new messages only
+                        session_insights = await self.analysis_service.extract_insights_from_messages(
+                            messages_to_process, chat_id
+                        )
+                        
+                        if session_insights:
+                            all_new_insights.extend(session_insights)
+                            processed_chat_ids.append(chat_id)
+                            logger.info(f"Extracted {len(session_insights)} insights from chat {chat_id}")
+                        
+                    except Exception as e:
+                        logger.error(f"Error processing chat session {chat_session.get('_id')}: {e}")
+                        continue
+                
+                if all_new_insights:
+                    # Categorize insights by section
+                    categorized_insights = self.analysis_service.categorize_insights(all_new_insights)
+                    
+                    # Update canvas sections
+                    sections_updated = 0
+                    for section_key, insights in categorized_insights.items():
+                        if request.exclude_sections and section_key in request.exclude_sections:
+                            continue
+                        
+                        # Prioritize insights before adding
+                        prioritized_insights = self.analysis_service.prioritize_insights(insights)
+                        
+                        # Limit insights per section to avoid overwhelming canvas
+                        max_insights_per_section = 10
+                        limited_insights = prioritized_insights[:max_insights_per_section]
+                        
+                        if limited_insights:
+                            canvas.update_section(section_key, limited_insights)
+                            sections_updated += 1
+                            logger.info(f"Updated section '{section_key}' with {len(limited_insights)} insights")
+                    
+                    # Update canvas metadata with the timestamp from BEFORE processing
+                    canvas.last_chat_processed = update_started_at
+                    canvas.last_updated = datetime.utcnow()
+                    
+                    # Save updated canvas to database
+                    await self._save_canvas(canvas)
+                    
+                    logger.info(f"Canvas update completed: {len(all_new_insights)} new insights, {sections_updated} sections updated")
+                else:
+                    logger.info("No insights extracted from chat sessions")
+                
                 return canvas
-            
-            # Filter chat sessions if specific ones requested
-            if request.include_chat_sessions:
-                chat_sessions = [
-                    chat for chat in chat_sessions 
-                    if str(chat["_id"]) in request.include_chat_sessions
-                ]
-                logger.info(f"Filtered to {len(chat_sessions)} specifically requested chat sessions")
-            
-            # Process each chat session for insights
-            all_new_insights = []
-            processed_chat_ids = []
-            
-            for chat_session in chat_sessions:
-                try:
-                    chat_id = str(chat_session["_id"])
-                    messages = chat_session.get("messages", [])
-                    
-                    if not messages:
-                        continue
-                    
-                    logger.info(f"Processing chat {chat_id} with {len(messages)} messages")
-                    
-                    # Extract insights from this chat session
-                    session_insights = await self.analysis_service.extract_insights_from_messages(
-                        messages, chat_id
-                    )
-                    
-                    if session_insights:
-                        all_new_insights.extend(session_insights)
-                        processed_chat_ids.append(chat_id)
-                        logger.info(f"Extracted {len(session_insights)} insights from chat {chat_id}")
-                    
-                except Exception as e:
-                    logger.error(f"Error processing chat session {chat_session.get('_id')}: {e}")
-                    continue
-            
-            if all_new_insights:
-                # Categorize insights by section
-                categorized_insights = self.analysis_service.categorize_insights(all_new_insights)
                 
-                # Update canvas sections
-                sections_updated = 0
-                for section_key, insights in categorized_insights.items():
-                    if request.exclude_sections and section_key in request.exclude_sections:
-                        continue
-                    
-                    # Prioritize insights before adding
-                    prioritized_insights = self.analysis_service.prioritize_insights(insights)
-                    
-                    # Limit insights per section to avoid overwhelming canvas
-                    max_insights_per_section = 10
-                    limited_insights = prioritized_insights[:max_insights_per_section]
-                    
-                    if limited_insights:
-                        canvas.update_section(section_key, limited_insights)
-                        sections_updated += 1
-                        logger.info(f"Updated section '{section_key}' with {len(limited_insights)} insights")
-                
-                # Update canvas metadata
-                canvas.last_chat_processed = datetime.utcnow()
-                canvas.last_updated = datetime.utcnow()
-                
-                # Save updated canvas to database
-                await self._save_canvas(canvas)
-                
-                logger.info(f"Canvas update completed: {len(all_new_insights)} new insights, {sections_updated} sections updated")
-            else:
-                logger.info("No insights extracted from chat sessions")
-            
-            return canvas
-            
-        except Exception as e:
-            logger.error(f"Error updating canvas for user {user_id}: {e}")
-            import traceback
-            logger.error(f"Full traceback: {traceback.format_exc()}")
-            raise
+            except Exception as e:
+                logger.error(f"Error updating canvas for user {user_id}: {e}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                raise
+            finally:
+                # Clean up lock if no longer needed
+                if user_id in self._update_locks and not self._update_locks[user_id].locked():
+                    # Remove lock after some time to prevent memory buildup
+                    pass  # Keep lock for potential future use
     
     async def _get_all_user_chat_sessions(self, user_id: str) -> List[Dict]:
         """Get all chat sessions for a user"""
@@ -264,94 +309,100 @@ class CanvasManager:
             return False
     
     async def get_canvas_stats(self, user_id: str) -> Dict:
-        """Get statistics about user's canvas"""
+        """Get statistics about the user's PhD Canvas"""
         try:
             canvas = await self.get_or_create_canvas(user_id)
             
-            stats = {
+            # Calculate section breakdown
+            sections_breakdown = {}
+            for section_key, section in canvas.sections.items():
+                sections_breakdown[section_key] = {
+                    "title": section.title,
+                    "insight_count": len(section.insights),
+                    "priority": section.priority,
+                    "last_updated": section.updated_at
+                }
+            
+            return {
                 "total_insights": canvas.total_insights,
                 "total_sections": len(canvas.sections),
                 "last_updated": canvas.last_updated,
                 "last_chat_processed": canvas.last_chat_processed,
                 "created_at": canvas.created_at,
                 "auto_update": canvas.auto_update,
-                "sections_breakdown": {}
+                "sections_breakdown": sections_breakdown
             }
-            
-            # Add breakdown by section
-            for section_key, section in canvas.sections.items():
-                stats["sections_breakdown"][section_key] = {
-                    "title": section.title,
-                    "insight_count": len(section.insights),
-                    "last_updated": section.updated_at,
-                    "priority": section.priority
-                }
-            
-            return stats
             
         except Exception as e:
             logger.error(f"Error getting canvas stats for user {user_id}: {e}")
             return {
                 "total_insights": 0,
                 "total_sections": 0,
-                "error": str(e)
+                "sections_breakdown": {}
             }
     
     async def export_canvas_for_printing(self, user_id: str) -> Dict:
-        """Export canvas in a print-optimized format"""
+        """Export canvas in a format optimized for printing"""
         try:
             canvas = await self.get_or_create_canvas(user_id)
             
-            # Sort sections by priority and insight count
-            sorted_sections = []
+            # Format sections for printing
+            sections = []
             for section_key, section in canvas.sections.items():
-                if section.insights:  # Only include sections with insights
-                    # Sort insights by confidence score
-                    sorted_insights = sorted(
-                        section.insights, 
-                        key=lambda x: x.confidence_score, 
-                        reverse=True
-                    )
-                    
-                    sorted_sections.append({
-                        "key": section_key,
-                        "title": section.title,
-                        "description": section.description,
-                        "insights": [
-                            {
-                                "content": insight.content,
-                                "source": insight.source_persona.title(),
-                                "confidence": round(insight.confidence_score, 2)
-                            }
-                            for insight in sorted_insights[:8]  # Limit for printing
-                        ],
-                        "insight_count": len(section.insights),
-                        "priority": section.priority
-                    })
-            
-            # Sort sections by priority, then by insight count
-            sorted_sections.sort(key=lambda x: (x["priority"], -x["insight_count"]))
+                formatted_section = {
+                    "title": section.title,
+                    "description": section.description,
+                    "insights": [
+                        {
+                            "content": insight.content,
+                            "source": insight.source_persona,
+                            "confidence": insight.confidence_score
+                        }
+                        for insight in section.insights[:5]  # Limit to top 5 for printing
+                    ]
+                }
+                sections.append(formatted_section)
             
             return {
-                "user_id": user_id,
+                "user_id": str(canvas.user_id),
                 "generated_at": datetime.utcnow(),
                 "total_insights": canvas.total_insights,
                 "last_updated": canvas.last_updated,
-                "sections": sorted_sections,
+                "sections": sections,
                 "metadata": {
-                    "canvas_id": str(canvas.id),
                     "created_at": canvas.created_at,
-                    "version": "1.0"
+                    "last_chat_processed": canvas.last_chat_processed,
+                    "print_optimized": True
                 }
             }
             
         except Exception as e:
-            logger.error(f"Error exporting canvas for printing: {e}")
+            logger.error(f"Error exporting canvas for printing for user {user_id}: {e}")
             raise
+    
+    async def toggle_auto_update(self, user_id: str, enabled: bool) -> bool:
+        """Toggle auto-update setting for a canvas"""
+        try:
+            db = self.get_database()
+            user_object_id = ObjectId(user_id)
+            
+            result = await db.phd_canvases.update_one(
+                {"user_id": user_object_id},
+                {"$set": {"auto_update": enabled}}
+            )
+            
+            return result.modified_count > 0
+            
+        except Exception as e:
+            logger.error(f"Error toggling auto-update for user {user_id}: {e}")
+            return False
 
-# Global canvas manager instance
-canvas_manager = CanvasManager()
+# Singleton instance
+_canvas_manager_instance = None
 
 def get_canvas_manager() -> CanvasManager:
-    """Get the global canvas manager instance"""
-    return canvas_manager
+    """Get singleton instance of CanvasManager"""
+    global _canvas_manager_instance
+    if _canvas_manager_instance is None:
+        _canvas_manager_instance = CanvasManager()
+    return _canvas_manager_instance

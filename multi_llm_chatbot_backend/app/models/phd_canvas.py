@@ -3,6 +3,9 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime
 from bson import ObjectId
 from app.models.user import PyObjectId
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CanvasInsight(BaseModel):
     """Individual insight extracted from chat messages"""
@@ -53,13 +56,45 @@ class PhdCanvas(BaseModel):
                 description=self._get_section_description(section_key)
             )
         
-        # Add new insights and remove duplicates
-        existing_contents = {insight.content for insight in self.sections[section_key].insights}
-        new_insights = [insight for insight in insights if insight.content not in existing_contents]
+        existing_insights_map = {
+            insight.content.strip().lower(): insight 
+            for insight in self.sections[section_key].insights
+        }
         
-        self.sections[section_key].insights.extend(new_insights)
-        self.sections[section_key].updated_at = datetime.utcnow()
-        self.last_updated = datetime.utcnow()
+        # Also track existing chat session + message combinations
+        existing_sources = {
+            (insight.source_chat_session, insight.source_message_id)
+            for insight in self.sections[section_key].insights
+            if insight.source_chat_session and insight.source_message_id
+        }
+        
+        new_insights = []
+        for insight in insights:
+            # Normalize content for comparison
+            normalized_content = insight.content.strip().lower()
+            
+            # Check if this exact content already exists
+            if normalized_content in existing_insights_map:
+                logger.debug(f"Skipping duplicate insight: {insight.content[:50]}...")
+                continue
+            
+            # Check if this source was already processed
+            if insight.source_chat_session and insight.source_message_id:
+                source_key = (insight.source_chat_session, insight.source_message_id)
+                if source_key in existing_sources:
+                    logger.debug(f"Skipping already processed source: {source_key}")
+                    continue
+            
+            # This is genuinely new
+            new_insights.append(insight)
+        
+        if new_insights:
+            logger.info(f"Adding {len(new_insights)} new insights to section '{section_key}'")
+            self.sections[section_key].insights.extend(new_insights)
+            self.sections[section_key].updated_at = datetime.utcnow()
+            self.last_updated = datetime.utcnow()
+        else:
+            logger.info(f"No new insights to add to section '{section_key}' (all {len(insights)} were duplicates)")
         
         # Update total insights count
         self.total_insights = sum(len(section.insights) for section in self.sections.values())
