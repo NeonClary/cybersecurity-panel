@@ -14,7 +14,7 @@ import '../styles/ChatPage.css';
 import '../styles/EnhancedChatInput.css';
 import AdvisorStatusDropdown from '../components/AdvisorStatusDropdown';
 
-const ChatPage = ({ user, authToken, onNavigateToHome, onSignOut }) => {
+const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSignOut }) => {
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingAdvisors, setThinkingAdvisors] = useState([]);
@@ -696,6 +696,7 @@ const handleNewChat = async (sessionId = null) => {
         onSidebarToggle={handleSidebarToggle}
         isMobileOpen={isMobileMenuOpen}
         onMobileToggle={setIsMobileMenuOpen}
+        onNavigateToCanvas={onNavigateToCanvas}
       />
       
       <div className={`main-chat-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>

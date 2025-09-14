@@ -10,7 +10,8 @@ import {
   User,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  FileText
 } from 'lucide-react';
 import '../styles/Sidebar.css';
 
@@ -23,7 +24,8 @@ const Sidebar = ({
   authToken,
   onSidebarToggle,
   isMobileOpen = false,
-  onMobileToggle
+  onMobileToggle,
+  onNavigateToCanvas
 }) => {
   const [chatSessions, setChatSessions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -221,6 +223,15 @@ const Sidebar = ({
                 <Plus size={16} />
                 <span>{isCreatingNewChat ? 'Creating...' : 'New Chat'}</span>
               </button>
+
+              <button 
+                className="sidebar-canvas-btn"
+                onClick={onNavigateToCanvas}
+                title="PhD Canvas"
+              >
+                <FileText size={20} />
+                {!isCollapsed && <span>PhD Canvas</span>}
+              </button>
             </>
           )}
 
@@ -241,6 +252,14 @@ const Sidebar = ({
                 disabled={isCreatingNewChat}
               >
                 <Plus size={20} />
+              </button>
+              <button 
+                className="sidebar-canvas-btn"
+                onClick={onNavigateToCanvas}
+                title="PhD Canvas"
+              >
+                <FileText size={20} />
+                {!isCollapsed && <span>PhD Canvas</span>}
               </button>
             </div>
           )}

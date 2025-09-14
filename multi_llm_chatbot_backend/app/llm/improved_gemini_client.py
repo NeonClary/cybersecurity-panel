@@ -46,7 +46,7 @@ class ImprovedGeminiClient(LLMClient):
                     "topK": 40,
                     "topP": 0.9,
                     "maxOutputTokens": max_tokens,
-                    "stopSequences": ["Student:", "Question:", "\n\nStudent:", "\n\nQuestion:"]
+                    "stopSequences": ["</END>", "Student:", "Question:", "\n\nStudent:", "\n\nQuestion:"]
                 },
                 "safetySettings": [
                     {
@@ -110,9 +110,19 @@ class ImprovedGeminiClient(LLMClient):
     def _clean_response(self, response: str) -> str:
         """Clean up response text"""
         # Remove common issues
-        response = response.strip()
+        """response = response.strip()
         
         # Remove duplicate spaces and normalize
         response = ' '.join(response.split())
         
+        return response"""
+        response = response.strip()
+
+        # Preserve line breaks for Markdown; only trim right-side spaces and collapse 3+ blank lines
+        response = response.replace("\r\n", "\n").replace("\r", "\n")
+        lines = [ln.rstrip() for ln in response.split("\n")]
+
+        import re
+        response = re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
         return response
