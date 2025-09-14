@@ -270,10 +270,10 @@ const MessageBubble = ({
           
           {showReplyButton && (
             <div className="message-actions">
-              <div className="action-buttons">
+              <div className="message-action-buttons">
                 <div className="tooltip-container">
                   <button 
-                    className="action-button"
+                    className="message-action-button"
                     onClick={() => onReply && onReply(message)}
                     onMouseEnter={() => showTooltipWithDelay('reply')}
                     onMouseLeave={hideTooltip}
@@ -282,7 +282,7 @@ const MessageBubble = ({
                       borderColor: (colors.color ? colors.color + '40' : 'var(--border-muted)')
                     }}
                   >
-                    <Reply size={14} />
+                    <Reply size={14} stroke="currentColor" fill="none" />
                   </button>
                   {showTooltip === 'reply' && (
                     <div className="tooltip">Reply to this message</div>
@@ -291,7 +291,7 @@ const MessageBubble = ({
 
                 <div className="tooltip-container">
                   <button 
-                    className="action-button"
+                    className="message-action-button"
                     onClick={() => handleCopy(message.id, message?.compact_markdown || message?.content || '')}
                     onMouseEnter={() => showTooltipWithDelay('copy')}
                     onMouseLeave={hideTooltip}
@@ -311,7 +311,7 @@ const MessageBubble = ({
 
                 <div className="tooltip-container">
                   <button 
-                    className="action-button"
+                    className="message-action-button"
                     onClick={() => handleExpand(message.id, personaId)}
                     onMouseEnter={() => showTooltipWithDelay('expand')}
                     onMouseLeave={hideTooltip}
@@ -329,7 +329,7 @@ const MessageBubble = ({
 
                 <div className="tooltip-container">
                   <button 
-                    className="action-button"
+                    className="message-action-button"
                     onClick={handleInfoToggle}
                     onMouseEnter={() => showTooltipWithDelay('info')}
                     onMouseLeave={hideTooltip}

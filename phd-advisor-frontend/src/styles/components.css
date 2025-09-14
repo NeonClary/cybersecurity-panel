@@ -591,13 +591,13 @@
   border-top: 1px solid var(--border-tertiary);
 }
 
-.action-buttons {
+.message-action-buttons {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.action-button {
+.message-action-button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -611,14 +611,20 @@
   position: relative;
 }
 
-.action-button:hover {
+.message-action-button:hover {
   background: var(--bg-secondary);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.action-button:active {
+.message-action-button:active {
   transform: translateY(0);
+}
+
+.message-action-button svg {
+  width: 14px;
+  height: 14px;
+  color: inherit;
 }
 
 /* Tooltip Styles */
@@ -686,13 +692,13 @@
 }
 
 /* Focus states for accessibility */
-.action-button:focus-visible {
+.message-action-button:focus-visible {
   outline: 2px solid var(--accent-primary);
   outline-offset: 2px;
 }
 
 /* Copy button success state */
-.action-button.copied {
+.message-action-button.copied {
   color: #10B981 !important;
   border-color: #10B98140 !important;
 }
@@ -1031,11 +1037,11 @@
 }
 
 /* Smooth transitions */
-.action-button {
+.message-action-button {
   transition: all 0.2s ease;
 }
 
-.action-button:hover {
+.message-action-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
@@ -1155,11 +1161,11 @@
     grid-template-columns: 1fr;
   }
 
-    .action-buttons {
+    .message-action-buttons {
     gap: 6px;
   }
 
-  .action-button {
+  .message-action-button {
     width: 28px;
     height: 28px;
   }
