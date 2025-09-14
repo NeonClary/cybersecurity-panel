@@ -2,10 +2,12 @@ from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
 from typing import Dict, Optional
 from datetime import datetime
 import logging
+from bson import ObjectId
 
 from app.models.user import User
 from app.models.phd_canvas import PhdCanvas, CanvasResponse, UpdateCanvasRequest
 from app.core.auth import get_current_active_user
+from app.core.database import get_database
 
 from pydantic import BaseModel
 
@@ -168,6 +170,7 @@ async def trigger_auto_update(
     """Trigger automatic canvas update (typically called when user opens canvas page)"""
     try:
         canvas_manager = get_canvas_manager()
+        db = get_database()
         
         # Get current canvas to check if auto-update is needed
         canvas = await canvas_manager.get_or_create_canvas(str(current_user.id))
@@ -179,13 +182,6 @@ async def trigger_auto_update(
         is_first_time_canvas = (
             canvas.last_chat_processed is None and 
             canvas.total_insights == 0
-        )
-        
-        # Check if we need to update (has been more than 1 hour since last update)
-        from datetime import timedelta
-        needs_regular_update = (
-            canvas.last_updated is None or 
-            (datetime.utcnow() - canvas.last_updated) > timedelta(hours=1)
         )
         
         if is_first_time_canvas:
@@ -203,11 +199,29 @@ async def trigger_auto_update(
                 "status": "processing",
                 "type": "full_update"
             }
+        
+        # For existing canvas, check if there are actually new chats
+        user_object_id = ObjectId(str(current_user.id))
+        
+        # Count chats newer than last processed
+        query_filter = {
+            "user_id": user_object_id,
+            "is_active": {"$ne": False},
+            "deleted_at": {"$exists": False}
+        }
+        
+        if canvas.last_chat_processed:
+            query_filter["$or"] = [
+                {"created_at": {"$gt": canvas.last_chat_processed}},
+                {"updated_at": {"$gt": canvas.last_chat_processed}}
+            ]
+        
+        new_chat_count = await db.chat_sessions.count_documents(query_filter)
+        
+        if new_chat_count > 0:
+            logger.info(f"Found {new_chat_count} new/updated chats for user {current_user.id}, triggering incremental update")
             
-        elif needs_regular_update:
-            logger.info(f"Regular auto-updating canvas for user {current_user.id}")
-            
-            # For existing canvas, do incremental update
+            # Only update if there are actually new chats
             background_tasks.add_task(
                 _background_canvas_update,
                 str(current_user.id),
@@ -215,14 +229,17 @@ async def trigger_auto_update(
             )
             
             return {
-                "message": "Canvas update queued", 
+                "message": f"Canvas update queued for {new_chat_count} new chats", 
                 "status": "updating",
-                "type": "incremental_update"
+                "type": "incremental_update",
+                "new_chats": new_chat_count
             }
         else:
+            logger.info(f"No new chats found for user {current_user.id}, skipping update")
             return {
                 "message": "Canvas is up to date", 
-                "status": "current"
+                "status": "current",
+                "new_chats": 0
             }
             
     except Exception as e:
@@ -296,22 +313,4 @@ async def _background_canvas_update(user_id: str, request: UpdateCanvasRequest):
     except Exception as e:
         logger.error(f"Error in background canvas update for user {user_id}: {e}")
         import traceback
-        logger.error(f"Full traceback: {traceback.format_exc()}")
-
-# Health check endpoint
-@router.get("/phd-canvas/health")
-async def canvas_health_check():
-    """Health check for canvas service"""
-    try:
-        canvas_manager = get_canvas_manager()
-        return {
-            "status": "healthy",
-            "service": "phd-canvas",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    except Exception as e:
-        logger.error(f"Canvas health check failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Canvas service is not healthy"
-        )
+        logger.error(f"Traceback: {traceback.format_exc()}")
