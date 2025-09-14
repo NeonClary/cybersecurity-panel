@@ -223,6 +223,15 @@ const Sidebar = ({
                 <Plus size={16} />
                 <span>{isCreatingNewChat ? 'Creating...' : 'New Chat'}</span>
               </button>
+
+              <button 
+                className="sidebar-canvas-btn"
+                onClick={onNavigateToCanvas}
+                title="PhD Canvas"
+              >
+                <FileText size={20} />
+                {!isCollapsed && <span>PhD Canvas</span>}
+              </button>
             </>
           )}
 
