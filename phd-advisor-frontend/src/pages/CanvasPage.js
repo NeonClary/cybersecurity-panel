@@ -93,6 +93,7 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
   const [stats, setStats] = useState({});
   const [isPrintView, setIsPrintView] = useState(false);
   const [isProcessingFirstTime, setIsProcessingFirstTime] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     let pollInterval = null;
@@ -255,7 +256,15 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
   };
 
   const handleRefreshCanvas = async () => {
+    // Prevent multiple simultaneous refresh requests
+    if (isRefreshing || isUpdating) {
+      console.log('Refresh already in progress, ignoring duplicate request');
+      return;
+    }
+    
+    setIsRefreshing(true);
     setIsUpdating(true);
+    
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/phd-canvas/refresh`, {
         method: 'GET',
@@ -277,16 +286,26 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
         
         setTimeout(() => {
           setIsUpdating(false);
+          setIsRefreshing(false);
         }, 10000);
       }
     } catch (error) {
       console.error('Error refreshing canvas:', error);
       setIsUpdating(false);
+      setIsRefreshing(false);
     }
   };
 
   const handleFullRefresh = async () => {
+    // Prevent multiple simultaneous refresh requests
+    if (isRefreshing || isUpdating) {
+      console.log('Refresh already in progress, ignoring duplicate request');
+      return;
+    }
+    
+    setIsRefreshing(true);
     setIsUpdating(true);
+    
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/api/phd-canvas/refresh`, {
         method: 'GET',
@@ -308,11 +327,13 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
         
         setTimeout(() => {
           setIsUpdating(false);
+          setIsRefreshing(false);
         }, 10000);
       }
     } catch (error) {
       console.error('Error refreshing canvas:', error);
       setIsUpdating(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -379,12 +400,12 @@ const CanvasPage = ({ user, authToken, onNavigateToChat, onSignOut }) => {
         
         <div className="header-actions">
           <button 
-            className="action-button refresh-button"
             onClick={handleRefreshCanvas}
-            disabled={isUpdating}
+            disabled={isRefreshing || isUpdating}
+            className={`refresh-button ${(isRefreshing || isUpdating) ? 'disabled' : ''}`}
           >
-            <RefreshCw className={`action-icon ${isUpdating ? 'spinning' : ''}`} />
-            {isUpdating ? 'Updating...' : 'Refresh'}
+            <RefreshCw className={`refresh-icon ${(isRefreshing || isUpdating) ? 'spinning' : ''}`} />
+            {(isRefreshing || isUpdating) ? 'Refreshing...' : 'Refresh Canvas'}
           </button>
           
           <button 
