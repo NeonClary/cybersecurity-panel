@@ -1,5 +1,6 @@
 # main
 .env
+gcp_build.txt
 
 # backend
 multi_llm_chatbot_backend/.env
