@@ -439,3 +439,9 @@ phd-advisor-panel/
 - Powered by [Ollama](https://ollama.ai/) for local LLM support
 - Uses [ChromaDB](https://www.trychroma.com/) for vector storage
 - Document processing with [PyPDF2](https://pypdf2.readthedocs.io/) and [python-docx](https://python-docx.readthedocs.io/)
+
+## Copyright
+
+© 2025 University of Colorado Boulder. All rights reserved.
+
+This project is developed and maintained by the University of Colorado Boulder for academic and research purposes.
