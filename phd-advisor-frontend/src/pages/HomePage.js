@@ -86,6 +86,14 @@ const HomePage = ({ onNavigateToChat }) => {
           </div>
         </div>
       </main>
+      {/* Footer */}
+      <footer className="footer">
+        <div className="footer-content">
+          <p className="footer-text">
+            © 2025 University of Colorado Boulder. All rights reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 };
