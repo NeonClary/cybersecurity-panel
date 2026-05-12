@@ -14,6 +14,7 @@ import {
   FileText
 } from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
+import ConfirmDialog from './ConfirmDialog';
 import CopyrightNotice from './CopyrightNotice';
 import '../styles/Sidebar.css';
 
@@ -39,6 +40,8 @@ const Sidebar = ({
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
+  const [isClearingAll, setIsClearingAll] = useState(false);
 
   useEffect(() => {
     if (authToken) {
@@ -152,6 +155,28 @@ const Sidebar = ({
     }
   };
 
+  const handleClearAllChats = async () => {
+    setIsClearingAll(true);
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        setChatSessions([]);
+        onCurrentSessionDeleted?.();
+      }
+    } catch (error) {
+      console.error('Error clearing all chat sessions:', error);
+    } finally {
+      setIsClearingAll(false);
+      setShowClearAllConfirm(false);
+    }
+  };
+
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
     // Close user menu when collapsing
@@ -228,7 +253,27 @@ const Sidebar = ({
                 </div>
               </div>
 
-              <button
+              <div className="new-chat-row">
+                <button
+                  className="new-chat-button"
+                  onClick={handleNewChat}
+                  disabled={isCreatingNewChat}
+                >
+                  <Plus size={16} />
+                  <span>{isCreatingNewChat ? 'Creating...' : 'New Chat'}</span>
+                </button>
+                <button
+                  className="clear-all-chats-btn"
+                  onClick={() => setShowClearAllConfirm(true)}
+                  disabled={isClearingAll || chatSessions.length === 0}
+                  title="Clear all chats"
+                  aria-label="Clear all chats"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+
+              <button 
                 className="sidebar-canvas-btn"
                 onClick={onNavigateToCanvas}
                 title={canvasLabel}
@@ -364,11 +409,22 @@ const Sidebar = ({
       </div>
       
       {isMobileOpen && (
-        <div 
-          className="mobile-sidebar-overlay visible" 
+        <div
+          className="mobile-sidebar-overlay visible"
           onClick={() => onMobileToggle(false)}
         />
       )}
+
+      <ConfirmDialog
+        isOpen={showClearAllConfirm}
+        title="Clear all chats?"
+        message="This will permanently delete every chat in your sidebar. This action can't be undone."
+        confirmLabel={isClearingAll ? 'Clearing…' : 'Clear all chats'}
+        cancelLabel="Cancel"
+        tone="danger"
+        onConfirm={handleClearAllChats}
+        onCancel={() => setShowClearAllConfirm(false)}
+      />
     </>
   );
 };
