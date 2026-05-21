@@ -88,6 +88,12 @@ class ChatPageConfig(BaseModel):
     examples: List[ExampleCategory] = []
 
 
+class OnboardingConfig(BaseModel):
+    features: List[FeatureConfig] = []
+    tour_title: str = ""
+    tour_body: str = ""
+
+
 class PersonaItemConfig(_IconValidatorMixin):
     id: str
     name: str
@@ -305,6 +311,7 @@ class AppSettings(BaseModel):
     homepage: HomepageConfig = HomepageConfig()
     login: LoginConfig = LoginConfig()
     chat_page: ChatPageConfig = ChatPageConfig()
+    onboarding: OnboardingConfig = OnboardingConfig()
     personas: PersonasConfig = PersonasConfig()
     orchestrator: OrchestratorConfig = OrchestratorConfig()
     auth: AuthConfig = AuthConfig()
@@ -326,6 +333,7 @@ class AppSettings(BaseModel):
             "homepage": self.homepage.dict(),
             "login": self.login.dict(),
             "chat_page": self.chat_page.dict(),
+            "onboarding": self.onboarding.dict(),
             "personas": {
                 "items": [p.to_frontend_config() for p in self.personas.items],
             },

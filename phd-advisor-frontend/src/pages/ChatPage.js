@@ -16,6 +16,7 @@ import '../styles/ChatPage.css';
 import '../styles/EnhancedChatInput.css';
 import AdvisorStatusDropdown from '../components/AdvisorStatusDropdown';
 import AdvisorCarousel from '../components/AdvisorCarousel';
+import OnboardingTour from '../components/OnboardingTour';
 
 const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSignOut, onUserUpdate }) => {
   const { config, advisors, getAdvisorColors } = useAppConfig();
@@ -752,6 +753,7 @@ const handleNewChat = async (sessionId = null) => {
   const chatPlaceholder = config?.chat_page?.placeholder || "Ask your advisors anything...";
 
   return (
+    <OnboardingTour>
     <div className="chat-page-with-sidebar">
       {/* Sidebar Component */}
       <Sidebar
@@ -998,6 +1000,7 @@ const handleNewChat = async (sessionId = null) => {
         </div>
       </div>
     </div>
+    </OnboardingTour>
   );
 };
 
