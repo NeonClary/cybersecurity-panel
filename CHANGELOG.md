@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.0.1a3](https://github.com/NeonGeckoCom/CCAI-Demo/tree/2.0.1a3) (2026-05-21)
+
+[Full Changelog](https://github.com/NeonGeckoCom/CCAI-Demo/compare/2.0.1a2...2.0.1a3)
+
+**Merged pull requests:**
+
+- Add Onboarding tour [\#48](https://github.com/NeonGeckoCom/CCAI-Demo/pull/48) ([NeonRyan](https://github.com/NeonRyan))
+
 ## [2.0.1a2](https://github.com/NeonGeckoCom/CCAI-Demo/tree/2.0.1a2) (2026-05-19)
 
 [Full Changelog](https://github.com/NeonGeckoCom/CCAI-Demo/compare/33862e61789b40734f952d1ae06b03c86dff49af...2.0.1a2)
