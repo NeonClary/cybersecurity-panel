@@ -12,6 +12,20 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
+def _default_chroma_path(subdir: str) -> str:
+    """Resolve the default ChromaDB persistence directory.
+
+    On HF Spaces (and any deployment that sets ``DATA_DIR``) the embeddings
+    must live on the bucket mount so they survive Space rebuilds. In local
+    dev DATA_DIR is unset, so we keep the historical working-directory path
+    so existing local installs and tests don't move their data.
+    """
+    data_dir = os.environ.get("DATA_DIR", "").strip()
+    if data_dir:
+        return str(Path(data_dir) / "chroma" / subdir)
+    return f"./{subdir}"
+
 # Download required NLTK data
 try:
     nltk.data.find('tokenizers/punkt')
@@ -177,14 +191,16 @@ class RAGManager:
     Handles document storage, embedding, and retrieval using ChromaDB
     """
     
-    def __init__(self, embedding_model: str = None, persist_directory: str = "./chroma_db"):
+    def __init__(self, embedding_model: str = None, persist_directory: str = None):
         from app.config import get_settings
         settings = get_settings()
         if embedding_model is None:
             embedding_model = settings.rag.embedding_model
         self.embedding_model_name = embedding_model
+        if persist_directory is None:
+            persist_directory = _default_chroma_path("chroma_db")
         self.persist_directory = Path(persist_directory)
-        self.persist_directory.mkdir(exist_ok=True)
+        self.persist_directory.mkdir(parents=True, exist_ok=True)
         
         # Initialize embedding model
         logger.info(f"Loading embedding model: {embedding_model}")
@@ -459,13 +475,15 @@ class RAGManager:
 
 
 class EnhancedRAGManager:
-    def __init__(self, persist_directory: str = "./chromadb_storage"):
+    def __init__(self, persist_directory: str = None):
         """Initialize enhanced RAG manager with improved document handling"""
         from app.config import get_settings
         settings = get_settings()
 
+        if persist_directory is None:
+            persist_directory = _default_chroma_path("chromadb_storage")
         self.persist_directory = persist_directory
-        Path(persist_directory).mkdir(exist_ok=True)
+        Path(persist_directory).mkdir(parents=True, exist_ok=True)
         
         # Initialize ChromaDB client
         self.client = chromadb.PersistentClient(

@@ -1,83 +1,50 @@
-import os
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo.errors import ConnectionFailure
+"""Database connection facade.
+
+Used to wrap pymongo / motor against a real MongoDB instance. For Hugging
+Face Spaces deployment we now back the same public API with SQLite on a HF
+Storage Bucket mount (see ``app.core.db``). The shim emulates the Mongo
+idioms the routers and services use, so this module simply forwards to it
+and keeps the legacy ``connect_to_mongo`` / ``close_mongo_connection`` /
+``get_database`` API intact for ``main.py`` and the route files.
+"""
+
 import logging
 
-from app.config import get_settings
+from app.core.db import _close, _open, get_database as _get_database
 
 logger = logging.getLogger(__name__)
 
-class Database:
-    client: AsyncIOMotorClient = None
-    database = None
 
-db = Database()
-
-async def connect_to_mongo():
-    """Create database connection"""
+async def connect_to_mongo() -> None:
+    """Open the SQLite-backed database and run schema bootstrap."""
+    await _open()
+    logger.info("SQLite-backed database ready (Mongo API shim active).")
+    # Legacy hook: previously called ``setup_canvas_collections`` here.
+    # The phd_canvases table is already declared in the shim's schema, so
+    # the call below is a no-op but kept for symmetry with the original
+    # startup path.
     try:
-        settings = get_settings()
+        from app.core.canvas_database import setup_canvas_collections
 
-        # Connection string: config.yaml → env var fallback (handled by Pydantic validator)
-        mongo_url = settings.mongodb.connection_string
-        if not mongo_url:
-            # Last-resort fallback to raw env var (backwards compat)
-            mongo_url = os.getenv("MONGODB_CONNECTION_STRING", "")
-        if not mongo_url:
-            raise ValueError(
-                "MongoDB connection string not set. "
-                "Provide it in config.yaml (mongodb.connection_string) "
-                "or as the MONGODB_CONNECTION_STRING environment variable."
-            )
+        await setup_canvas_collections(_get_database())
+        logger.info("Canvas database initialization completed (no-op on SQLite shim).")
+    except Exception as canvas_error:  # pragma: no cover
+        logger.error(f"Canvas database initialization failed: {canvas_error}")
 
-        db_name = settings.mongodb.database_name
-        
-        db.client = AsyncIOMotorClient(mongo_url)
-        db.database = db.client[db_name]
-        
-        # Test connection
-        await db.client.admin.command('ping')
 
-        logger.info(f"Successfully connected to MongoDB database: {db_name}")
-        
-        # Create indexes for better performance
-        await create_indexes()
-        try:
-            from app.core.canvas_database import setup_canvas_collections
-            await setup_canvas_collections(db.database)  # Pass db directly
-            logger.info("Canvas database initialization completed")
-        except Exception as canvas_error:
-            logger.error(f"Canvas database initialization failed: {canvas_error}")
-        
-    except ConnectionFailure as e:
-        logger.error(f"Failed to connect to MongoDB: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error connecting to MongoDB: {e}")
-        raise
+async def close_mongo_connection() -> None:
+    """Best-effort connection close on FastAPI shutdown."""
+    await _close()
+    logger.info("Disconnected from SQLite-backed database.")
 
-async def close_mongo_connection():
-    """Close database connection"""
-    if db.client:
-        db.client.close()
-        logger.info("Disconnected from MongoDB")
 
-async def create_indexes():
-    """Create database indexes for performance"""
-    try:
-        # Index for users collection
-        await db.database.users.create_index("email", unique=True)
-        await db.database.users.create_index("created_at")
-        
-        # Indexes for chat_sessions collection
-        await db.database.chat_sessions.create_index("user_id")
-        await db.database.chat_sessions.create_index("created_at")
-        await db.database.chat_sessions.create_index([("user_id", 1), ("created_at", -1)])
-        
-        logger.info("Database indexes created successfully")
-    except Exception as e:
-        logger.warning(f"Error creating indexes: {e}")
+async def create_indexes() -> None:
+    """Index creation is handled by the shim's schema bootstrap; kept for
+    backwards compatibility so any out-of-process maintenance script that
+    imports this name keeps working."""
+    return None
+
 
 def get_database():
-    """Get database instance"""
-    return db.database
+    """Return the SQLite-backed Mongo-API-compatible Database object."""
+    return _get_database()

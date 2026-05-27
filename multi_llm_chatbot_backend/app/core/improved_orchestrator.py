@@ -6,6 +6,7 @@ from app.core.rag_manager import get_rag_manager
 from app.config import get_settings
 from app.llm.llm_client import LLMClient, ToolCallResult
 from app.tools import get_tool_definitions, get_tool_executor
+from app.utils.chat_summary import generate_conversation_context_summary
 
 import json
 import logging
@@ -61,15 +62,13 @@ class ImprovedChatOrchestrator:
             return ToolCallResult(text="", used_tool=False)
 
         system_prompt = (
-            "You are a helpful assistant with access to external tools. "
-            "Use the available tools when the user's question can be answered "
-            "by one of them. If no tool is relevant, respond with a brief "
-            "text answer. "
-            "If a tool response includes 'truncated': true, let the user know "
-            "how many total results were found and suggest they narrow their "
-            "search for more specific results. "
-            "Format your responses using markdown. Use bullet points "
-            "to present structured data like course listings or professor ratings."
+            "You are a helpful cybersecurity assistant with access to external tools. "
+            "Use the available tools when the user's question can be answered by one of them. "
+            "Call get_current_datetime when the user asks about today, deadlines, timelines, "
+            "schedules, incident timing, or when accurate date/time context would improve "
+            "your guidance — then weave the result into your answer. "
+            "If no tool is relevant, respond with a brief text answer. "
+            "Format your responses using markdown."
         )
 
         return await self.llm_client.generate_with_tools(
@@ -687,9 +686,14 @@ When analyzing the document context:
         """
         enhanced_context = []
 
-        # Get recent conversation history (last 6 messages for efficiency)
-        recent_messages = session.messages[-6:] if len(session.messages) > 6 else session.messages
-        
+        conversation_messages = [
+            m for m in session.messages if m.get("role") != "system"
+        ]
+        history_tokens = self.context_manager._estimate_tokens_for_messages(
+            conversation_messages
+        )
+        threshold = get_settings().orchestrator.conversation_history_token_threshold
+
         # Check if we actually have meaningful document content
         has_documents = bool(document_context and document_context.strip() and len(document_context.strip()) > 50)
         
@@ -711,11 +715,6 @@ When analyzing the document context:
 
     Always cite your sources when referencing information from their documents using the format: "According to your [document_name]..." or "In your [section_name] from [document_name]..."
     """
-            
-            enhanced_context.append({
-                "role": "system",
-                "content": system_message
-            })
         else:
             # NO DOCUMENTS - Explicitly tell persona not to reference documents
             system_message = f"""{persona.system_prompt}
@@ -728,19 +727,58 @@ When analyzing the document context:
     3. Provide general guidance based on best practices in your area of expertise
 
     Do NOT make up document names or pretend to have access to files that don't exist."""
-            
-            enhanced_context.append({
-                "role": "system", 
-                "content": system_message
-            })
 
-        # Add recent conversation messages (excluding system messages to avoid duplication)
-        for message in recent_messages:
-            if message.get('role') != 'system':
+        if hasattr(session, "user_profile_context") and session.user_profile_context:
+            system_message += (
+                f"\n\n{session.user_profile_context}\n"
+                "Use this background to calibrate technical depth, examples, and priorities."
+            )
+
+        enhanced_context.append({
+            "role": "system",
+            "content": system_message,
+        })
+
+        if history_tokens < threshold:
+            for message in conversation_messages:
                 enhanced_context.append({
-                    "role": message['role'],
-                    "content": message['content']
+                    "role": message["role"],
+                    "content": message["content"],
                 })
+        else:
+            msg_count = len(conversation_messages)
+            if (
+                session.conversation_summary
+                and session.conversation_summary_message_count == msg_count
+            ):
+                summary = session.conversation_summary
+            else:
+                llm = self.llm_client
+                if llm is None and self.personas:
+                    llm = next(iter(self.personas.values())).llm
+                persona_names = {p.id: p.name for p in self.personas.values()}
+                summary = ""
+                if llm is not None:
+                    summary = await generate_conversation_context_summary(
+                        conversation_messages,
+                        llm,
+                        persona_names=persona_names,
+                    )
+                if summary:
+                    session.conversation_summary = summary
+                    session.conversation_summary_message_count = msg_count
+                    system_message += f"\n\nSummary of earlier conversation:\n{summary}"
+                    enhanced_context[0]["content"] = system_message
+                else:
+                    logger.warning(
+                        "Summary generation failed; including full history (%d tokens)",
+                        history_tokens,
+                    )
+                    for message in conversation_messages:
+                        enhanced_context.append({
+                            "role": message["role"],
+                            "content": message["content"],
+                        })
 
         return enhanced_context
     
@@ -871,10 +909,19 @@ When analyzing the document context:
             }
         
 
-    async def get_top_personas(self, session_id: str, k: int = 3) -> List[str]:
+    async def get_top_personas(
+        self,
+        session_id: str,
+        k: int = 3,
+        candidate_ids: Optional[List[str]] = None,
+    ) -> List[str]:
         """
         Use the LLM to rank personas based on current session context.
         Falls back to default persona order if LLM fails or returns invalid data.
+
+        When ``candidate_ids`` is provided (e.g., from the header's advisor
+        selection dropdown) ranking is restricted to that pool so users only
+        receive responses from advisors they've enabled.
         """
         try:
             session = self.session_manager.get_session(session_id)
@@ -883,22 +930,33 @@ When analyzing the document context:
                 logger.warning("No personas registered.")
                 return []
 
+            if candidate_ids:
+                candidate_personas = {
+                    pid: self.personas[pid]
+                    for pid in candidate_ids
+                    if pid in self.personas
+                }
+                if not candidate_personas:
+                    candidate_personas = dict(self.personas)
+            else:
+                candidate_personas = dict(self.personas)
+
             # Use the LLM from one of the existing persona objects
-            llm = next(iter(self.personas.values())).llm
+            llm = next(iter(candidate_personas.values())).llm
 
             # Use recent conversation context (last 5 messages)
             recent_context = "\n".join(
                 msg['content'] for msg in session.get_recent_messages(5)
             )
 
-            # Format available persona descriptions
+            # Format available persona descriptions (only the candidate pool)
             persona_descriptions = "\n".join([
                 f"- ID: {p.id}\n  Name: {p.name}\n  Prompt: {p.system_prompt.strip()}"
-                for p in self.personas.values()
+                for p in candidate_personas.values()
             ])
 
-            # Ensure k does not exceed the number of available personas
-            k = min(k, len(self.personas))
+            # Ensure k does not exceed the number of candidate personas
+            k = min(k, len(candidate_personas))
 
             app_title = get_settings().app.title
 
@@ -935,15 +993,19 @@ When analyzing the document context:
             if isinstance(top_ids, dict):
                 top_ids = next(iter(top_ids.values()), [])
 
-            # Step 3: Filter valid persona IDs
-            valid_ids = [pid for pid in top_ids if pid in self.personas]
+            # Step 3: Filter valid persona IDs against the candidate pool
+            valid_ids = [pid for pid in top_ids if pid in candidate_personas]
 
             if len(valid_ids) < k:
                 logger.warning(f"LLM returned insufficient or invalid IDs. Got: {valid_ids}")
-                return list(self.personas.keys())[:k]
+                return list(candidate_personas.keys())[:k]
 
             return valid_ids[:k]
 
         except Exception as e:
             logger.error(f"Error selecting top personas: {e}")
+            if candidate_ids:
+                fallback_ids = [pid for pid in candidate_ids if pid in self.personas]
+                if fallback_ids:
+                    return fallback_ids[:k]
             return list(self.personas.keys())[:k]

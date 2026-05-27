@@ -1,34 +1,21 @@
 import React from 'react';
 import { MessageCircle, ArrowRight } from 'lucide-react';
 import AdvisorCard from '../components/AdvisorCard';
-import ThemeToggle from '../components/ThemeToggle';
+import AppHeader from '../components/AppHeader';
 import CopyrightNotice from '../components/CopyrightNotice';
 import { useAppConfig } from '../contexts/AppConfigContext';
 
-const HomePage = ({ onNavigateToChat, isAuthenticated }) => {
+const HomePage = ({ onNavigateToChat, isAuthenticated, onNavigateToHome, onNavigateToCanvas }) => {
   const { config, advisors, resolveIcon } = useAppConfig();
-
-  const UsersIcon = resolveIcon('Users');
 
   return (
     <div className="homepage">
-      {/* Header */}
-      <header className="header">
-        <div className="header-content">
-          <div className="header-left">
-            <div className="logo-container">
-              <UsersIcon className="logo-icon" />
-            </div>
-            <div>
-              <h1 className="logo-title">{config.app.title}</h1>
-              <p className="logo-subtitle">{config.app.subtitle}</p>
-            </div>
-          </div>
-          <div className="header-right">
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+      <AppHeader
+        currentPage="home"
+        onNavigateToHome={onNavigateToHome}
+        onNavigateToChat={onNavigateToChat}
+        onNavigateToCanvas={onNavigateToCanvas}
+      />
 
       {/* Hero Section */}
       <main className="main">

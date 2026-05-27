@@ -302,34 +302,38 @@ const MessageBubble = ({
     const colors = getAdvisorColors(personaId, isDark);
     const isCopied = copiedStates[message.id];
 
-    const avatarElement = (size = 40) => (
-      advisor.avatarUrl ? (
-        <img 
-          src={advisor.avatarUrl} 
-          alt={advisor.name || 'Advisor'} 
-          style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} 
-        />
-      ) : Icon ? (
+    const avatarElement = (size = 44) => {
+      const iconSize = Math.round(size * 0.52);
+      return (
         <div
-          style={{
-            width: size, height: size, borderRadius: '50%', backgroundColor: colors.bgColor || 'var(--bg-muted)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden'
-          }}
+          className="advisor-message-avatar-ring"
+          style={{ width: size, height: size }}
         >
-          <Icon style={{ color: colors.color || 'var(--text-secondary)', width: size * 0.5, height: size * 0.5 }} />
+          {advisor.avatarUrl ? (
+            <img
+              src={advisor.avatarUrl}
+              alt={advisor.name || 'Advisor'}
+            />
+          ) : Icon ? (
+            <Icon
+              className="advisor-message-avatar-icon"
+              style={{
+                color: colors.color || 'var(--text-secondary)',
+                width: iconSize,
+                height: iconSize,
+              }}
+            />
+          ) : (
+            <span
+              className="advisor-message-avatar-initial"
+              style={{ color: colors.color || 'var(--text-secondary)', fontSize: iconSize }}
+            >
+              {advisor.name ? advisor.name.charAt(0) : 'A'}
+            </span>
+          )}
         </div>
-      ) : (
-        <div
-          style={{
-            width: size, height: size, borderRadius: '50%', backgroundColor: colors.bgColor || 'var(--bg-muted)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            color: colors.color || 'var(--text-secondary)', fontWeight: 600, fontSize: size * 0.4
-          }}
-        >
-          {advisor.name ? advisor.name.charAt(0) : 'A'}
-        </div>
-      )
-    );
+      );
+    };
 
     return (
       <div className={`advisor-message-container ${inlineAvatar ? 'inline-avatar-mode' : ''}`}>
@@ -350,7 +354,7 @@ const MessageBubble = ({
           }}
         >
           <div className="advisor-message-header">
-            {inlineAvatar && avatarElement(32)}
+            {inlineAvatar && avatarElement(44)}
             <h4 
               className="advisor-message-name" 
               style={{ color: colors.color || 'var(--text-primary)' }}

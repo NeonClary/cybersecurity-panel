@@ -1,48 +1,39 @@
+# ---------------------------------------------------------------------------
+# Local-dev wrapper around the single-container HuggingFace Spaces image.
+#
+# This file used to spin up three services (FastAPI backend, CRA dev server,
+# MongoDB). The HF deployment shape (single-container, SQLite on the bucket)
+# is now also the local-dev shape — same image you push to the Space — so
+# this is a one-service compose with a named volume that emulates the HF
+# Storage Bucket mount.
+#
+# Override CYBERPANEL_HOST_PORT via .env (or shell) if 7861 conflicts; the
+# in-container port is fixed at 7860 to mirror HF Spaces.
+# ---------------------------------------------------------------------------
+
 services:
-  backend:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-      target: backend
+    image: cybersecurity-panel:dev
     ports:
-      - "8000:8000"
-    networks:
-      - application
-    depends_on:
-      - database
+      - "${CYBERPANEL_HOST_PORT:-7861}:7860"
     environment:
-      MONGODB_CONNECTION_STRING: "mongodb://database:27017"
-      MONGODB_DATABASE: phd_advisor
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-CHANGEME-by-overriding-in-dot-env-file}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-?}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       VLLM_API_KEY: ${VLLM_API_KEY:-}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      GEMINI_MODEL: gemini-2.5-flash
-      CONFIG_PATH: ${CONFIG_PATH:-/ccai/phd_config.yaml}
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: frontend
-    ports:
-      - "3000:3000"
-    networks:
-      - application
-    depends_on:
-      - backend
-    environment:
-      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8000}
-      REACT_APP_TESTING_ONBOARDING: ${REACT_APP_TESTING_ONBOARDING:-false}
-  database:
-    image: mongo:8.0
+      VLLM_API_USERNAME: ${VLLM_API_USERNAME:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      CONFIG_PATH: ${CONFIG_PATH:-/home/user/app/cybersecurity_config.yaml}
+      # Same-origin in single-container; only relevant for cross-origin dev.
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      # SQLite + ChromaDB persistence both land here. The named volume below
+      # mirrors the HF Storage Bucket mount so user data survives rebuilds.
+      DATA_DIR: /data
     volumes:
-      - mongo_data:/data/db
-    networks:
-      - application
+      - cybersecurity_data:/data
+
 volumes:
-  mongo_data:
-networks:
-  application:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.host_binding_ipv4: "0.0.0.0"
+  cybersecurity_data:

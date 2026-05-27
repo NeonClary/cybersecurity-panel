@@ -1,22 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import {
   MessageSquare,
-  Plus,
   SquarePen,
   Search,
   MoreVertical,
   Trash2,
-  Edit3,
   LogOut,
   User,
-  Settings,
+  UserCircle,
+  DatabaseZap,
+  KeyRound,
   PanelLeft,
-  FileText
+  FileText,
+  ChevronRight,
+  Clock
 } from 'lucide-react';
+import * as LucideIcons from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
-import ConfirmDialog from './ConfirmDialog';
+import UserAvatarPicker from './UserAvatarPicker';
 import CopyrightNotice from './CopyrightNotice';
-import SettingsModal from './SettingsModal';
 import '../styles/Sidebar.css';
 
 const Sidebar = ({
@@ -25,27 +27,46 @@ const Sidebar = ({
   onSelectSession,
   onNewChat,
   onSignOut,
-  onUserUpdate,
   authToken,
   onSidebarToggle,
   isMobileOpen = false,
   onMobileToggle,
-  onNavigateToCanvas,
   refreshTrigger,
-  onCurrentSessionDeleted
+  onCurrentSessionDeleted,
+  pageContext = 'chat',
+  canvasItems = [],
+  canvasSubview = 'workspace',
+  widgetGroups = [],
+  deliverableProjects = [],
+  insightSections = [],
+  userAvatarId,
+  onAvatarChange,
+  onOpenProfile,
+  onOpenAccount,
+  onOpenClearData,
 }) => {
   const { config } = useAppConfig();
-  const canvasLabel = config?.app?.title ? `${config.app.title} Canvas` : 'Canvas';
-  const appVersion = config?.version;
+  const isOnCanvas = pageContext === 'canvas';
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const avatarOptions = config?.app?.user_avatars || [];
+  const currentAvatar = avatarOptions.find(a => a.id === userAvatarId);
+  const AvatarIcon = currentAvatar ? (LucideIcons[currentAvatar.icon] || User) : User;
+  const [expanded, setExpanded] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sidebar-expanded-v1') || '{}'); } catch { return {}; }
+  });
+  const toggleExpanded = (key) => {
+    setExpanded(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('sidebar-expanded-v1', JSON.stringify(next));
+      return next;
+    });
+  };
   const [chatSessions, setChatSessions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
-  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
-  const [isClearingAll, setIsClearingAll] = useState(false);
 
   useEffect(() => {
     if (authToken) {
@@ -159,28 +180,6 @@ const Sidebar = ({
     }
   };
 
-  const handleClearAllChats = async () => {
-    setIsClearingAll(true);
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      if (response.ok) {
-        setChatSessions([]);
-        onCurrentSessionDeleted?.();
-      }
-    } catch (error) {
-      console.error('Error clearing all chat sessions:', error);
-    } finally {
-      setIsClearingAll(false);
-      setShowClearAllConfirm(false);
-    }
-  };
-
   const toggleSidebar = () => {
     setIsCollapsed(!isCollapsed);
     // Close user menu when collapsing
@@ -214,8 +213,17 @@ const Sidebar = ({
             <>
               <div className="user-section">
                 <div className="user-info">
-                  <div className="user-avatar">
-                    <User size={20} />
+                  <div
+                    className="user-avatar"
+                    onClick={() => onAvatarChange && setShowAvatarPicker(true)}
+                    style={{
+                      cursor: onAvatarChange ? 'pointer' : undefined,
+                      backgroundColor: currentAvatar?.bg || undefined,
+                      color: currentAvatar?.color || undefined,
+                    }}
+                    title={onAvatarChange ? 'Change avatar' : undefined}
+                  >
+                    <AvatarIcon size={20} />
                   </div>
                   <div className="user-details">
                     <span className="user-name">{user.firstName} {user.lastName}</span>
@@ -243,12 +251,21 @@ const Sidebar = ({
                     
                     {showUserMenu && (
                       <div className="user-menu">
-                        <button
-                          className="user-menu-item"
-                          onClick={() => { setShowSettings(true); setShowUserMenu(false); }}
-                        >
-                          <Settings size={16} />
-                          <span>Settings</span>
+                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAvatarPicker(true); }}>
+                          <User size={16} />
+                          <span>Change Avatar</span>
+                        </button>
+                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); if (onOpenProfile) onOpenProfile(); }}>
+                          <UserCircle size={16} />
+                          <span>Profile</span>
+                        </button>
+                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); if (onOpenAccount) onOpenAccount(); }}>
+                          <KeyRound size={16} />
+                          <span>Account</span>
+                        </button>
+                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); if (onOpenClearData) onOpenClearData(); }}>
+                          <DatabaseZap size={16} />
+                          <span>Clear User Data</span>
                         </button>
                         <button className="user-menu-item sign-out" onClick={onSignOut}>
                           <LogOut size={16} />
@@ -260,34 +277,6 @@ const Sidebar = ({
                 </div>
               </div>
 
-              <div className="new-chat-row">
-                <button
-                  className="new-chat-button"
-                  onClick={handleNewChat}
-                  disabled={isCreatingNewChat}
-                >
-                  <Plus size={16} />
-                  <span>{isCreatingNewChat ? 'Creating...' : 'New Chat'}</span>
-                </button>
-                <button
-                  className="clear-all-chats-btn"
-                  onClick={() => setShowClearAllConfirm(true)}
-                  disabled={isClearingAll || chatSessions.length === 0}
-                  title="Clear all chats"
-                  aria-label="Clear all chats"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-
-              <button 
-                className="sidebar-canvas-btn"
-                onClick={onNavigateToCanvas}
-                title={canvasLabel}
-              >
-                <FileText size={18} />
-                {!isCollapsed && <span>{canvasLabel}</span>}
-              </button>
             </>
           )}
 
@@ -309,14 +298,6 @@ const Sidebar = ({
               >
                 <SquarePen size={20} />
               </button>
-              <button 
-                className="sidebar-canvas-btn"
-                onClick={onNavigateToCanvas}
-                title={canvasLabel}
-              >
-                <FileText size={20} />
-                {!isCollapsed && <span>{canvasLabel}</span>}
-              </button>
             </div>
           )}
         </div>
@@ -328,24 +309,187 @@ const Sidebar = ({
               <Search size={16} className="search-icon" />
               <input
                 type="text"
-                placeholder="Search chats..."
+                placeholder={
+                  isOnCanvas
+                    ? (canvasSubview === 'deliverables' ? 'Search drafts...'
+                       : canvasSubview === 'insights' ? 'Search sections...'
+                       : 'Search widgets...')
+                    : 'Search chats...'
+                }
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="search-input"
               />
             </div>
-            <button
-              className="new-chat-icon-btn"
-              onClick={handleNewChat}
-              disabled={isCreatingNewChat}
-              title={isCreatingNewChat ? 'Creating...' : 'New Chat'}
-            >
-              <SquarePen size={18} />
-            </button>
+            {!isOnCanvas && (
+              <button
+                className="new-chat-icon-btn"
+                onClick={handleNewChat}
+                disabled={isCreatingNewChat}
+                title={isCreatingNewChat ? 'Creating...' : 'New Chat'}
+              >
+                <SquarePen size={18} />
+              </button>
+            )}
           </div>
         )}
 
-        {/* Chat Sessions */}
+        {/* Canvas sidebar — subview-aware (Insights / Workspace / Deliverables) */}
+        {isOnCanvas ? (
+          <div className="canvas-sidebar-menu">
+            {!isCollapsed && (() => {
+              const q = searchTerm.toLowerCase();
+
+              // ---------- DELIVERABLES: project list with expandable section dropdown ----------
+              if (canvasSubview === 'deliverables') {
+                const projects = deliverableProjects.filter(p =>
+                  !q || p.name.toLowerCase().includes(q) || p.sections.some(s => s.name.toLowerCase().includes(q))
+                );
+                if (projects.length === 0) {
+                  return (
+                    <div className="no-sessions">
+                      {searchTerm ? 'No drafts match' : 'No drafts yet — create one in Documents'}
+                    </div>
+                  );
+                }
+                return projects.map(p => {
+                  const open = expanded[`p-${p.id}`] ?? p.isActive;
+                  const totalWords = p.sections.reduce((s, x) => s + x.wc, 0);
+                  return (
+                    <div key={p.id} className={`csm-project ${p.isActive ? 'active' : ''}`}>
+                      <button
+                        className="csm-project-head"
+                        onClick={() => toggleExpanded(`p-${p.id}`)}
+                      >
+                        <ChevronRight size={12} className={`csm-chevron ${open ? 'open' : ''}`}/>
+                        <FileText size={13}/>
+                        <span className="csm-project-name">{p.name}</span>
+                        {p.versions > 0 && (
+                          <span className="csm-versions" title={`${p.versions} version${p.versions === 1 ? '' : 's'} saved`}>
+                            <Clock size={10}/>{p.versions}
+                          </span>
+                        )}
+                      </button>
+                      {open && (
+                        <div className="csm-project-body">
+                          <button className="csm-row" onClick={p.onOpen}>
+                            <span className="csm-row-icon">📂</span>
+                            <span>Open editor</span>
+                          </button>
+                          {p.sections.map(s => (
+                            <button key={s.id} className="csm-row csm-row-section" onClick={s.onClick}>
+                              <span className="csm-row-bullet"/>
+                              <span className="csm-row-label">{s.name}</span>
+                              {s.wc > 0 && <span className="csm-row-meta">{s.wc}</span>}
+                            </button>
+                          ))}
+                          <div className="csm-row csm-row-foot">
+                            <Clock size={11}/>
+                            <span>{p.versions} version{p.versions === 1 ? '' : 's'} · auto-saved</span>
+                          </div>
+                          <div className="csm-row csm-row-foot">
+                            <span style={{ color: 'var(--text-tertiary, #9CA3AF)' }}>{totalWords} words total</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              }
+
+              // ---------- WORKSPACE: widgets grouped by category ----------
+              if (canvasSubview === 'workspace') {
+                const groups = widgetGroups
+                  .map(g => ({
+                    ...g,
+                    items: g.items.filter(it => !q || it.label.toLowerCase().includes(q)),
+                  }))
+                  .filter(g => g.items.length > 0);
+                if (groups.length === 0) {
+                  return (
+                    <div className="no-sessions">
+                      {searchTerm ? 'No widgets match' : 'Workspace is empty — add widgets'}
+                    </div>
+                  );
+                }
+                return groups.map(g => {
+                  const open = expanded[`g-${g.id}`] ?? true;
+                  return (
+                    <div key={g.id} className="csm-group">
+                      <button className="csm-group-head" onClick={() => toggleExpanded(`g-${g.id}`)}>
+                        <ChevronRight size={11} className={`csm-chevron ${open ? 'open' : ''}`}/>
+                        <span className="csm-group-name">{g.label}</span>
+                        <span className="csm-group-count">{g.items.length}</span>
+                      </button>
+                      {open && (
+                        <div className="csm-group-body">
+                          {g.items.map(it => (
+                            <button key={it.id} className={`csm-row ${it.critic ? 'critic' : ''}`} onClick={it.onClick}>
+                              <span className="csm-row-bullet"/>
+                              <span className="csm-row-label">{it.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              }
+
+              // ---------- INSIGHTS: section list with confidence badges ----------
+              if (canvasSubview === 'insights') {
+                const sections = insightSections.filter(s => !q || s.name.toLowerCase().includes(q));
+                if (sections.length === 0) {
+                  return <div className="no-sessions">{searchTerm ? 'No sections match' : 'No insights yet'}</div>;
+                }
+                return (
+                  <div className="csm-group">
+                    <div className="csm-group-head" style={{ cursor: 'default' }}>
+                      <span className="csm-group-name">Sections</span>
+                      <span className="csm-group-count">{sections.length}</span>
+                    </div>
+                    <div className="csm-group-body">
+                      {sections.map(s => {
+                        const complete = s.taskCount > 0 && s.doneCount === s.taskCount;
+                        return (
+                          <button key={s.id} className={`csm-row ${complete ? 'csm-row-done' : ''}`} onClick={s.onClick}>
+                            <span className="csm-row-bullet"/>
+                            <span className="csm-row-label">{s.name}</span>
+                            {s.taskCount > 0 && (
+                              <span className="csm-row-meta">{s.doneCount}/{s.taskCount}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+
+              // ---------- Fallback: flat list (legacy) ----------
+              const items = canvasItems.filter(it => !q || it.label.toLowerCase().includes(q));
+              if (items.length === 0) {
+                return <div className="no-sessions">{searchTerm ? 'No matches' : 'Nothing here yet'}</div>;
+              }
+              return (
+                <div className="sessions-list">
+                  {items.map((it) => (
+                    <div key={it.id} className="session-item" onClick={it.onClick}>
+                      <div className="session-content">
+                        <div className="session-icon"><FileText size={16}/></div>
+                        <div className="session-details">
+                          <div className="session-title">{it.label}</div>
+                          {it.sub && <div className="session-meta"><span>{it.sub}</span></div>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        ) : (
+        /* Chat Sessions */
         <div className="chat-sessions">
           {isLoading ? (
             <div className="loading-sessions">
@@ -398,15 +542,8 @@ const Sidebar = ({
             </div>
           )}
         </div>
-
-        {appVersion && (
-          <div
-            className="sidebar-version"
-            title={`Version ${appVersion}`}
-          >
-            {isCollapsed ? `v${appVersion}` : `Version ${appVersion}`}
-          </div>
         )}
+
         {/* Footer */}
         <div className={`sidebar-footer ${isCollapsed ? 'collapsed' : ''}`}>
           <a 
@@ -423,30 +560,19 @@ const Sidebar = ({
         </div>
       </div>
       
-      {isMobileOpen && (
-        <div
-          className="mobile-sidebar-overlay visible"
-          onClick={() => onMobileToggle(false)}
+      {showAvatarPicker && (
+        <UserAvatarPicker
+          options={avatarOptions}
+          currentId={userAvatarId}
+          onSelect={(id) => { onAvatarChange?.(id); setShowAvatarPicker(false); }}
+          onClose={() => setShowAvatarPicker(false)}
         />
       )}
 
-      <ConfirmDialog
-        isOpen={showClearAllConfirm}
-        title="Clear all chats?"
-        message="This will permanently delete every chat in your sidebar. This action can't be undone."
-        confirmLabel={isClearingAll ? 'Clearing…' : 'Clear all chats'}
-        cancelLabel="Cancel"
-        tone="danger"
-        onConfirm={handleClearAllChats}
-        onCancel={() => setShowClearAllConfirm(false)}
-      />
-      {showSettings && (
-        <SettingsModal
-          user={user}
-          authToken={authToken}
-          onUserUpdate={onUserUpdate}
-          onSignOut={onSignOut}
-          onClose={() => setShowSettings(false)}
+      {isMobileOpen && (
+        <div 
+          className="mobile-sidebar-overlay visible" 
+          onClick={() => onMobileToggle(false)}
         />
       )}
     </>

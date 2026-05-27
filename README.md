@@ -1,6 +1,35 @@
-# PhD Advisory Panel
+---
+title: Cybersecurity Panel
+emoji: 🛡️
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+pinned: false
+app_port: 7860
+---
 
-An AI-powered academic guidance system that provides personalized advice through specialized advisor personas. Get diverse perspectives on your PhD journey from multiple AI advisors, each bringing unique expertise in methodology, theory, and practical guidance.
+# Cybersecurity Panel
+
+An AI-powered cybersecurity guidance system that provides expert advice through a panel of specialized advisor personas. Ask about threats, compliance, incident response, architecture, and career growth and get diverse perspectives from multiple AI advisors. Built on Neon AI's Collaborative Conversational AI (CCAI) framework.
+
+## Hugging Face Spaces deployment
+
+This Space ships as a single Docker image built from the repository root [`Dockerfile`](Dockerfile). The container does three things:
+
+1. Builds the React frontend (CRA) at image-build time with `REACT_APP_API_URL=""` so every `fetch` issues a relative URL.
+2. Serves the bundled SPA from FastAPI at `/`, with the API exposed on `/api/...`, `/auth/...`, etc., on the same `:7860` origin.
+3. Persists user data (auth, profiles, chat sessions, onboarding, canvas state) in **SQLite via `aiosqlite`** at `${DATA_DIR}/cybersecurity_panel.db`. Mount a Hugging Face Storage Bucket at `/data` to make the database survive Space rebuilds — there is **no MongoDB**, **no Atlas**, no third-party data plane (the persistence pattern follows [`CU-Student-AIProject-Helper`](https://github.com/NeonClary/CU-Student-AIProject-Helper)).
+
+### Required Space secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `JWT_SECRET_KEY` | Signs auth tokens. Set this to a long random string. |
+| `GEMINI_API_KEY` | Powers the default Gemini provider (model: `gemini-2.5-flash`). |
+| `OPENAI_API_KEY` | Optional — only required if you switch to the OpenAI provider. |
+| `VLLM_API_KEY` | Optional — only required if you point the orchestrator/advisors at a Neon vLLM endpoint. |
+
+
 
 ## Features
 

@@ -19,7 +19,6 @@ import yaml
 from pydantic import BaseModel, validator, Field, model_validator
 
 from app.utils.avatar_helpers import get_bundled_avatar_path
-from app.version import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +48,19 @@ class FeatureConfig(_IconValidatorMixin):
     icon: str = "HelpCircle"
 
 
+class UserAvatarOption(BaseModel):
+    id: str
+    icon: str = "User"
+    color: str = "#2563EB"
+    bg: str = "#EFF6FF"
+
+
 class AppConfig(BaseModel):
     title: str = "Advisor Canvas"
     subtitle: str = "AI-Powered Guidance"
     primary_color: str = "#7C3AED"
     footer_text: str = ""
+    user_avatars: List[UserAvatarOption] = []
 
 
 class HomepageConfig(BaseModel):
@@ -73,6 +80,8 @@ class LoginConfig(BaseModel):
     subtitle: str = "Sign in to continue"
     signup_subtitle: str = "Create your account to get personalized guidance from expert advisors"
     academic_stages: List[AcademicStage] = []
+    knowledge_levels: List[AcademicStage] = []
+    timezones: List[AcademicStage] = []
 
 
 class ExampleCategory(_IconValidatorMixin):
@@ -86,12 +95,6 @@ class ExampleCategory(_IconValidatorMixin):
 class ChatPageConfig(BaseModel):
     placeholder: str = "Ask your advisors anything..."
     examples: List[ExampleCategory] = []
-
-
-class OnboardingConfig(BaseModel):
-    features: List[FeatureConfig] = []
-    tour_title: str = ""
-    tour_body: str = ""
 
 
 class PersonaItemConfig(_IconValidatorMixin):
@@ -154,7 +157,11 @@ class PersonaItemConfig(_IconValidatorMixin):
                 self.avatar, self.id,
             )
             return f"icon://{self.icon}"
-        base = os.getenv("REACT_APP_API_URL", "http://localhost:8000").rstrip("/")
+        # Default to empty string (→ relative URL) so single-origin Spaces
+        # deployments serve avatars off the same host as the SPA. Local
+        # ``npm start`` development setups can still set REACT_APP_API_URL
+        # explicitly to point at the backend on a different port.
+        base = os.getenv("REACT_APP_API_URL", "").rstrip("/")
         return f"{base}/api/avatars/bundled/{self.avatar}"
 
     def to_frontend_config(self) -> dict:
@@ -194,6 +201,7 @@ class PersonasConfig(BaseModel):
 
 class OrchestratorConfig(BaseModel):
     min_words_without_keywords: int = 6
+    conversation_history_token_threshold: int = 4000
     specific_keywords: List[str] = []
     clarification_questions: List[str] = [
             "Could you provide more details about what you need help with?"]
@@ -270,12 +278,30 @@ class OllamaConfig(BaseModel):
 class VllmConfig(BaseModel):
     api_url: str = ""
     api_key: str = Field(default=os.getenv("VLLM_API_KEY", ""))
+    api_username: str = Field(default=os.getenv("VLLM_API_USERNAME", ""))
+    model_id: str = ""
+    neon_persona_orchestrator: str = "vanilla"
+    neon_persona_advisors: str = "CybersecurityExpert"
+
+
+class OpenAIConfig(BaseModel):
+    api_key: str = Field(default=os.getenv("OPENAI_API_KEY", ""))
+    model: str = "gpt-5.4"
+    orchestrator_reasoning_effort: str = "low"
+    persona_reasoning_effort: str = "none"
+
+
+class ResilientConfig(BaseModel):
+    race_timeout_seconds: float = 3.0
 
 
 class LLMConfig(BaseModel):
+    provider: str = "gemini"
     gemini: GeminiConfig = GeminiConfig()
     ollama: OllamaConfig = OllamaConfig()
     vllm: VllmConfig = VllmConfig()
+    openai: OpenAIConfig = OpenAIConfig()
+    resilient: ResilientConfig = ResilientConfig()
 
 
 class RAGConfig(BaseModel):
@@ -311,7 +337,6 @@ class AppSettings(BaseModel):
     homepage: HomepageConfig = HomepageConfig()
     login: LoginConfig = LoginConfig()
     chat_page: ChatPageConfig = ChatPageConfig()
-    onboarding: OnboardingConfig = OnboardingConfig()
     personas: PersonasConfig = PersonasConfig()
     orchestrator: OrchestratorConfig = OrchestratorConfig()
     auth: AuthConfig = AuthConfig()
@@ -333,11 +358,9 @@ class AppSettings(BaseModel):
             "homepage": self.homepage.dict(),
             "login": self.login.dict(),
             "chat_page": self.chat_page.dict(),
-            "onboarding": self.onboarding.dict(),
             "personas": {
                 "items": [p.to_frontend_config() for p in self.personas.items],
             },
-            "version": __version__,
         }
 
 

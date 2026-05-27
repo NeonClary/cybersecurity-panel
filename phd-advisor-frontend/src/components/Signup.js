@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight, BookOpen, Phone, GraduationCap } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Shield, Phone, Globe } from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import '../styles/Signup.css';
 
@@ -19,14 +19,22 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
 
-  const academicStages = config?.login?.academic_stages?.length
-    ? config.login.academic_stages
-    : [
-        { value: '', label: 'Select your stage' },
-        { value: 'beginner', label: 'Beginner' },
-        { value: 'intermediate', label: 'Intermediate' },
-        { value: 'advanced', label: 'Advanced' },
-      ];
+  const knowledgeLevels = config?.login?.knowledge_levels?.length
+    ? config.login.knowledge_levels
+    : config?.login?.academic_stages?.length
+      ? config.login.academic_stages
+      : [
+          { value: '', label: 'Select your cybersecurity knowledge level' },
+          { value: 'newcomer', label: 'New to cybersecurity' },
+          { value: 'foundational', label: 'Foundational' },
+          { value: 'practitioner', label: 'Practitioner' },
+          { value: 'experienced', label: 'Experienced' },
+          { value: 'expert', label: 'Expert / specialist' },
+        ];
+
+  const timezones = config?.login?.timezones?.length
+    ? config.login.timezones
+    : [{ value: '', label: 'Select timezone (optional)' }];
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -75,7 +83,7 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
     }
     
     if (!formData.academicStage) {
-      newErrors.academicStage = 'Please select your academic stage';
+      newErrors.academicStage = 'Please select your cybersecurity knowledge level';
     }
     
     setErrors(newErrors);
@@ -140,7 +148,7 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
         {/* Header */}
         <div className="signup-header">
           <div className="logo-container">
-            <BookOpen className="logo-icon" />
+            <Shield className="logo-icon" />
           </div>
           <h1 className="signup-title">Join Our Community</h1>
           <p className="signup-subtitle">
@@ -285,13 +293,13 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
               </div>
             </div>
 
-            {/* Academic Stage */}
+            {/* Cybersecurity knowledge level */}
             <div className="form-group">
               <label htmlFor="academicStage" className="form-label">
-                Academic Stage
+                Cybersecurity knowledge level
               </label>
               <div className="input-container">
-                <GraduationCap className="input-icon" />
+                <Shield className="input-icon" />
                 <select
                   id="academicStage"
                   name="academicStage"
@@ -300,7 +308,7 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
                   className={`form-select ${errors.academicStage ? 'error' : ''}`}
                   disabled={isLoading}
                 >
-                  {academicStages.map(stage => (
+                  {knowledgeLevels.map(stage => (
                     <option key={stage.value} value={stage.value}>
                       {stage.label}
                     </option>
@@ -312,23 +320,27 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
               )}
             </div>
 
-            {/* Research Area (Optional) */}
+            {/* Time zone (optional) */}
             <div className="form-group">
               <label htmlFor="researchArea" className="form-label">
-                Research Area <span className="optional">(Optional)</span>
+                Time zone <span className="optional">(Optional)</span>
               </label>
               <div className="input-container">
-                <BookOpen className="input-icon" />
-                <input
-                  type="text"
+                <Globe className="input-icon" />
+                <select
                   id="researchArea"
                   name="researchArea"
                   value={formData.researchArea}
                   onChange={handleInputChange}
-                  className="form-input"
-                  placeholder="e.g., Computer Science, Biology, Psychology..."
+                  className="form-select"
                   disabled={isLoading}
-                />
+                >
+                  {timezones.map(tz => (
+                    <option key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 

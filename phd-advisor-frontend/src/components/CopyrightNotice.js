@@ -22,7 +22,7 @@ const CopyrightNotice = ({ variant = 'footer', className = '' }) => {
           Neon.ai
         </a>
       )}
-      , {'\u00A9 '}University of Colorado Boulder. All rights reserved.{' '}
+      . All rights reserved.{' '}
       <a
         href="https://www.neon.ai/contact"
         target="_blank"

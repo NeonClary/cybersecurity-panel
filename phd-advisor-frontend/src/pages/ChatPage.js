@@ -1,28 +1,31 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-
-import { Home, MessageCircle, Reply, X, Sparkles, Users, Settings2, FileText, Menu, HelpCircle } from 'lucide-react';
-
+import { MessageCircle, Reply, X, Sparkles, Users, Settings2, FileText, HelpCircle } from 'lucide-react';
 import EnhancedChatInput from '../components/EnhancedChatInput';
 import MessageBubble from '../components/MessageBubble';
 import ThinkingIndicator from '../components/ThinkingIndicator';
 import SuggestionsPanel from '../components/SuggestionsPanel';
-import ThemeToggle from '../components/ThemeToggle';
-import ProviderDropdown from '../components/ProviderDropdown';
+import AppHeader from '../components/AppHeader';
+import AdvisorStatusDropdown from '../components/AdvisorStatusDropdown';
 import ExportButton from '../components/ExportButton';
 import Sidebar from '../components/Sidebar';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/ChatPage.css';
 import '../styles/EnhancedChatInput.css';
-import AdvisorStatusDropdown from '../components/AdvisorStatusDropdown';
 import AdvisorCarousel from '../components/AdvisorCarousel';
-import OnboardingTour from '../components/OnboardingTour';
+import OnboardingChat from '../components/OnboardingChat';
+import ProfileWalkthrough from '../components/ProfileWalkthrough';
+import ClearDataModal from '../components/ClearDataModal';
+import AccountModal from '../components/AccountModal';
 
-const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSignOut, onUserUpdate }) => {
+const ACTIVE_ADVISORS_STORAGE_KEY = 'cybersecurityActiveAdvisorIds';
+
+const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSignOut }) => {
   const { config, advisors, getAdvisorColors } = useAppConfig();
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingAdvisors, setThinkingAdvisors] = useState([]);
+  const [activeAdvisorIds, setActiveAdvisorIds] = useState([]);
   const [collectedInfo, setCollectedInfo] = useState({});
   const [replyingTo, setReplyingTo] = useState(null);
   const [currentProvider, setCurrentProvider] = useState('gemini');
@@ -38,7 +41,97 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSig
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
 
-  
+  const [userAvatarId, setUserAvatarId] = useState(
+    () => localStorage.getItem('userAvatarId') || (user?.avatarId ?? null)
+  );
+  const avatarOptions = config?.app?.user_avatars || [];
+
+  const handleAvatarChange = async (id) => {
+    setUserAvatarId(id);
+    localStorage.setItem('userAvatarId', id);
+    try {
+      await fetch(`${process.env.REACT_APP_API_URL}/auth/me`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarId: id }),
+      });
+    } catch (e) {
+      console.error('Failed to save avatar:', e);
+    }
+  };
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [showProfileForm, setShowProfileForm] = useState(false);
+  const [showClearData, setShowClearData] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [userProfile, setUserProfile] = useState(null);
+
+  const loadProfile = async () => {
+    try {
+      const resp = await fetch(`${process.env.REACT_APP_API_URL}/api/users/me/profile`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (resp.ok) setUserProfile(await resp.json());
+    } catch (e) {
+      /* ignore */
+    }
+  };
+
+  useEffect(() => {
+    if (authToken) loadProfile();
+  }, [authToken]);
+
+  useEffect(() => {
+    const allIds = Object.keys(advisors || {});
+    if (allIds.length === 0) return;
+
+    setActiveAdvisorIds((prev) => {
+      let next = prev.filter((id) => allIds.includes(id));
+      if (next.length === 0) {
+        try {
+          const stored = JSON.parse(localStorage.getItem(ACTIVE_ADVISORS_STORAGE_KEY) || 'null');
+          if (Array.isArray(stored)) {
+            const valid = stored.filter((id) => allIds.includes(id));
+            if (valid.length > 0) next = valid;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      if (next.length === 0) next = [...allIds];
+      if (
+        prev.length === next.length &&
+        prev.every((id, index) => id === next[index])
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [advisors]);
+
+  const persistActiveAdvisorIds = (ids) => {
+    localStorage.setItem(ACTIVE_ADVISORS_STORAGE_KEY, JSON.stringify(ids));
+  };
+
+  const handleSetActiveAdvisors = (ids) => {
+    setActiveAdvisorIds(ids);
+    persistActiveAdvisorIds(ids);
+  };
+
+  const handleToggleAdvisor = (id) => {
+    setActiveAdvisorIds((prev) => {
+      const set = new Set(prev);
+      if (set.has(id)) {
+        if (set.size <= 1) return prev;
+        set.delete(id);
+      } else {
+        set.add(id);
+      }
+      const next = Array.from(set);
+      persistActiveAdvisorIds(next);
+      return next;
+    });
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -215,19 +308,20 @@ const loadChatSession = async (sessionId) => {
   }
 };
 
-// Save a message to the current session
-const saveMessageToSession = async (message) => {
-  if (!currentSessionId || !authToken) return;
+// Save a message to the current session (optional sessionId when state is not updated yet)
+const saveMessageToSession = async (message, sessionIdOverride) => {
+  const sid = sessionIdOverride || currentSessionId;
+  if (!sid || !authToken) return;
 
   try {
-    await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/${currentSessionId}/messages`, {
+    await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/${sid}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${authToken}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        session_id: currentSessionId,
+        session_id: sid,
         message: {
           ...message,
           timestamp: message.timestamp.toISOString()
@@ -395,6 +489,10 @@ const handleNewChat = async (sessionId = null) => {
       }
     }
 
+    saveMessageToSession(userMessage, sessionId).catch(err =>
+      console.error('Failed to persist user message:', err)
+    );
+
     // Update session title if this is the first message and title is generic
     if (messages.length === 0 && currentSessionTitle.includes('Chat ')) {
       const newTitle = inputMessage.length > 30 
@@ -405,6 +503,14 @@ const handleNewChat = async (sessionId = null) => {
 
     // Set loading state
     setIsLoading(true);
+    const advisorsForRequest = activeAdvisorIds.length > 0
+      ? activeAdvisorIds
+      : Object.keys(advisors || {});
+    // Start with just the orchestrator's thinking bubble. The backend will
+    // emit a `progress { phase: 'selected', selected_advisors: [...] }` event
+    // naming the 3 advisors it picked, and that handler will add their
+    // ThinkingIndicators. This prevents the brief flash of thinking indicators
+    // for every advisor in the active pool before ranking has run.
     setThinkingAdvisors(['system']);
 
     try {
@@ -417,7 +523,8 @@ const handleNewChat = async (sessionId = null) => {
         body: JSON.stringify({
           user_input: inputMessage,
           response_length: 'medium',
-          chat_session_id: currentSessionId // Include current session ID
+          chat_session_id: sessionId,
+          active_advisors: advisorsForRequest,
         }),
       });
 
@@ -457,7 +564,7 @@ const handleNewChat = async (sessionId = null) => {
               };
               setMessages(prev => [...prev, msg]);
               setThinkingAdvisors(prev => prev.filter(a => a !== d.persona_id));
-              await saveMessageToSession(msg);
+              await saveMessageToSession(msg, sessionId);
               break;
             }
             case 'clarification':
@@ -470,6 +577,15 @@ const handleNewChat = async (sessionId = null) => {
               }]);
               break;
             case 'progress':
+              if (d.phase === 'selected' && Array.isArray(d.selected_advisors)) {
+                setThinkingAdvisors(prev => {
+                  const next = new Set(prev);
+                  next.add('system');
+                  d.selected_advisors.forEach(id => next.add(id));
+                  return Array.from(next);
+                });
+                break;
+              }
               if (d.phase === 'complete') {
                 break;
               }
@@ -753,94 +869,60 @@ const handleNewChat = async (sessionId = null) => {
   const chatPlaceholder = config?.chat_page?.placeholder || "Ask your advisors anything...";
 
   return (
-    <OnboardingTour>
     <div className="chat-page-with-sidebar">
       {/* Sidebar Component */}
-      <Sidebar
+      <Sidebar 
         user={user}
         currentSessionId={currentSessionId}
         onSelectSession={handleSelectSession}
         onNewChat={handleNewChat}
         onCurrentSessionDeleted={handleCurrentSessionDeleted}
         onSignOut={onSignOut}
-        onUserUpdate={onUserUpdate}
         authToken={authToken}
         onSidebarToggle={handleSidebarToggle}
         isMobileOpen={isMobileMenuOpen}
         onMobileToggle={setIsMobileMenuOpen}
         onNavigateToCanvas={onNavigateToCanvas}
         refreshTrigger={sidebarRefreshTrigger}
+        userAvatarId={userAvatarId}
+        onAvatarChange={handleAvatarChange}
+        onOpenProfile={() => setShowProfileForm(true)}
+        onOpenAccount={() => setShowAccount(true)}
+        onOpenClearData={() => setShowClearData(true)}
       />
       
       <div className={`main-chat-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="modern-chat-page">
-          {/* Floating Header */}
-          <div className="floating-header">
-            <div className="header-left">
-              <button 
-                className="mobile-menu-button"
-                onClick={handleMobileMenuToggle}
-              >
-                <Menu size={20} />
-              </button>
-              <button onClick={onNavigateToHome} className="modern-home-btn">
-                <Home size={20} />
-              </button>
-              <div className="header-brand">
-                <div className="brand-icon">
-                  <Users size={24} />
-                </div>
-                <div className="brand-text">
-                  <h1>{config?.app?.title || 'Advisory'}</h1>
-                  <p>{config?.app?.subtitle || 'AI-Powered Guidance'}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="header-right">
-              <AdvisorStatusDropdown 
-                advisors={advisors}
-                thinkingAdvisors={thinkingAdvisors}
-                getAdvisorColors={getAdvisorColors}
-                isDark={isDark}
-              />
-              
-              <div className="header-controls">
-                {/* Add session title display */}
-                {currentSessionTitle && (
-                  <div className="session-title-display">
-                    <span>{currentSessionTitle}</span>
-                  </div>
-                )}
-                
-                {/* Export Button */}
-                <ExportButton
-                  hasMessages={hasConversationMessages}
-                  currentSessionId={currentSessionId}
-                  authToken={authToken}
-                />
-
-                {/* Provider Dropdown */}
-                <ProviderDropdown
-                  currentProvider={currentProvider}
-                  onProviderChange={handleProviderSwitch}
-                  isLoading={isProviderSwitching}
-                />
-
-                {/* Theme Toggle */}
-                <ThemeToggle />
-
-                {/* Help / User Guide */}
-                <button
-                  className="header-help-btn"
-                  onClick={() => window.dispatchEvent(new CustomEvent('open-user-guide'))}
-                  title="Open user guide"
-                >
-                  <HelpCircle />
-                </button>
-              </div>
-            </div>
-          </div>
+          <AppHeader
+            currentPage="chat"
+            onNavigateToHome={onNavigateToHome}
+            onNavigateToChat={() => {}}
+            onNavigateToCanvas={onNavigateToCanvas}
+            onMobileMenu={handleMobileMenuToggle}
+          >
+            <AdvisorStatusDropdown
+              advisors={advisors}
+              activeAdvisorIds={activeAdvisorIds}
+              onToggleAdvisor={handleToggleAdvisor}
+              onSetActiveAdvisors={handleSetActiveAdvisors}
+              thinkingAdvisors={thinkingAdvisors}
+              getAdvisorColors={getAdvisorColors}
+              isDark={isDark}
+            />
+            <ExportButton
+              hasMessages={hasConversationMessages}
+              currentSessionId={currentSessionId}
+              authToken={authToken}
+            />
+            {/* User guide button (from main) — slotted into AppHeader's children */}
+            <button
+              className="icon-btn header-help-btn"
+              onClick={() => window.dispatchEvent(new CustomEvent('open-user-guide'))}
+              title="Open user guide"
+            >
+              <HelpCircle size={18} />
+            </button>
+          </AppHeader>
 
           {/* Main Content */}
           <div className="chat-content">
@@ -1000,7 +1082,6 @@ const handleNewChat = async (sessionId = null) => {
         </div>
       </div>
     </div>
-    </OnboardingTour>
   );
 };
 

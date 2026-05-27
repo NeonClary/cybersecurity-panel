@@ -8,11 +8,6 @@ import CanvasPage from './pages/CanvasPage';
 import UserGuide from './components/UserGuide';
 import './styles/components.css';
 
-// Set REACT_APP_TESTING_ONBOARDING=true in your .env to force the onboarding
-// tour to run on every page load. Leave unset in production — tour will only
-// show once per user (localStorage).
-export const TESTING_ONBOARDING = process.env.REACT_APP_TESTING_ONBOARDING === 'true';
-
 function App() {
   const [currentView, setCurrentView] = useState('home');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -43,7 +38,10 @@ function App() {
     setCurrentView('auth');
   };
 
-  const navigateToCanvas = () => {
+  const navigateToCanvas = (canvasView) => {
+    if (['insights', 'workspace', 'deliverables'].includes(canvasView)) {
+      localStorage.setItem('canvas-view-v2', canvasView);
+    }
     setCurrentView('canvas');
   };
 
@@ -64,11 +62,6 @@ function App() {
     setCurrentView('chat');
   };
 
-  const handleUserUpdate = (updatedUser) => {
-    setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
-  };
-
   const handleSignOut = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
@@ -84,7 +77,9 @@ function App() {
         <div className="App">
           {currentView === 'home' && (
             <HomePage
+              onNavigateToHome={navigateToHome}
               onNavigateToChat={isAuthenticated ? navigateToChat : navigateToAuth}
+              onNavigateToCanvas={isAuthenticated ? navigateToCanvas : navigateToAuth}
               isAuthenticated={isAuthenticated}
             />
           )}
@@ -92,9 +87,10 @@ function App() {
             <AuthPage onAuthSuccess={handleAuthSuccess} />
           )}
           {currentView === 'canvas' && isAuthenticated && (
-            <CanvasPage 
+            <CanvasPage
               user={user}
               authToken={authToken}
+              onNavigateToHome={navigateToHome}
               onNavigateToChat={navigateToChat}
               onSignOut={handleSignOut}
             />
@@ -106,7 +102,6 @@ function App() {
               onNavigateToHome={navigateToHome}
               onNavigateToCanvas={navigateToCanvas}
               onSignOut={handleSignOut}
-              onUserUpdate={handleUserUpdate}
             />
           )}
           {/* Global help center — listens for the 'open-user-guide' event */}

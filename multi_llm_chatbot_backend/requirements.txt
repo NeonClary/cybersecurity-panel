@@ -6,6 +6,7 @@ python-multipart~=0.0
 # HTTP client for LLM APIs
 httpx~=0.28
 openai~=2.30
+huggingface-hub~=0.36
 
 # Document processing
 PyPDF2~=3.0
@@ -31,9 +32,11 @@ markdown~=3.0
 # PDF generation and export
 reportlab~=4.4
 
-# Database (MongoDB)
+# Persistence: SQLite via aiosqlite on the HF Storage Bucket mount (no MongoDB).
+# pymongo is kept *only* for bson.ObjectId and the DuplicateKeyError /
+# PyMongoError types that the existing routers and the SQLite shim raise.
+aiosqlite~=0.20
 pymongo~=4.16
-motor~=3.7
 
 # Authentication and security
 passlib[bcrypt]~=1.7

@@ -1,8 +1,29 @@
+import os
+from pathlib import Path
+
 import chromadb
 from chromadb.config import Settings
+
 from app.llm.embedding_client import get_embedding
 
-client = chromadb.PersistentClient(path="./chroma_storage")
+
+def _persona_knowledge_path() -> str:
+    """Resolve the persona-knowledge ChromaDB path.
+
+    Mirrors ``app.core.rag_manager._default_chroma_path``: when ``DATA_DIR``
+    is set (HF Spaces, any bucket-mounted deployment) the embeddings live
+    under ``${DATA_DIR}/chroma/persona_knowledge`` so they survive Space
+    rebuilds. Local installs keep the historical relative path.
+    """
+    data_dir = os.environ.get("DATA_DIR", "").strip()
+    if data_dir:
+        return str(Path(data_dir) / "chroma" / "persona_knowledge")
+    return "./chroma_storage"
+
+
+_path = _persona_knowledge_path()
+Path(_path).mkdir(parents=True, exist_ok=True)
+client = chromadb.PersistentClient(path=_path)
 
 collection = client.get_or_create_collection("persona_knowledge")
 
