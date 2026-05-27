@@ -1,11 +1,60 @@
-from typing import List
-from app.llm.llm_client import LLMClient
-from app.config import get_settings
+from typing import Dict, List, Optional
+
 import logging
 import re
-from typing import List, Dict
+
+from app.llm.llm_client import LLMClient
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+CONTEXT_SUMMARY_SYSTEM = (
+    "You are a concise summarizer. Condense the following conversation into a short summary "
+    "that preserves the key topics discussed, any conclusions reached, important facts shared, "
+    "and the overall tone. Keep it under 300 words. Write in third person narrative form."
+)
+
+
+def _conversation_role_label(role: str, persona_names: Optional[Dict[str, str]] = None) -> str:
+    if role == "user":
+        return "User"
+    if role == "assistant":
+        return "Assistant"
+    if persona_names and role in persona_names:
+        return persona_names[role]
+    return role.replace("_", " ").title()
+
+
+async def generate_conversation_context_summary(
+    messages: List[dict],
+    llm: LLMClient,
+    persona_names: Optional[Dict[str, str]] = None,
+    max_tokens: int = 1024,
+) -> str:
+    """Summarize chat history for LLM context when the transcript exceeds the token budget."""
+    transcript_lines = []
+    for msg in messages:
+        content = (msg.get("content") or "").strip()
+        if not content:
+            continue
+        label = _conversation_role_label(msg.get("role", "user"), persona_names)
+        transcript_lines.append(f"{label}: {content}")
+
+    if not transcript_lines:
+        return ""
+
+    transcript = "\n".join(transcript_lines)
+    try:
+        summary = await llm.generate(
+            system_prompt=CONTEXT_SUMMARY_SYSTEM,
+            context=[{"role": "user", "content": transcript}],
+            temperature=0.3,
+            max_tokens=max_tokens,
+        )
+        return (summary or "").strip()
+    except Exception as exc:
+        logger.error("Conversation context summary failed: %s", exc)
+        return ""
 
 async def generate_summary_from_messages(messages: List[dict], llm: LLMClient, max_tokens: int = 800) -> str:
     """

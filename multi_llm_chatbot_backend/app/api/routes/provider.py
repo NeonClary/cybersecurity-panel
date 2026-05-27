@@ -37,11 +37,12 @@ def create_llm_client(provider: str = None):
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
-# Initialize LLM and personas
-llm = create_llm_client(current_provider)
-DEFAULT_PERSONAS = get_default_personas(llm)
-for persona in DEFAULT_PERSONAS:
-    chat_orchestrator.register_persona(persona)
+# NOTE: Personas and `llm` are already created and registered by
+# app/core/bootstrap.py with the correct ResilientLLMClient wrapping
+# (primary vLLM + OpenAI fallback). Re-registering them here at module
+# import time replaces them with a raw vLLM client that lacks the
+# fallback wrapper AND lacks the api_username/api_key wiring, breaking
+# both auth and failover. Bootstrap already handles initial setup.
 
 class ProviderSwitch(BaseModel):
     provider: str
@@ -65,13 +66,19 @@ async def switch_provider(provider_data: ProviderSwitch):
         raise HTTPException(status_code=400, detail=f"Unknown provider: {provider_data.provider}. Available: {available_providers}")
 
     try:
+        from app.core.bootstrap import (
+            create_orchestrator_llm,
+            create_persona_llm,
+        )
+
         current_provider = provider_data.provider
-        new_llm = create_llm_client(current_provider)
+        new_llm = create_orchestrator_llm()
         llm = new_llm
 
         chat_orchestrator.llm_client = new_llm
 
-        new_personas = get_default_personas(new_llm)
+        persona_llm = create_persona_llm()
+        new_personas = get_default_personas(persona_llm)
         chat_orchestrator.personas.clear()
         for persona in new_personas:
             chat_orchestrator.register_persona(persona)

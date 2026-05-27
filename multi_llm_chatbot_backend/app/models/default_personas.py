@@ -6,9 +6,10 @@ The heavy persona definitions have moved into ``config.yaml`` (under the
 and exposes the same public API the rest of the codebase already relies on.
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from app.config import get_settings
+from app.llm.llm_client import LLMClient
 from app.models.persona import Persona
 
 
@@ -46,7 +47,7 @@ def _get_registry() -> dict:
 # Public API — unchanged signatures so existing callers keep working
 # ------------------------------------------------------------------
 
-def get_default_personas(llm) -> List[Persona]:
+def get_default_personas(llm: LLMClient) -> List[Persona]:
     """Return a list of :class:`Persona` objects wired to *llm*."""
     return [
         Persona(
@@ -54,6 +55,24 @@ def get_default_personas(llm) -> List[Persona]:
             name=data["name"],
             system_prompt=data["system_prompt"],
             llm=llm,
+            temperature=data.get("default_temperature", 5),
+        )
+        for pid, data in _get_registry().items()
+    ]
+
+
+def get_personas_with_llm_map(
+    default_llm: LLMClient,
+    llm_map: Optional[Dict[str, LLMClient]] = None,
+) -> List[Persona]:
+    if not llm_map:
+        return get_default_personas(default_llm)
+    return [
+        Persona(
+            id=pid,
+            name=data["name"],
+            system_prompt=data["system_prompt"],
+            llm=llm_map.get(pid, default_llm),
             temperature=data.get("default_temperature", 5),
         )
         for pid, data in _get_registry().items()

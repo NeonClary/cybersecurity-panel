@@ -22,6 +22,14 @@ class ConversationContext:
         self.document_chunks_count: int = 0  # Track total chunks in vector DB
         self.last_retrieval_stats: Dict[str, Any] = {}  # Last RAG retrieval info
 
+        # Cached LLM summary when conversation history exceeds token threshold
+        self.conversation_summary: Optional[str] = None
+        self.conversation_summary_message_count: int = 0
+
+    def clear_conversation_summary(self) -> None:
+        self.conversation_summary = None
+        self.conversation_summary_message_count = 0
+
     def append_message(self, role: str, content: str):
         """Add a message to the conversation history"""
         self.messages.append({
@@ -34,6 +42,7 @@ class ConversationContext:
     def clear_messages(self):
         """Clear conversation messages but keep document references"""
         self.messages.clear()
+        self.clear_conversation_summary()
         self.last_accessed = datetime.now()
 
     def get_messages_by_role(self, role: str) -> List[Dict[str, str]]:

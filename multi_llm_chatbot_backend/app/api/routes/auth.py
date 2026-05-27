@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from datetime import datetime, timedelta
-from app.models.user import UserCreate, UserLogin, User, Token, UserResponse
+from app.models.user import UserCreate, UserLogin, User, Token, UserResponse, UserUpdate
 from pydantic import BaseModel, model_validator
 from typing import Optional
 from app.core.auth import (
@@ -89,6 +89,20 @@ async def signup(user_data: UserCreate):
         # Insert user into database
         result = await db.users.insert_one(user.dict(by_alias=True))
         user.id = result.inserted_id
+
+        profile_seed: dict = {
+            "user_id": user.id,
+            "updated_at": datetime.utcnow(),
+        }
+        if user_data.academicStage:
+            profile_seed["knowledge_level"] = user_data.academicStage
+        if user_data.researchArea:
+            profile_seed["timezone"] = user_data.researchArea
+        await db.user_profiles.update_one(
+            {"user_id": user.id},
+            {"$set": profile_seed},
+            upsert=True,
+        )
         
         # Create access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -225,23 +239,40 @@ async def change_password(
 
 @router.patch("/me", response_model=UserResponse)
 async def update_profile(
-    body: UpdateProfileRequest,
+    body: UserUpdate,
     current_user: User = Depends(get_current_active_user),
 ):
-    """
-    Update the authenticated user's profile fields.
-    @param body: UpdateProfileRequest with optional firstName and lastName
-    @param current_user: Authenticated user from dependency injection
-    @return: UserResponse with the updated profile information
-    """
+    """Update account fields (name, email, avatar, signup preferences)."""
     try:
-        updates = {}
-        if body.first_name is not None:
-            updates["firstName"] = body.first_name
-        if body.last_name is not None:
-            updates["lastName"] = body.last_name
         db = get_database()
+        updates = {k: v for k, v in body.dict().items() if v is not None}
+        if body.firstName is not None:
+            updates["firstName"] = body.firstName.strip()
+        if body.lastName is not None:
+            updates["lastName"] = body.lastName.strip()
+        if not updates:
+            return create_user_response(current_user)
+
+        if "email" in updates and updates["email"] != current_user.email:
+            existing = await get_user_by_email(updates["email"])
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already in use",
+                )
+
         await db.users.update_one({"_id": current_user.id}, {"$set": updates})
+        profile_sync: dict = {"updated_at": datetime.utcnow()}
+        if body.academicStage is not None:
+            profile_sync["knowledge_level"] = body.academicStage
+        if body.researchArea is not None:
+            profile_sync["timezone"] = body.researchArea
+        if len(profile_sync) > 1:
+            await db.user_profiles.update_one(
+                {"user_id": current_user.id},
+                {"$set": profile_sync, "$setOnInsert": {"user_id": current_user.id}},
+                upsert=True,
+            )
         updated_user = await db.users.find_one({"_id": current_user.id})
         return create_user_response(User(**updated_user))
 

@@ -95,7 +95,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Inactive user"
         )
-    
     return user
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)) -> User:
@@ -113,6 +112,7 @@ def create_user_response(user: User) -> UserResponse:
         email=user.email,
         academicStage=user.academicStage,
         researchArea=user.researchArea,
+        avatarId=user.avatarId,
         created_at=user.created_at,
         last_login=user.last_login
     )
