@@ -133,6 +133,19 @@
   background: var(--bg-gradient);
 }
 
+/* The landing page has no tabs or hamburger, so the space-saving rules that
+   hide the header brand on Chat/Canvas would leave its header empty. Keep the
+   brand visible at every width here. */
+.homepage .header-left .header-brand {
+  display: flex !important;
+}
+.homepage .app-header .brand-text {
+  display: block !important;
+}
+.homepage .app-header .brand-text p {
+  display: block !important;
+}
+
 .header {
   background-color: var(--bg-primary);
   box-shadow: var(--shadow-sm);
