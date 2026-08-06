@@ -145,14 +145,19 @@ class ContextManager:
         Format messages for vLLM's OpenAI-compatible API.
         Normalizes custom persona roles to 'assistant' since the API
         only accepts system/user/assistant.
+
+        System messages in the context are PRESERVED: the orchestrator puts
+        session context (documents, user profile, knowledge summary, rolling
+        conversation summary) into a leading system message, and dropping it
+        here silently blinded the default vLLM path to all of it.
         """
-        formatted = [{"role": "system", "content": system_prompt}]
+        formatted = []
+        if system_prompt:
+            formatted.append({"role": "system", "content": system_prompt})
         for message in messages:
             role = message["role"]
             content = message["content"]
-            if role == "system":
-                continue
-            if role not in ("user", "assistant"):
+            if role not in ("system", "user", "assistant"):
                 content = f"[{role.title()} Advisor]: {content}"
                 role = "assistant"
             formatted.append({"role": role, "content": content})

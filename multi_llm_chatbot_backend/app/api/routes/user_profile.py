@@ -185,6 +185,10 @@ async def clear_user_data(
     if req.profile:
         await db.user_profiles.delete_many({"user_id": current_user.id})
         await db.onboarding_conversations.delete_many({"user_id": current_user.id})
+        # "Profile" from the user's point of view includes everything the
+        # panel knows about them — the About You facts and generated summaries.
+        await db.user_facts.delete_many({"user_id": current_user.id})
+        await db.user_summaries.delete_many({"user_id": current_user.id})
         cleared.append("profile")
 
     if req.chats:
@@ -195,6 +199,9 @@ async def clear_user_data(
         cleared.append(f"chats ({result.modified_count})")
 
     if req.canvas:
+        # Canvas docs exist with both ObjectId and string user_id depending on
+        # which code path created them (canvas_manager vs guest seed) — clear both.
+        await db.phd_canvases.delete_many({"user_id": current_user.id})
         await db.phd_canvases.delete_many({"user_id": str(current_user.id)})
         cleared.append("canvas")
 

@@ -112,7 +112,7 @@ const AboutYouModal = ({
   const [newFact, setNewFact] = useState({ category: 'person', key: '', value: '' });
   const [adding, setAdding] = useState(false);
 
-  const apiUrl = process.env.REACT_APP_API_URL;
+  const apiUrl = process.env.REACT_APP_API_URL || '';
   const mouseDownOnOverlay = useRef(false);
 
   const handleOverlayMouseDown = (e) => {

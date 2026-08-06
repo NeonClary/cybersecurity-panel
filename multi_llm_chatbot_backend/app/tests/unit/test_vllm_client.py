@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from openai import APIConnectionError, APIStatusError
 
+from app.core.context_manager import ContextManager
 from app.llm.llm_client import ToolCallResult
 from app.llm.improved_vllm_client import ImprovedVllmClient
 
@@ -657,4 +658,40 @@ class TestVllmGenerateWithTools(unittest.TestCase):
         self.assertEqual(len(tool_msgs), 2)
         error_content = json.loads(tool_msgs[1]["content"])
         self.assertIn("error", error_content)
+
+
+class TestVllmContextFormatting(unittest.TestCase):
+    """Regression: the vLLM formatter must NOT drop system messages from the
+    context — the orchestrator delivers session context (documents, user
+    profile, knowledge summary) as a leading system message."""
+
+    def test_system_context_message_preserved(self):
+        cm = ContextManager()
+        context = [
+            {"role": "system", "content": "USER KNOWLEDGE SUMMARY: runs an 80-person firm"},
+            {"role": "user", "content": "What should we do first?"},
+        ]
+        formatted = cm._format_for_vllm(context, system_prompt="")
+        system_contents = [m["content"] for m in formatted if m["role"] == "system"]
+        self.assertTrue(
+            any("USER KNOWLEDGE SUMMARY" in c for c in system_contents),
+            "session-context system message was dropped on the vLLM path",
+        )
+
+    def test_no_empty_leading_system_message(self):
+        cm = ContextManager()
+        formatted = cm._format_for_vllm(
+            [{"role": "user", "content": "Hi"}], system_prompt=""
+        )
+        self.assertTrue(all(m["content"] for m in formatted))
+
+    def test_custom_persona_roles_normalized(self):
+        cm = ContextManager()
+        formatted = cm._format_for_vllm(
+            [{"role": "incident_responder", "content": "Isolate the host."}],
+            system_prompt="You are helpful.",
+        )
+        self.assertEqual(formatted[0], {"role": "system", "content": "You are helpful."})
+        self.assertEqual(formatted[1]["role"], "assistant")
+        self.assertIn("Isolate the host.", formatted[1]["content"])
 
