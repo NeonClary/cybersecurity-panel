@@ -171,10 +171,13 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
         
         console.log('MongoDB session created:', newSession.id);
         return newSession.id;
-      } else {
-        console.error('Failed to create new session');
-        return null;
       }
+
+      console.error('Failed to create new session', response.status);
+      if (response.status === 401 && typeof onSignOut === 'function') {
+        onSignOut();
+      }
+      return null;
     } catch (error) {
       console.error('Error creating new session:', error);
       return null;
@@ -416,6 +419,12 @@ const handleNewChat = async (sessionId = null) => {
       sessionId = await createNewSession(inputMessage);
       if (!sessionId) {
         console.error('Failed to create session');
+        setMessages(prev => [...prev, {
+          id: generateMessageId(),
+          type: 'error',
+          content: 'Could not start a chat session. Your sign-in may have expired — please sign in again (or Explore as guest).',
+          timestamp: new Date(),
+        }]);
         return;
       }
     }
@@ -462,7 +471,20 @@ const handleNewChat = async (sessionId = null) => {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        if (response.status === 401 && typeof onSignOut === 'function') {
+          onSignOut();
+          throw new Error('Session expired. Please sign in again.');
+        }
+        let detail = `HTTP error! status: ${response.status}`;
+        try {
+          const errBody = await response.json();
+          if (errBody?.detail) {
+            detail = typeof errBody.detail === 'string'
+              ? errBody.detail
+              : JSON.stringify(errBody.detail);
+          }
+        } catch { /* keep status text */ }
+        throw new Error(detail);
       }
 
       const reader = response.body.getReader();
@@ -479,7 +501,13 @@ const handleNewChat = async (sessionId = null) => {
 
         for (const line of lines) {
           if (!line.trim()) continue;
-          const payload = JSON.parse(line);
+          let payload;
+          try {
+            payload = JSON.parse(line);
+          } catch (parseErr) {
+            console.error('Failed to parse chat-stream line:', line, parseErr);
+            continue;
+          }
 
           const d = payload.data || {};
 
@@ -601,6 +629,7 @@ const handleNewChat = async (sessionId = null) => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}`,
       },
       body: JSON.stringify({
         user_input: inputMessage,
@@ -680,6 +709,7 @@ const handleNewChat = async (sessionId = null) => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           user_input: expandPrompt,

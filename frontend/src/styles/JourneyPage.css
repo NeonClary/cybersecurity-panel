@@ -251,33 +251,39 @@
 
 .journey-track-card {
   text-align: left;
-  border: 1px solid var(--border-primary, #e2e8f0);
+  border: 1px solid var(--border-primary, #DDD5C8);
   border-radius: 12px;
   padding: 0.9rem 1rem;
-  background: var(--bg-secondary, #fff);
+  background: var(--card-bg, #FFFFFF);
+  box-shadow: var(--shadow-sm);
   cursor: pointer;
   min-height: 44px;
+  color: var(--text-primary);
 }
 
 .journey-track-card.active {
-  border-color: var(--accent, #0f766e);
-  box-shadow: inset 0 0 0 1px var(--accent, #0f766e);
+  border-color: var(--accent-primary, #5558E3);
+  box-shadow: inset 0 0 0 1px var(--accent-primary, #5558E3), var(--shadow-sm);
 }
 
 .journey-track-card strong {
   display: block;
   margin-bottom: 0.35rem;
+  font-size: var(--font-section, 18px);
+  color: var(--text-primary);
 }
 
 .journey-track-card span {
-  font-size: 0.85rem;
-  color: var(--text-secondary, #64748b);
+  font-size: var(--font-small, 13px);
+  color: var(--text-secondary, #4A453E);
 }
 
 .journey-level {
   margin: 1.25rem 0;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border-primary, #e2e8f0);
+  padding: 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-muted, #E8E1D6);
+  background: var(--bg-secondary, #F3EEE6);
 }
 
 .journey-level ul {

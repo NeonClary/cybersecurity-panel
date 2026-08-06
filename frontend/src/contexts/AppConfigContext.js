@@ -125,16 +125,9 @@ export const AppConfigProvider = ({ children }) => {
     localStorage.setItem('myCustomAvatars', JSON.stringify(next));
   };
 
-  // Inject the primary colour as a CSS custom property on <html> so it is
-  // available everywhere without prop-drilling.
+  // Keep document title in sync; do not override theme accent tokens —
+  // cream/dark palettes live in components.css.
   useEffect(() => {
-    if (config?.app?.primary_color) {
-      document.documentElement.style.setProperty(
-        '--accent-primary',
-        config.app.primary_color
-      );
-    }
-    // Also update the <title> tag dynamically
     if (config?.app?.title) {
       document.title = config.app.title;
     }

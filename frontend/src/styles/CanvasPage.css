@@ -158,8 +158,6 @@
   top: 0;
   z-index: 100;
   background: var(--header-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--header-border);
   padding: 12px 24px;
   display: grid;
@@ -2176,32 +2174,49 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
 }
 
 /* --- Workspace: widget groups --- */
-.canvas-sidebar-menu .csm-group { display: flex; flex-direction: column; gap: 1px; margin-bottom: 4px; }
+.canvas-sidebar-menu .csm-group { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
 .canvas-sidebar-menu .csm-group-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 8px 10px;
   background: transparent;
   border: none;
-  border-radius: 5px;
+  border-radius: 8px;
   font-family: inherit;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  font-weight: 600;
-  color: var(--text-tertiary, #9CA3AF);
+  font-size: 13px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 700;
+  color: var(--text-primary, #1A1714);
   cursor: pointer;
 }
-.canvas-sidebar-menu .csm-group-head:hover { background: var(--bg-secondary, #f3f4f6); color: var(--text-secondary, #6b7280); }
-.dark .canvas-sidebar-menu .csm-group-head:hover { background: var(--bg-secondary-dark, #374151); }
+.canvas-sidebar-menu .csm-group-head:hover,
+.canvas-sidebar-menu .csm-group-head[aria-expanded="true"],
+.canvas-sidebar-menu .csm-group.open > .csm-group-head {
+  background: var(--bg-tertiary, #EBE4D8);
+  color: var(--text-primary);
+}
+.dark .canvas-sidebar-menu .csm-group-head:hover,
+[data-theme="dark"] .canvas-sidebar-menu .csm-group-head:hover {
+  background: var(--bg-tertiary);
+}
 .canvas-sidebar-menu .csm-group-name { flex: 1; text-align: left; }
 .canvas-sidebar-menu .csm-group-count {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 10px;
-  color: var(--text-tertiary, #9CA3AF);
+  font-size: 11px;
+  color: var(--text-muted, #6A645C);
 }
-.canvas-sidebar-menu .csm-group-body { display: flex; flex-direction: column; gap: 1px; padding: 2px 0 6px 8px; }
+.canvas-sidebar-menu .csm-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 4px 6px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--bg-secondary, #F3EEE6);
+  border: 1px solid var(--border-muted, #E8E1D6);
+}
 
 /* --- Deliverables: project blocks --- */
 .canvas-sidebar-menu .csm-project {

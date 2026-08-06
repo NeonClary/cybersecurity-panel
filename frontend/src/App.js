@@ -16,21 +16,57 @@ function App() {
   const [authToken, setAuthToken] = useState(null);
 
   useEffect(() => {
+    let cancelled = false;
     const token = localStorage.getItem('authToken');
     const userData = localStorage.getItem('user');
 
-    if (token && userData) {
-      try {
-        const parsedUser = JSON.parse(userData);
-        setAuthToken(token);
-        setUser(parsedUser);
-        setIsAuthenticated(true);
-        setCurrentView('chat');
-      } catch (error) {
-        localStorage.removeItem('authToken');
-        localStorage.removeItem('user');
-      }
+    if (!token || !userData) return undefined;
+
+    let parsedUser;
+    try {
+      parsedUser = JSON.parse(userData);
+    } catch {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('user');
+      return undefined;
     }
+
+    // Restore UI immediately, then prove the JWT still works. Stale tokens
+    // (rotated secret, deleted guest, etc.) previously left the user in chat
+    // with every API call 401'ing and send silently failing.
+    setAuthToken(token);
+    setUser(parsedUser);
+    setIsAuthenticated(true);
+    setCurrentView('chat');
+
+    (async () => {
+      try {
+        const apiUrl = process.env.REACT_APP_API_URL || '';
+        const resp = await fetch(`${apiUrl}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (cancelled) return;
+        if (!resp.ok) {
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('user');
+          setUser(null);
+          setAuthToken(null);
+          setIsAuthenticated(false);
+          setCurrentView('home');
+          return;
+        }
+        const me = await resp.json();
+        if (cancelled || !me) return;
+        setUser(me);
+        try {
+          localStorage.setItem('user', JSON.stringify(me));
+        } catch { /* ignore quota */ }
+      } catch {
+        // Network blip — keep optimistic session; next API call will re-check.
+      }
+    })();
+
+    return () => { cancelled = true; };
   }, []);
 
   const navigateToAuth = () => {

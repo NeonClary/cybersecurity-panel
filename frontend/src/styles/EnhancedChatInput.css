@@ -208,27 +208,25 @@
 
 /* Main Input Box */
 .floating-input-box {
-  background: var(--bg-primary);
+  background: var(--card-bg, #FFFFFF);
   border: 1px solid var(--border-primary);
   border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-md);
   overflow: hidden;
   transition: all 0.2s ease;
 }
 
 [data-theme="dark"] .floating-input-box {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--shadow-md);
 }
 
 .floating-input-box:focus-within {
   border-color: var(--accent-primary);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16), 0 0 0 1px var(--accent-primary);
+  box-shadow: var(--shadow-md), var(--input-focus-shadow);
 }
 
 [data-theme="dark"] .floating-input-box:focus-within {
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--accent-primary);
+  box-shadow: var(--shadow-md), var(--input-focus-shadow);
 }
 
 /* Text Input Row */
@@ -364,11 +362,11 @@
   flex-shrink: 0;
 }
 
-/* Enabled state - clean approach */
+/* Enabled state — sole high-chroma primary CTA */
 .send-button.enabled {
-  background: #3B82F6;
+  background: var(--accent-gradient);
   color: #FFFFFF;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Icon styling - use currentColor for better inheritance */
@@ -379,14 +377,14 @@
 }
 
 .send-button.enabled:hover {
-  background: #2563EB;
+  filter: brightness(1.05);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+  box-shadow: var(--shadow-md);
 }
 
 .send-button.enabled:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Disabled state */

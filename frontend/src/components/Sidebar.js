@@ -21,6 +21,7 @@ import {
   Moon,
   Monitor,
   Check,
+  Shield,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
@@ -233,6 +234,19 @@ const Sidebar = ({
         <div className="sidebar-header">
           {!isCollapsed && (
             <>
+              <div className="sidebar-brand" aria-label={config?.app?.title || 'Cybersecurity Advisor'}>
+                <div className="sidebar-brand-mark" aria-hidden="true">
+                  <Shield size={18} />
+                </div>
+                <div className="sidebar-brand-text">
+                  <span className="sidebar-brand-title">
+                    {config?.app?.title || 'Cybersecurity Advisor'}
+                  </span>
+                  {config?.app?.subtitle ? (
+                    <span className="sidebar-brand-subtitle">{config.app.subtitle}</span>
+                  ) : null}
+                </div>
+              </div>
               <div className="user-section">
                 <div className="user-info">
                   <div
@@ -358,6 +372,13 @@ const Sidebar = ({
 
           {isCollapsed && (
             <div className="collapsed-header">
+              <div
+                className="sidebar-brand-mark collapsed-brand-mark"
+                title={config?.app?.title || 'Cybersecurity Advisor'}
+                aria-label={config?.app?.title || 'Cybersecurity Advisor'}
+              >
+                <Shield size={18} />
+              </div>
               {/* Toggle button replaces user avatar when collapsed */}
               <button 
                 className="collapsed-toggle-avatar"

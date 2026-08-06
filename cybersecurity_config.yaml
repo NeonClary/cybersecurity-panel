@@ -5,7 +5,7 @@
 app:
   title: "Cybersecurity Advisor"
   subtitle: "AI-Powered Security Guidance"
-  primary_color: "#0F172A"
+  primary_color: "#5558E3"
   logo_icon: "Shield"
   footer_text: "© 2026 Neon AI. All rights reserved."
   user_avatars:
