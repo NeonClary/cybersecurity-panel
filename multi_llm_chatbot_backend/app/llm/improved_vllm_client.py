@@ -112,7 +112,21 @@ class ImprovedVllmClient(LLMClient):
             if response_mime_type == "application/json":
                 create_kwargs["response_format"] = {"type": "json_object"}
 
-            response = await self.client.chat.completions.create(**create_kwargs)
+            try:
+                response = await self.client.chat.completions.create(**create_kwargs)
+            except APIStatusError as e:
+                # Stale model_id in config is common after Neon revisions the
+                # loaded checkpoint — rediscover and retry once in-request.
+                if e.status_code == 404:
+                    logger.info(
+                        "Model %r not found (404); rediscovering from endpoint",
+                        self.model_name,
+                    )
+                    await self.refresh_model()
+                    create_kwargs["model"] = self.model_name
+                    response = await self.client.chat.completions.create(**create_kwargs)
+                else:
+                    raise
 
             text = response.choices[0].message.content.strip()
             return self._clean_response(text)
@@ -123,7 +137,7 @@ class ImprovedVllmClient(LLMClient):
         except APIStatusError as e:
             logger.error(f"vLLM API error: {e.status_code} - {e.message}")
             if e.status_code == 404:
-                logger.info("Model not found, will re-discover on next request")
+                logger.info("Model not found after rediscovery; clearing cached name")
                 self.model_name = None
             return "The AI service encountered an error. Please try again."
         except Exception as e:

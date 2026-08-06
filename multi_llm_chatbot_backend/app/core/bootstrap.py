@@ -36,40 +36,49 @@ def _load_shared_env_var(name: str) -> str:
     return ""
 
 
-def _vllm_api_username() -> str:
-    """Optional HTTP Basic auth username for the vLLM endpoint.
-
-    The Neon BrainForge/Security endpoint at 4090-x1-3 requires HTTP Basic
-    auth using HANA_USERNAME_KLATCHAT / HANA_KLATCHAT_PASSWORD from
-    ~/.secrets/shared.env. We allow explicit override via api_username
-    in config or VLLM_API_USERNAME env var, falling back to the shared
-    HANA_USERNAME_KLATCHAT entry.
-    """
-    return (
-        settings.llm.vllm.api_username
-        or os.getenv("VLLM_API_USERNAME", "")
-        or _load_shared_env_var("HANA_USERNAME_KLATCHAT")
-    )
-
-
-def _vllm_api_key() -> str:
-    """vLLM key/password. If api_username is set (HANA Basic auth), prefer
-    HANA_KLATCHAT_PASSWORD; otherwise use the generic VLLM_API_KEY Bearer
-    token. This matches the dual-auth nature of the Neon endpoints.
-    """
-    if _vllm_api_username():
-        return (
-            settings.llm.vllm.api_key
-            or os.getenv("HANA_KLATCHAT_PASSWORD", "")
-            or _load_shared_env_var("HANA_KLATCHAT_PASSWORD")
-            or os.getenv("VLLM_API_KEY", "")
-            or _load_shared_env_var("VLLM_API_KEY")
-        )
+def _vllm_bearer_key() -> str:
+    """Bearer token for Neon vLLM (preferred auth for 4090-x1-3)."""
     return (
         settings.llm.vllm.api_key
         or os.getenv("VLLM_API_KEY", "")
         or _load_shared_env_var("VLLM_API_KEY")
     )
+
+
+def _vllm_api_username() -> str:
+    """Optional HTTP Basic auth username for the vLLM endpoint.
+
+    Prefer Bearer ``VLLM_API_KEY`` when present — the current Neon
+    BrainForge/Security endpoint at 4090-x1-3 authenticates that way and
+    rejects HANA Basic. Only fall back to HANA_USERNAME_KLATCHAT when no
+    Bearer key is available. Explicit ``api_username`` / VLLM_API_USERNAME
+    still forces Basic.
+    """
+    explicit = (
+        settings.llm.vllm.api_username
+        or os.getenv("VLLM_API_USERNAME", "")
+    )
+    if explicit:
+        return explicit
+    if _vllm_bearer_key():
+        return ""
+    return _load_shared_env_var("HANA_USERNAME_KLATCHAT")
+
+
+def _vllm_api_key() -> str:
+    """vLLM key/password. Prefer Bearer ``VLLM_API_KEY``; only use
+    HANA_KLATCHAT_PASSWORD when Basic auth username is active and no
+    Bearer key is configured.
+    """
+    bearer = _vllm_bearer_key()
+    if _vllm_api_username():
+        if bearer:
+            return bearer
+        return (
+            os.getenv("HANA_KLATCHAT_PASSWORD", "")
+            or _load_shared_env_var("HANA_KLATCHAT_PASSWORD")
+        )
+    return bearer
 
 
 def _openai_api_key() -> str:

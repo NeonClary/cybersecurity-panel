@@ -233,11 +233,15 @@ class TestImprovedVllmClient(unittest.TestCase):
         )
         mock_response = MagicMock()
         mock_response.status_code = 404
-        client.client.chat.completions.create = AsyncMock(
-            side_effect=APIStatusError(
-                message="Model not found", response=mock_response, body=None,
-            )
+        not_found = APIStatusError(
+            message="Model not found", response=mock_response, body=None,
         )
+        mock_model = MagicMock()
+        mock_model.id = "still-missing"
+        client.client.models.list = AsyncMock(
+            return_value=MagicMock(data=[mock_model])
+        )
+        client.client.chat.completions.create = AsyncMock(side_effect=not_found)
 
         asyncio.run(client.generate(
             system_prompt="Test",
@@ -246,6 +250,34 @@ class TestImprovedVllmClient(unittest.TestCase):
             max_tokens=50,
         ))
         self.assertIsNone(client.model_name)
+
+    def test_generate_retries_after_404_with_discovered_model(self, MockAsyncOpenAI, mock_get_ctx):
+        client = ImprovedVllmClient(
+            api_url=FAKE_URL, api_key=FAKE_KEY, model_name="stale-model",
+        )
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        not_found = APIStatusError(
+            message="Model not found", response=mock_response, body=None,
+        )
+        mock_model = MagicMock()
+        mock_model.id = "fresh-model"
+        client.client.models.list = AsyncMock(
+            return_value=MagicMock(data=[mock_model])
+        )
+        client.client.chat.completions.create = AsyncMock(
+            side_effect=[not_found, _make_completion_mock("Recovered OK")]
+        )
+
+        result = asyncio.run(client.generate(
+            system_prompt="Test",
+            context=[{"role": "user", "content": "Hi"}],
+            temperature=0.5,
+            max_tokens=50,
+        ))
+        self.assertEqual(result, "Recovered OK")
+        self.assertEqual(client.model_name, "fresh-model")
+        self.assertEqual(client.client.chat.completions.create.call_count, 2)
 
     # ------------------------------------------------------------------
     # generate – response_format for JSON
