@@ -1,0 +1,135 @@
+.intake-panel {
+  max-width: 42rem;
+  margin: 2.5rem auto;
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+}
+
+.intake-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 999px;
+  background: var(--accent-soft, #ccfbf1);
+  color: var(--accent, #0f766e);
+  margin-bottom: 1rem;
+}
+
+.intake-greeting {
+  font-size: clamp(1.25rem, 2.5vw, 1.65rem);
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text-primary, #0f172a);
+  margin: 0 0 0.5rem;
+}
+
+.intake-sub {
+  margin: 0 0 1.25rem;
+  color: var(--text-secondary, #64748b);
+  font-size: 0.95rem;
+}
+
+.intake-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.intake-chip {
+  appearance: none;
+  border: 1px solid var(--border, #e2e8f0);
+  background: var(--surface, #fff);
+  color: var(--text-primary, #0f172a);
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-height: 44px;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
+}
+
+.intake-chip:hover,
+.intake-chip:focus-visible {
+  border-color: var(--accent, #0f766e);
+  background: var(--accent-soft, #f0fdfa);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.intake-chip--other {
+  border-style: dashed;
+}
+
+.intake-freetext {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  text-align: left;
+  margin-top: 0.5rem;
+}
+
+.intake-freetext textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 5rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border, #e2e8f0);
+  font: inherit;
+  background: var(--surface, #fff);
+  color: var(--text-primary, #0f172a);
+}
+
+.intake-submit {
+  align-self: flex-end;
+  min-height: 44px;
+  min-width: 6rem;
+  padding: 0.55rem 1.1rem;
+  border: none;
+  border-radius: 0.65rem;
+  background: var(--accent, #0f766e);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.intake-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+@media (max-width: 768px) {
+  .intake-panel {
+    margin: 1.25rem auto;
+    padding: 1.25rem 1rem;
+  }
+
+  .intake-chips {
+    flex-direction: column;
+  }
+
+  .intake-chip {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intake-chip {
+    transition: none;
+  }
+}

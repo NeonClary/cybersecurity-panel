@@ -1,6 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
-import { X, User as UserIcon, Lock, Trash2, AlertTriangle } from 'lucide-react';
+import {
+  X, User as UserIcon, Lock, Trash2, AlertTriangle, Activity, RefreshCw, Loader2,
+} from 'lucide-react';
 
 const overlay = {
   position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
@@ -21,6 +23,7 @@ const header = {
 const tabRow = {
   display: 'flex', gap: 4, padding: '12px 16px 0',
   borderBottom: '1px solid var(--border-primary)',
+  flexWrap: 'wrap',
 };
 
 const tabBtn = (active) => ({
@@ -54,13 +57,23 @@ const dangerBtn = {
   cursor: 'pointer', fontSize: 14, fontWeight: 500,
 };
 
-const SettingsModal = ({ user, authToken, onUserUpdate, onSignOut, onClose }) => {
-  const [activeTab, setActiveTab] = useState('profile');
+const statusColors = {
+  online: { bg: 'rgba(22,163,74,0.12)', color: '#16a34a', border: 'rgba(22,163,74,0.35)' },
+  unavailable: { bg: 'rgba(234,179,8,0.12)', color: '#ca8a04', border: 'rgba(234,179,8,0.35)' },
+  error: { bg: 'rgba(220,38,38,0.1)', color: '#dc2626', border: 'rgba(220,38,38,0.3)' },
+};
 
-  // Track where the mouse went DOWN so we don't close the modal when a user
-  // drags to select text inside an input and the mouseup happens outside the modal.
-  // (React's onClick fires on the common ancestor of down+up, which can be the
-  // overlay itself — causing accidental close on text selection.)
+const SettingsModal = ({
+  user,
+  authToken,
+  onUserUpdate,
+  onSignOut,
+  onClose,
+  initialTab = 'profile',
+  onModelStatusChange,
+}) => {
+  const [activeTab, setActiveTab] = useState(initialTab || 'profile');
+
   const mouseDownOnOverlay = useRef(false);
   const handleOverlayMouseDown = (e) => {
     mouseDownOnOverlay.current = e.target === e.currentTarget;
@@ -83,6 +96,10 @@ const SettingsModal = ({ user, authToken, onUserUpdate, onSignOut, onClose }) =>
   const [message, setMessage] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [modelStatus, setModelStatus] = useState(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState(null);
+
   const apiUrl = process.env.REACT_APP_API_URL;
 
   const extractError = (data, fallback) => {
@@ -91,6 +108,47 @@ const SettingsModal = ({ user, authToken, onUserUpdate, onSignOut, onClose }) =>
     if (Array.isArray(data.detail) && data.detail[0]?.msg) return data.detail[0].msg;
     return fallback;
   };
+
+  const onModelStatusChangeRef = useRef(onModelStatusChange);
+  onModelStatusChangeRef.current = onModelStatusChange;
+
+  const fetchModelStatus = useCallback(async (forceRefresh = false) => {
+    setStatusLoading(true);
+    setStatusError(null);
+    try {
+      const qs = forceRefresh ? '?refresh=true' : '';
+      const response = await fetch(`${apiUrl}/models/status${qs}`);
+      if (!response.ok) {
+        throw new Error(`Status request failed (${response.status})`);
+      }
+      const data = await response.json();
+      setModelStatus(data);
+      onModelStatusChangeRef.current?.(data);
+    } catch (err) {
+      console.warn('Model status check failed; keeping unfiltered provider list.', err);
+      setStatusError(err.message || 'Could not load model status.');
+      const failed = {
+        models: [],
+        online_providers: null,
+        check_failed: true,
+        error: err.message || 'Network error',
+      };
+      setModelStatus(failed);
+      onModelStatusChangeRef.current?.(failed);
+    } finally {
+      setStatusLoading(false);
+    }
+  }, [apiUrl]);
+
+  useEffect(() => {
+    if (activeTab === 'model-status') {
+      fetchModelStatus(false);
+    }
+  }, [activeTab, fetchModelStatus]);
+
+  useEffect(() => {
+    setActiveTab(initialTab || 'profile');
+  }, [initialTab]);
 
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
@@ -224,6 +282,11 @@ const SettingsModal = ({ user, authToken, onUserUpdate, onSignOut, onClose }) =>
     }`,
   });
 
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    setMessage(null);
+  };
+
   return ReactDOM.createPortal(
     <div style={overlay} onMouseDown={handleOverlayMouseDown} onMouseUp={handleOverlayMouseUp}>
       <div style={modal}>
@@ -235,14 +298,17 @@ const SettingsModal = ({ user, authToken, onUserUpdate, onSignOut, onClose }) =>
         </div>
 
         <div style={tabRow}>
-          <button style={tabBtn(activeTab === 'profile')} onClick={() => { setActiveTab('profile'); setMessage(null); }}>
+          <button style={tabBtn(activeTab === 'profile')} onClick={() => switchTab('profile')}>
             <UserIcon size={15} /> Profile
           </button>
-          <button style={tabBtn(activeTab === 'password')} onClick={() => { setActiveTab('password'); setMessage(null); }}>
+          <button style={tabBtn(activeTab === 'password')} onClick={() => switchTab('password')}>
             <Lock size={15} /> Password
           </button>
-          <button style={tabBtn(activeTab === 'danger')} onClick={() => { setActiveTab('danger'); setMessage(null); }}>
+          <button style={tabBtn(activeTab === 'danger')} onClick={() => switchTab('danger')}>
             <Trash2 size={15} /> Delete Account
+          </button>
+          <button style={tabBtn(activeTab === 'model-status')} onClick={() => switchTab('model-status')}>
+            <Activity size={15} /> Model Status
           </button>
         </div>
 
@@ -315,6 +381,106 @@ const SettingsModal = ({ user, authToken, onUserUpdate, onSignOut, onClose }) =>
                 {isSubmitting ? 'Deleting…' : 'Permanently Delete Account'}
               </button>
             </form>
+          )}
+
+          {activeTab === 'model-status' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  Probe each configured API with a tiny chat request.
+                  {modelStatus?.cached ? ' Showing cached results.' : null}
+                  {modelStatus?.checked_at ? (
+                    <span> Last checked: {new Date(modelStatus.checked_at).toLocaleString()}</span>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  style={{ ...primaryBtn, display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }}
+                  onClick={() => fetchModelStatus(true)}
+                  disabled={statusLoading}
+                >
+                  {statusLoading
+                    ? <Loader2 size={15} className="spinning" style={{ animation: 'spin 1s linear infinite' }} />
+                    : <RefreshCw size={15} />}
+                  Refresh
+                </button>
+              </div>
+
+              {statusError && (
+                <div style={messageStyle('error')}>
+                  Status check failed — provider list left unfiltered. {statusError}
+                </div>
+              )}
+
+              {modelStatus?.check_failed && !statusError && (
+                <div style={messageStyle('error')}>
+                  Status check failed — provider list left unfiltered.
+                  {modelStatus.error ? ` ${modelStatus.error}` : ''}
+                </div>
+              )}
+
+              {statusLoading && !modelStatus?.models?.length && (
+                <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Checking models…</div>
+              )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {(modelStatus?.models || []).map((m) => {
+                  const tone = statusColors[m.status] || statusColors.unavailable;
+                  return (
+                    <div
+                      key={m.id}
+                      style={{
+                        padding: '12px 14px',
+                        borderRadius: 10,
+                        border: `1px solid ${tone.border}`,
+                        background: 'var(--bg-secondary)',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
+                        <div>
+                          <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>
+                            {m.name}
+                            {m.model ? (
+                              <span style={{ fontWeight: 400, color: 'var(--text-secondary)', marginLeft: 8, fontSize: 12 }}>
+                                {m.model}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                            {m.provider}
+                            {typeof m.latency_ms === 'number' ? ` · ${m.latency_ms} ms` : ''}
+                          </div>
+                        </div>
+                        <span style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.03em',
+                          padding: '4px 8px',
+                          borderRadius: 6,
+                          background: tone.bg,
+                          color: tone.color,
+                          border: `1px solid ${tone.border}`,
+                        }}>
+                          {m.status}
+                        </span>
+                      </div>
+                      {m.status === 'error' && m.error && (
+                        <div style={{
+                          marginTop: 8,
+                          fontSize: 12,
+                          color: '#dc2626',
+                          wordBreak: 'break-word',
+                          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                        }}>
+                          {m.error}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>

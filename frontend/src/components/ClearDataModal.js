@@ -7,10 +7,11 @@ const ClearDataModal = ({ authToken, onClose, onDataCleared }) => {
   const [profile, setProfile] = useState(false);
   const [chats, setChats] = useState(false);
   const [canvas, setCanvas] = useState(false);
+  const [journey, setJourney] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [result, setResult] = useState(null);
 
-  const noneSelected = !profile && !chats && !canvas;
+  const noneSelected = !profile && !chats && !canvas && !journey;
 
   const handleClear = async () => {
     if (noneSelected) return;
@@ -22,12 +23,12 @@ const ClearDataModal = ({ authToken, onClose, onDataCleared }) => {
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ profile, chats, canvas }),
+        body: JSON.stringify({ profile, chats, canvas, journey }),
       });
       if (resp.ok) {
         const data = await resp.json();
         setResult(data.cleared);
-        if (onDataCleared) onDataCleared({ profile, chats, canvas });
+        if (onDataCleared) onDataCleared({ profile, chats, canvas, journey });
       } else {
         setResult(['Error clearing data']);
       }
@@ -144,6 +145,16 @@ const ClearDataModal = ({ authToken, onClose, onDataCleared }) => {
             <div style={{ fontWeight: 600, fontSize: 14 }}>Canvas</div>
             <div style={{ fontSize: 12, color: isDark ? '#9ca3af' : '#6b7280', marginTop: 2 }}>
               All collected insights and research notes.
+            </div>
+          </div>
+        </div>
+
+        <div onClick={() => setJourney(!journey)} style={checkRowActive(journey)}>
+          <div style={checkbox(journey)}>{journey && '✓'}</div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Security Journey</div>
+            <div style={{ fontSize: 12, color: isDark ? '#9ca3af' : '#6b7280', marginTop: 2 }}>
+              Track progress, checked items, and assessment history.
             </div>
           </div>
         </div>

@@ -171,6 +171,7 @@ class ClearDataRequest(BaseModel):
     profile: bool = False
     chats: bool = False
     canvas: bool = False
+    journey: bool = False
 
 
 @router.post("/users/me/clear-data")
@@ -196,5 +197,10 @@ async def clear_user_data(
     if req.canvas:
         await db.phd_canvases.delete_many({"user_id": str(current_user.id)})
         cleared.append("canvas")
+
+    if req.journey:
+        await db.goal_tracks.delete_many({"user_id": current_user.id})
+        await db.assessments.delete_many({"user_id": current_user.id})
+        cleared.append("journey")
 
     return {"cleared": cleared}

@@ -1,39 +1,110 @@
 # ---------------------------------------------------------------------------
-# Local-dev wrapper around the single-container HuggingFace Spaces image.
+# Docker Compose for Cybersecurity Panel
 #
-# This file used to spin up three services (FastAPI backend, CRA dev server,
-# MongoDB). The HF deployment shape (single-container, SQLite on the bucket)
-# is now also the local-dev shape — same image you push to the Space — so
-# this is a one-service compose with a named volume that emulates the HF
-# Storage Bucket mount.
+# Default (`docker compose up --build`): production-shaped single container
+# (same as HuggingFace Spaces). Port host 7861 → container 7860.
 #
-# Override CYBERPANEL_HOST_PORT via .env (or shell) if 7861 conflicts; the
-# in-container port is fixed at 7860 to mirror HF Spaces.
+# Dev with hot reload:
+#   docker compose --profile dev up --build
+# Backend: uvicorn --reload on :8000
+# Frontend: CRA npm start on :3000 (REACT_APP_API_URL=http://localhost:8000)
+#
+# Secrets: prefer C:\Users\dream\.secrets\shared.env (mounted / copied via
+# env_file). Override with a local .env as needed.
+#
+# Image/container naming follows: <repo>-<branch>-<date>
 # ---------------------------------------------------------------------------
+
+x-shared-env: &shared-env
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-CHANGEME-by-overriding-in-dot-env-file}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+  VLLM_API_KEY: ${VLLM_API_KEY:-}
+  VLLM_API_USERNAME: ${VLLM_API_USERNAME:-}
+  GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
 
 services:
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    image: cybersecurity-panel:dev
+    image: cybersecurity-panel-dev-cursor-${COMPOSE_DATE:-local}
+    container_name: cybersecurity-panel-dev-cursor-${COMPOSE_DATE:-local}
     ports:
       - "${CYBERPANEL_HOST_PORT:-7861}:7860"
+    env_file:
+      - path: ${SHARED_ENV_FILE:-C:/Users/dream/.secrets/shared.env}
+        required: false
+      - path: .env
+        required: false
     environment:
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-CHANGEME-by-overriding-in-dot-env-file}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      VLLM_API_KEY: ${VLLM_API_KEY:-}
-      VLLM_API_USERNAME: ${VLLM_API_USERNAME:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      <<: *shared-env
       CONFIG_PATH: ${CONFIG_PATH:-/home/user/app/cybersecurity_config.yaml}
-      # Same-origin in single-container; only relevant for cross-origin dev.
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
-      # SQLite + ChromaDB persistence both land here. The named volume below
-      # mirrors the HF Storage Bucket mount so user data survives rebuilds.
       DATA_DIR: /data
     volumes:
       - cybersecurity_data:/data
 
+  backend:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: backend
+    image: cybersecurity-panel-backend-dev-cursor-${COMPOSE_DATE:-local}
+    container_name: cybersecurity-panel-backend-dev-cursor-${COMPOSE_DATE:-local}
+    ports:
+      - "${BACKEND_HOST_PORT:-8000}:8000"
+    env_file:
+      - path: ${SHARED_ENV_FILE:-C:/Users/dream/.secrets/shared.env}
+        required: false
+      - path: .env
+        required: false
+    environment:
+      <<: *shared-env
+      CONFIG_PATH: /app/cybersecurity_config.yaml
+      DATA_DIR: /data
+      PYTHONPATH: /app/multi_llm_chatbot_backend
+    volumes:
+      - ./multi_llm_chatbot_backend:/app/multi_llm_chatbot_backend
+      - ./cybersecurity_config.yaml:/app/cybersecurity_config.yaml:ro
+      - ./personas:/app/personas:ro
+      - cybersecurity_data:/data
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--reload",
+        "--reload-dir",
+        "/app/multi_llm_chatbot_backend/app",
+      ]
+
+  frontend:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: frontend
+    image: cybersecurity-panel-frontend-dev-cursor-${COMPOSE_DATE:-local}
+    container_name: cybersecurity-panel-frontend-dev-cursor-${COMPOSE_DATE:-local}
+    ports:
+      - "${FRONTEND_HOST_PORT:-3000}:3000"
+    environment:
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:8000}
+      CHOKIDAR_USEPOLLING: "true"
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      - backend
+    command: ["npm", "start"]
+
 volumes:
   cybersecurity_data:
+  frontend_node_modules:

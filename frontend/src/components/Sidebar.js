@@ -13,7 +13,9 @@ import {
   PanelLeft,
   FileText,
   ChevronRight,
-  Clock
+  Clock,
+  Activity,
+  Map,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
@@ -44,9 +46,12 @@ const Sidebar = ({
   onOpenProfile,
   onOpenAccount,
   onOpenClearData,
+  onOpenModelStatus,
+  onNavigateToJourney,
 }) => {
   const { config } = useAppConfig();
   const isOnCanvas = pageContext === 'canvas';
+  const isOnJourney = pageContext === 'journey';
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const avatarOptions = config?.app?.user_avatars || [];
   const currentAvatar = avatarOptions.find(a => a.id === userAvatarId);
@@ -267,6 +272,12 @@ const Sidebar = ({
                           <DatabaseZap size={16} />
                           <span>Clear User Data</span>
                         </button>
+                        {onOpenModelStatus && (
+                          <button className="user-menu-item" onClick={() => { setShowUserMenu(false); onOpenModelStatus(); }}>
+                            <Activity size={16} />
+                            <span>Model Status</span>
+                          </button>
+                        )}
                         <button className="user-menu-item sign-out" onClick={onSignOut}>
                           <LogOut size={16} />
                           <span>Sign Out</span>
@@ -298,6 +309,15 @@ const Sidebar = ({
               >
                 <SquarePen size={20} />
               </button>
+              {onNavigateToJourney && (
+                <button
+                  className="collapsed-new-chat"
+                  onClick={onNavigateToJourney}
+                  title="Journey"
+                >
+                  <Map size={20} />
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -329,6 +349,16 @@ const Sidebar = ({
                 title={isCreatingNewChat ? 'Creating...' : 'New Chat'}
               >
                 <SquarePen size={18} />
+              </button>
+            )}
+            {onNavigateToJourney && (
+              <button
+                className="new-chat-icon-btn"
+                onClick={onNavigateToJourney}
+                title="Journey"
+                style={isOnJourney ? { color: 'var(--accent-primary)' } : undefined}
+              >
+                <Map size={18} />
               </button>
             )}
           </div>

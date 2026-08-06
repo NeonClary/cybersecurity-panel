@@ -1,0 +1,47 @@
+id: custom_goal
+name: Custom Goal
+description: >
+  A blank track you and the advisor panel can fill together — for an
+  internal assessment, a board deadline, a product launch, or any other
+  goal you choose.
+audience: any
+levels:
+  - id: define
+    name: Define the goal
+    description: Clarify what success looks like and by when.
+    items:
+      - id: custom_def_1
+        title: State the outcome
+        description: Write one sentence describing the result you need.
+      - id: custom_def_2
+        title: Set a target date
+        description: Pick a realistic deadline or milestone date.
+      - id: custom_def_3
+        title: Name stakeholders
+        description: Who else is involved — IT, legal, leadership, vendors?
+  - id: plan
+    name: Plan the work
+    description: Break the goal into owned, checkable steps.
+    items:
+      - id: custom_plan_1
+        title: List workstreams
+        description: Split into 3–7 workstreams the panel can help refine.
+      - id: custom_plan_2
+        title: Identify blockers
+        description: Note skills, budget, access, or approvals you still need.
+      - id: custom_plan_3
+        title: Agree first sprint
+        description: Choose the next 1–2 weeks of concrete actions.
+  - id: execute
+    name: Execute & review
+    description: Do the work, measure progress, adjust.
+    items:
+      - id: custom_exec_1
+        title: Complete first milestone
+        description: Finish the first agreed deliverable or checklist block.
+      - id: custom_exec_2
+        title: Midpoint check-in
+        description: Review progress with the panel; adjust the plan if needed.
+      - id: custom_exec_3
+        title: Close the goal
+        description: Confirm done criteria met; capture lessons for next time.

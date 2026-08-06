@@ -92,9 +92,24 @@ class ExampleCategory(_IconValidatorMixin):
     suggestions: List[str] = []
 
 
+class IntakeChipConfig(BaseModel):
+    id: str
+    label: str
+    prompt: str = ""
+    free_text: bool = False
+
+
+class IntakeConfig(BaseModel):
+    greeting: str = (
+        "You've contacted me today — what is it that I can help you with in cybersecurity?"
+    )
+    chips: List[IntakeChipConfig] = []
+
+
 class ChatPageConfig(BaseModel):
     placeholder: str = "Ask your advisors anything..."
     examples: List[ExampleCategory] = []
+    intake: IntakeConfig = IntakeConfig()
 
 
 class PersonaItemConfig(_IconValidatorMixin):
@@ -331,6 +346,15 @@ class VoiceConfig(BaseModel):
     tts_endpoint: str = "https://coqui.neonaiservices.com"
 
 
+class UserKnowledgeConfig(BaseModel):
+    short_summary_max_tokens: int = 150
+    long_summary_max_tokens: int = 600
+    small_model_context_budget: int = 4096
+    extract_on_every_message: bool = True
+    # Providers that receive the short summary (small context window).
+    small_context_providers: List[str] = ["vllm", "ollama"]
+
+
 class AppSettings(BaseModel):
     """Top-level container that mirrors the YAML structure."""
     app: AppConfig = AppConfig()
@@ -345,6 +369,7 @@ class AppSettings(BaseModel):
     rag: RAGConfig = RAGConfig()
     tools: ToolsConfig = ToolsConfig()
     voice: VoiceConfig = VoiceConfig()
+    user_knowledge: UserKnowledgeConfig = UserKnowledgeConfig()
 
     # ------------------------------------------------------------------
     # Convenience helpers
@@ -360,6 +385,11 @@ class AppSettings(BaseModel):
             "chat_page": self.chat_page.dict(),
             "personas": {
                 "items": [p.to_frontend_config() for p in self.personas.items],
+            },
+            "user_knowledge": {
+                "short_summary_max_tokens": self.user_knowledge.short_summary_max_tokens,
+                "long_summary_max_tokens": self.user_knowledge.long_summary_max_tokens,
+                "small_model_context_budget": self.user_knowledge.small_model_context_budget,
             },
         }
 

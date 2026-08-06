@@ -1,0 +1,120 @@
+id: itil_maturity
+name: ITIL Maturity Model
+description: >
+  Organizational cybersecurity capability mapped to the classic five-level
+  ITIL/CMMI maturity ladder — from ad-hoc firefighting to continually
+  optimizing security operations.
+audience: enterprise
+levels:
+  - id: initial
+    name: Initial
+    description: >
+      Ad-hoc, reactive security. Practices depend on individuals; incidents
+      drive most activity. No consistent policies or measured outcomes.
+    items:
+      - id: itil_i_1
+        title: Inventory critical assets
+        description: List servers, endpoints, cloud accounts, and data stores that matter most.
+      - id: itil_i_2
+        title: Document incident contacts
+        description: Keep a short roster of who to call for IR, legal, and vendor support.
+      - id: itil_i_3
+        title: Enable MFA on admin accounts
+        description: Require multi-factor authentication for privileged and remote access.
+      - id: itil_i_4
+        title: Basic malware protection
+        description: Deploy endpoint AV/EDR on company devices and keep signatures current.
+      - id: itil_i_5
+        title: Record major incidents
+        description: Capture date, impact, and resolution notes for each significant security event.
+
+  - id: managed
+    name: Managed
+    description: >
+      Repeatable processes exist. Security work is planned, tracked, and
+      owned — but still team-dependent and not fully standardized.
+    items:
+      - id: itil_m_1
+        title: Written access-control policy
+        description: Define who may grant access, review cadence, and joiner/mover/leaver steps.
+      - id: itil_m_2
+        title: Patch window defined
+        description: Agree severity-based SLAs for critical/high vulnerability remediation.
+      - id: itil_m_3
+        title: Backup restore tested
+        description: Restore a sample backup quarterly and document the outcome.
+      - id: itil_m_4
+        title: Security awareness baseline
+        description: Run phishing or awareness training at least annually for all staff.
+      - id: itil_m_5
+        title: Ticketed security requests
+        description: Route access, exception, and vuln fixes through a tracked queue.
+      - id: itil_m_6
+        title: Vendor security questionnaire
+        description: Review high-risk vendors with a short security checklist before onboarding.
+
+  - id: defined
+    name: Defined
+    description: >
+      Organization-wide standards. Security processes are documented,
+      consistently applied, and integrated with IT change and risk management.
+    items:
+      - id: itil_d_1
+        title: Formal IR playbooks
+        description: Documented runbooks for ransomware, account takeover, and data exposure.
+      - id: itil_d_2
+        title: Risk register maintained
+        description: Track top cyber risks with owners, likelihood/impact, and treatment plans.
+      - id: itil_d_3
+        title: Change control for security configs
+        description: Firewall, IdP, and EDR changes go through reviewed change management.
+      - id: itil_d_4
+        title: Segregation of duties
+        description: Separate privileges so one person cannot both request and approve critical access.
+      - id: itil_d_5
+        title: Logging & retention standard
+        description: Define what is logged, retention periods, and who can access audit trails.
+
+  - id: quantitative
+    name: Quantitative
+    description: >
+      Measured and controlled. Metrics drive decisions; risk and control
+      effectiveness are quantified with meaningful thresholds.
+    items:
+      - id: itil_q_1
+        title: MTTD / MTTR dashboards
+        description: Track mean time to detect and respond; review trends monthly.
+      - id: itil_q_2
+        title: Vulnerability SLA compliance %
+        description: Measure % of critical/high vulns closed within agreed windows.
+      - id: itil_q_3
+        title: Control coverage metrics
+        description: Report MFA adoption, EDR coverage, and encrypt-at-rest percentages.
+      - id: itil_q_4
+        title: Risk appetite thresholds
+        description: Define quantitative risk tolerance and escalate when breached.
+      - id: itil_q_5
+        title: Board / exec scorecard
+        description: Deliver a recurring security metrics pack for leadership review.
+
+  - id: optimizing
+    name: Optimizing
+    description: >
+      Continual improvement. Feedback loops, automation, and proactive
+      threat hunting refine the program based on evidence.
+    items:
+      - id: itil_o_1
+        title: Post-incident improvement loop
+        description: Every major incident produces tracked corrective actions with owners.
+      - id: itil_o_2
+        title: Automated control checks
+        description: Continuously validate key controls (MFA, backups, logging) via tooling.
+      - id: itil_o_3
+        title: Threat hunting cadence
+        description: Schedule proactive hunts informed by intel and past incident patterns.
+      - id: itil_o_4
+        title: Tabletop exercise program
+        description: Run cross-functional scenario exercises and update playbooks from findings.
+      - id: itil_o_5
+        title: Capability roadmap
+        description: Maintain a multi-year security capability roadmap tied to business goals.

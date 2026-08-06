@@ -1,0 +1,127 @@
+id: nist_csf
+name: NIST Cybersecurity Framework
+description: >
+  Progress across the NIST CSF 2.0 functions (Govern, Identify, Protect,
+  Detect, Respond, Recover). Use tiers as a qualitative maturity note while
+  checking off foundational practices under each function.
+audience: enterprise
+levels:
+  - id: govern
+    name: Govern
+    description: >
+      Tier progress — Partial → Risk Informed → Repeatable → Adaptive.
+      Establish cybersecurity risk strategy, policy, and oversight.
+    items:
+      - id: nist_gv_1
+        title: Cybersecurity risk strategy documented
+        description: Leadership-approved statement of priorities, risk appetite, and ownership.
+      - id: nist_gv_2
+        title: Roles and accountability assigned
+        description: Name owners for security, privacy, and compliance decisions.
+      - id: nist_gv_3
+        title: Policy set published
+        description: Acceptable use, access, incident, and data-handling policies available to staff.
+      - id: nist_gv_4
+        title: Oversight cadence
+        description: Regular risk/security review with executives or the board.
+
+  - id: identify
+    name: Identify
+    description: >
+      Tier progress — know what you have and what threatens it before investing
+      in controls. Asset, risk, and business-context clarity.
+    items:
+      - id: nist_id_1
+        title: Asset inventory (systems & data)
+        description: Maintain an inventory of critical systems, cloud services, and sensitive data.
+      - id: nist_id_2
+        title: Business impact priorities
+        description: Rank which services/outages hurt customers or revenue most.
+      - id: nist_id_3
+        title: Threat & vulnerability awareness
+        description: Subscribe to relevant advisories and track known weaknesses.
+      - id: nist_id_4
+        title: Supply-chain risk noted
+        description: Identify critical vendors and their security dependencies.
+      - id: nist_id_5
+        title: Risk assessment refreshed
+        description: Update organizational cyber risk assessment at least annually.
+
+  - id: protect
+    name: Protect
+    description: >
+      Tier progress — safeguards that limit or contain cybersecurity events
+      (identity, awareness, data security, platform security).
+    items:
+      - id: nist_pr_1
+        title: Identity & access management baseline
+        description: Central IdP, least privilege, and MFA for remote/privileged access.
+      - id: nist_pr_2
+        title: Awareness & training program
+        description: Role-appropriate security training with phishing practice.
+      - id: nist_pr_3
+        title: Data protection controls
+        description: Encryption in transit/at rest for sensitive data; secure disposal.
+      - id: nist_pr_4
+        title: Platform hardening
+        description: Secure baselines for endpoints, servers, and cloud configurations.
+      - id: nist_pr_5
+        title: Protective technology (EDR/firewall)
+        description: Deploy and monitor endpoint detection and network perimeter controls.
+
+  - id: detect
+    name: Detect
+    description: >
+      Tier progress — find cybersecurity events promptly via continuous
+      monitoring and anomaly detection.
+    items:
+      - id: nist_de_1
+        title: Centralized logging
+        description: Aggregate auth, endpoint, and cloud logs into a searchable store.
+      - id: nist_de_2
+        title: Alerting on critical events
+        description: Define alerts for failed admin logins, ransomware indicators, and data exfil signals.
+      - id: nist_de_3
+        title: Monitoring coverage review
+        description: Periodically verify key assets are generating and shipping logs.
+      - id: nist_de_4
+        title: Anomaly review process
+        description: Assign who triages alerts and within what time window.
+
+  - id: respond
+    name: Respond
+    description: >
+      Tier progress — take action on detected events with clear ownership,
+      communications, and analysis.
+    items:
+      - id: nist_rs_1
+        title: Incident response plan
+        description: Written IR plan covering severity levels, roles, and escalation paths.
+      - id: nist_rs_2
+        title: Communications templates
+        description: Draft internal and customer/regulator notification language for likely scenarios.
+      - id: nist_rs_3
+        title: Analysis & forensics capability
+        description: Know how evidence is preserved and who can investigate.
+      - id: nist_rs_4
+        title: Containment playbooks
+        description: Document first actions for account takeover and malware/ransomware.
+
+  - id: recover
+    name: Recover
+    description: >
+      Tier progress — restore operations and reduce future impact with
+      tested recovery plans and improvement cycles.
+    items:
+      - id: nist_rc_1
+        title: Recovery plan documented
+        description: RTO/RPO targets and restoration steps for critical services.
+      - id: nist_rc_2
+        title: Backup integrity verified
+        description: Confirm backups are complete, protected, and restorable.
+      - id: nist_rc_3
+        title: Recovery exercise completed
+        description: Practice restoring at least one critical system end-to-end.
+      - id: nist_rc_4
+        title: Lessons learned incorporated
+        description: Feed recovery findings back into Identify/Protect improvements.

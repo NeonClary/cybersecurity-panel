@@ -1,0 +1,55 @@
+id: certification_path
+name: Certification Path
+description: >
+  Study and career milestones from foundational certs through advanced
+  professional credentials — adaptable to your background.
+audience: individual
+levels:
+  - id: foundation
+    name: Foundation
+    description: Build core knowledge and prove fundamentals.
+    items:
+      - id: cert_f_1
+        title: Choose an entry cert
+        description: Pick Security+ (or equivalent) if you are new to security.
+      - id: cert_f_2
+        title: Study plan (8–12 weeks)
+        description: Map domains to weekly study blocks and practice questions.
+      - id: cert_f_3
+        title: Home lab basics
+        description: Stand up a small lab (VMs, logging, or cloud free tier).
+      - id: cert_f_4
+        title: Pass foundation exam
+        description: Earn Security+ or a comparable foundational credential.
+  - id: practitioner
+    name: Practitioner
+    description: Specialize toward SOC, GRC, cloud, or engineering roles.
+    items:
+      - id: cert_p_1
+        title: Pick a track
+        description: SOC/IR, GRC, cloud security, or AppSec — choose one focus.
+      - id: cert_p_2
+        title: Intermediate cert
+        description: CySA+, CCSP, cloud vendor security cert, or similar.
+      - id: cert_p_3
+        title: Portfolio project
+        description: Publish a write-up of a detection rule, policy pack, or lab.
+      - id: cert_p_4
+        title: Interview practice
+        description: Behavioral + technical mocks for your target role.
+  - id: professional
+    name: Professional
+    description: Senior credentials and leadership readiness.
+    items:
+      - id: cert_pr_1
+        title: CISSP (or peer) eligibility
+        description: Confirm experience requirements and endorsement path.
+      - id: cert_pr_2
+        title: Domain deep-dives
+        description: Master CISSP domains or your peer cert's body of knowledge.
+      - id: cert_pr_3
+        title: Earn professional cert
+        description: Pass CISSP or equivalent and maintain CPE plan.
+      - id: cert_pr_4
+        title: Mentor others
+        description: Share what you learned — study groups, junior coaching, talks.

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { MessageCircle, Reply, X, Sparkles, Users, Settings2, FileText, HelpCircle } from 'lucide-react';
 import EnhancedChatInput from '../components/EnhancedChatInput';
 import MessageBubble from '../components/MessageBubble';
@@ -17,10 +17,13 @@ import OnboardingChat from '../components/OnboardingChat';
 import ProfileWalkthrough from '../components/ProfileWalkthrough';
 import ClearDataModal from '../components/ClearDataModal';
 import AccountModal from '../components/AccountModal';
+import SettingsModal from '../components/SettingsModal';
+import ProviderDropdown from '../components/ProviderDropdown';
+import IntakePanel from '../components/IntakePanel';
 
 const ACTIVE_ADVISORS_STORAGE_KEY = 'cybersecurityActiveAdvisorIds';
 
-const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSignOut }) => {
+const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNavigateToJourney, onSignOut }) => {
   const { config, advisors, getAdvisorColors } = useAppConfig();
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,6 +33,8 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSig
   const [replyingTo, setReplyingTo] = useState(null);
   const [currentProvider, setCurrentProvider] = useState('gemini');
   const [isProviderSwitching, setIsProviderSwitching] = useState(false);
+  const [onlineProviders, setOnlineProviders] = useState(null); // null = fail-open / not filtered yet
+  const [statusCheckFailed, setStatusCheckFailed] = useState(false);
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const messagesEndRef = useRef(null);
   const { isDark } = useTheme();
@@ -64,6 +69,8 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSig
   const [showProfileForm, setShowProfileForm] = useState(false);
   const [showClearData, setShowClearData] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState('profile');
   const [userProfile, setUserProfile] = useState(null);
 
   const loadProfile = async () => {
@@ -145,11 +152,36 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSig
     scrollToBottom();
   }, [messages, thinkingAdvisors]);
 
-  useEffect(() => {
-    fetchCurrentProvider();
+  const applyModelStatus = useCallback((data) => {
+    if (!data || data.check_failed || data.online_providers == null) {
+      console.warn('Model status check failed or incomplete; keeping unfiltered provider list.');
+      setStatusCheckFailed(true);
+      setOnlineProviders(null);
+      return;
+    }
+    setStatusCheckFailed(false);
+    setOnlineProviders(data.online_providers);
   }, []);
 
-  const fetchCurrentProvider = async () => {
+  const fetchModelStatus = useCallback(async (forceRefresh = false) => {
+    try {
+      const qs = forceRefresh ? '?refresh=true' : '';
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/models/status${qs}`);
+      if (!response.ok) {
+        throw new Error(`Model status HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      applyModelStatus(data);
+      return data;
+    } catch (error) {
+      console.warn('Model status check failed; keeping unfiltered provider list.', error);
+      setStatusCheckFailed(true);
+      setOnlineProviders(null);
+      return null;
+    }
+  }, [applyModelStatus]);
+
+  const fetchCurrentProvider = useCallback(async () => {
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/current-provider`);
       if (response.ok) {
@@ -160,9 +192,12 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onSig
     } catch (error) {
       console.error('Error fetching current provider:', error);
     }
-  };
+  }, []);
 
-  
+  useEffect(() => {
+    fetchCurrentProvider();
+    fetchModelStatus();
+  }, [fetchCurrentProvider, fetchModelStatus]);
 
   const handleProviderSwitch = async (newProvider) => {
     if (newProvider === currentProvider || isProviderSwitching) return;
@@ -889,6 +924,11 @@ const handleNewChat = async (sessionId = null) => {
         onOpenProfile={() => setShowProfileForm(true)}
         onOpenAccount={() => setShowAccount(true)}
         onOpenClearData={() => setShowClearData(true)}
+        onOpenModelStatus={() => {
+          setSettingsInitialTab('model-status');
+          setShowSettings(true);
+        }}
+        onNavigateToJourney={onNavigateToJourney}
       />
       
       <div className={`main-chat-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
@@ -898,8 +938,16 @@ const handleNewChat = async (sessionId = null) => {
             onNavigateToHome={onNavigateToHome}
             onNavigateToChat={() => {}}
             onNavigateToCanvas={onNavigateToCanvas}
+            onNavigateToJourney={onNavigateToJourney}
             onMobileMenu={handleMobileMenuToggle}
           >
+            <ProviderDropdown
+              currentProvider={currentProvider}
+              onProviderChange={handleProviderSwitch}
+              isLoading={isProviderSwitching}
+              onlineProviders={onlineProviders}
+              statusCheckFailed={statusCheckFailed}
+            />
             <AdvisorStatusDropdown
               advisors={advisors}
               activeAdvisorIds={activeAdvisorIds}
@@ -928,6 +976,7 @@ const handleNewChat = async (sessionId = null) => {
           <div className="chat-content">
             {!hasMessages ? (
               <div className="welcome-state">
+                <IntakePanel onSubmit={handleSendMessage} />
                 <AdvisorCarousel />
                 <SuggestionsPanel onSuggestionClick={handleSendMessage} />
               </div>
@@ -1077,10 +1126,59 @@ const handleNewChat = async (sessionId = null) => {
                   ? `Reply to ${replyingTo.advisorName}...`
                   : chatPlaceholder
               }
+              showProfileButtons={!userProfile}
+              onOpenOnboarding={() => setShowOnboarding(true)}
+              onOpenProfileForm={() => setShowProfileForm(true)}
             />
           </div>
         </div>
       </div>
+
+      {showProfileForm && (
+        <ProfileWalkthrough
+          authToken={authToken}
+          existingProfile={userProfile}
+          onClose={() => { setShowProfileForm(false); loadProfile(); }}
+        />
+      )}
+      {showOnboarding && (
+        <OnboardingChat
+          authToken={authToken}
+          userName={user?.firstName}
+          onClose={() => { setShowOnboarding(false); loadProfile(); }}
+        />
+      )}
+      {showAccount && (
+        <AccountModal
+          user={user}
+          authToken={authToken}
+          onClose={() => setShowAccount(false)}
+          onAccountUpdated={(u) => {
+            localStorage.setItem('user', JSON.stringify(u));
+          }}
+          onAccountDeleted={onSignOut}
+        />
+      )}
+      {showSettings && (
+        <SettingsModal
+          user={user}
+          authToken={authToken}
+          initialTab={settingsInitialTab}
+          onClose={() => setShowSettings(false)}
+          onSignOut={onSignOut}
+          onUserUpdate={(u) => {
+            localStorage.setItem('user', JSON.stringify(u));
+          }}
+          onModelStatusChange={applyModelStatus}
+        />
+      )}
+      {showClearData && (
+        <ClearDataModal
+          authToken={authToken}
+          onClose={() => setShowClearData(false)}
+          onDataCleared={() => { loadProfile(); setShowClearData(false); }}
+        />
+      )}
     </div>
   );
 };

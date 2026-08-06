@@ -71,6 +71,15 @@ login:
 
 chat_page:
   placeholder: "Ask your advisors about threats, controls, incidents, compliance, or your security career..."
+  intake:
+    greeting: >-
+      You've contacted me today — what is it that I can help you with in cybersecurity?
+    chips:
+      - { id: "hacked", label: "I think I've been hacked", prompt: "I think I may have been hacked or compromised. Help me figure out what to do first." }
+      - { id: "audit", label: "Prepare for an audit or review", prompt: "I have a cybersecurity review or audit coming up and I need help preparing." }
+      - { id: "business", label: "Secure my business", prompt: "I need practical help securing my small business — what should I prioritize?" }
+      - { id: "career", label: "Grow my security career", prompt: "I want to grow my cybersecurity career. Help me pick a path and next steps." }
+      - { id: "other", label: "Something else…", prompt: "", free_text: true }
   examples:
     - title: "Threats & Defense"
       icon: "ShieldAlert"
@@ -107,6 +116,12 @@ chat_page:
 
 personas:
   base_prompt: |
+    **Conversation rules:**
+    - Always offer useful information before asking a follow-up question (give-and-take). Never interrogate.
+    - Adapt vocabulary to the user's knowledge level from their summary: plain language for beginners; full technical terms for experts.
+    - Prefer one high-value follow-up over a list of questions.
+    - If urgency is high (active incident / "was I hacked"), lead with immediate first steps before profiling.
+
     **Formatting (Compact Markdown v1):**
     - Use GitHub-Flavored Markdown.
     - Output exactly three sections in this order:
@@ -198,6 +213,21 @@ tools:
     enabled: true
     default_timezone: "America/Los_Angeles"
 
+user_knowledge:
+  short_summary_max_tokens: 150
+  long_summary_max_tokens: 600
+  small_model_context_budget: 4096
+  extract_on_every_message: true
+  small_context_providers:
+    - vllm
+    - ollama
+
 voice:
   stt_endpoint: "https://whisper.neonaiservices.com"
   tts_endpoint: "https://coqui.neonaiservices.com"
+
+user_knowledge:
+  short_summary_max_tokens: 150
+  long_summary_max_tokens: 600
+  small_model_context_budget: 4096
+  extract_on_every_message: true

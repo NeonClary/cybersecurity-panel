@@ -5,6 +5,7 @@ import HomePage from './pages/HomePage';
 import ChatPage from './pages/ChatPage';
 import AuthPage from './pages/AuthPage';
 import CanvasPage from './pages/CanvasPage';
+import JourneyPage from './pages/JourneyPage';
 import UserGuide from './components/UserGuide';
 import './styles/components.css';
 
@@ -38,7 +39,15 @@ function App() {
     setCurrentView('auth');
   };
 
+  const navigateToJourney = () => {
+    setCurrentView('journey');
+  };
+
   const navigateToCanvas = (canvasView) => {
+    if (canvasView === 'journey') {
+      setCurrentView('journey');
+      return;
+    }
     if (['insights', 'workspace', 'deliverables'].includes(canvasView)) {
       localStorage.setItem('canvas-view-v2', canvasView);
     }
@@ -80,6 +89,7 @@ function App() {
               onNavigateToHome={navigateToHome}
               onNavigateToChat={isAuthenticated ? navigateToChat : navigateToAuth}
               onNavigateToCanvas={isAuthenticated ? navigateToCanvas : navigateToAuth}
+              onNavigateToJourney={isAuthenticated ? navigateToJourney : navigateToAuth}
               isAuthenticated={isAuthenticated}
             />
           )}
@@ -92,6 +102,19 @@ function App() {
               authToken={authToken}
               onNavigateToHome={navigateToHome}
               onNavigateToChat={navigateToChat}
+              onNavigateToJourney={navigateToJourney}
+              onNavigateToCanvas={navigateToCanvas}
+              onSignOut={handleSignOut}
+            />
+          )}
+          {currentView === 'journey' && isAuthenticated && (
+            <JourneyPage
+              user={user}
+              authToken={authToken}
+              onNavigateToHome={navigateToHome}
+              onNavigateToChat={navigateToChat}
+              onNavigateToCanvas={navigateToCanvas}
+              onNavigateToJourney={navigateToJourney}
               onSignOut={handleSignOut}
             />
           )}
@@ -101,6 +124,7 @@ function App() {
               authToken={authToken}
               onNavigateToHome={navigateToHome}
               onNavigateToCanvas={navigateToCanvas}
+              onNavigateToJourney={navigateToJourney}
               onSignOut={handleSignOut}
             />
           )}

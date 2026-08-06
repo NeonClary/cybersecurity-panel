@@ -1,0 +1,31 @@
+# syntax=docker/dockerfile:1.7
+# Dev images with hot-reload. Not used for HuggingFace Spaces (see Dockerfile).
+
+FROM python:3.12-slim-bookworm AS backend
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY multi_llm_chatbot_backend/requirements.txt /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r /tmp/requirements.txt
+COPY multi_llm_chatbot_backend /app/multi_llm_chatbot_backend
+COPY cybersecurity_config.yaml /app/cybersecurity_config.yaml
+COPY personas /app/personas
+ENV PYTHONPATH=/app/multi_llm_chatbot_backend \
+    PYTHONUNBUFFERED=1 \
+    DATA_DIR=/data \
+    CONFIG_PATH=/app/cybersecurity_config.yaml
+WORKDIR /app/multi_llm_chatbot_backend
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+FROM node:20-bookworm AS frontend
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
+COPY frontend/ ./
+EXPOSE 3000
+ENV CHOKIDAR_USEPOLLING=true
+CMD ["npm", "start"]

@@ -69,15 +69,20 @@ LOG = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Each entry: (table name, has_unique_email_column, user_id_unique).
-# users have a UNIQUE email column. user_profiles and onboarding_conversations
-# have a UNIQUE user_id column (one record per user). chat_sessions and
-# phd_canvases keep user_id only as an index (many records per user).
+# users have a UNIQUE email column. user_profiles, onboarding_conversations,
+# user_summaries, and goal_tracks have a UNIQUE user_id column (one record
+# per user). chat_sessions, phd_canvases, user_facts, and assessments keep
+# user_id only as an index (many records per user).
 _TABLES: tuple[tuple[str, bool, bool], ...] = (
     ("users",                       True,  False),
     ("chat_sessions",               False, False),
     ("user_profiles",               False, True),
     ("onboarding_conversations",    False, True),
     ("phd_canvases",                False, False),
+    ("user_facts",                  False, False),
+    ("user_summaries",              False, True),
+    ("goal_tracks",                 False, True),
+    ("assessments",                 False, False),
 )
 
 _TABLE_NAMES = {t[0] for t in _TABLES}

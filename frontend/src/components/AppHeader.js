@@ -7,9 +7,10 @@ import { useAppConfig } from '../contexts/AppConfigContext';
  * Shared floating header used on every page so the app feels like one surface.
  *
  * Props:
- *   currentPage: 'home' | 'chat' | 'canvas'
- *   onNavigateToHome, onNavigateToChat, onNavigateToCanvas: navigation callbacks
- *     (onNavigateToCanvas may receive 'insights' | 'workspace' to deep-link a view)
+ *   currentPage: 'home' | 'chat' | 'canvas' | 'journey' | 'canvas-<subview>'
+ *   onNavigateToHome, onNavigateToChat, onNavigateToCanvas, onNavigateToJourney
+ *     (onNavigateToCanvas may receive 'workspace' | 'deliverables' to deep-link a view;
+ *      'journey' is handled via onNavigateToJourney when provided)
  *   onMobileMenu?: () => void  — when present, shows the mobile menu button
  *   children?: ReactNode        — extra controls slotted between the tabs and the theme toggle
  */
@@ -18,6 +19,7 @@ const AppHeader = ({
   onNavigateToHome,
   onNavigateToChat,
   onNavigateToCanvas,
+  onNavigateToJourney,
   onMobileMenu,
   children,
 }) => {
@@ -25,6 +27,11 @@ const AppHeader = ({
   const BrandIcon = resolveIcon ? resolveIcon('Users') : Users;
 
   const goToCanvas = (view) => {
+    if (view === 'journey') {
+      if (onNavigateToJourney) onNavigateToJourney();
+      else if (onNavigateToCanvas) onNavigateToCanvas('journey');
+      return;
+    }
     if (onNavigateToCanvas) onNavigateToCanvas(view);
   };
 
@@ -32,6 +39,7 @@ const AppHeader = ({
   // 'canvas-<subview>' from CanvasPage so only the active one highlights.
   const isOnHome = currentPage === 'home';
   const isOnChat = currentPage === 'chat';
+  const isOnJourney = currentPage === 'journey';
   const isOnCanvas = currentPage === 'canvas' || currentPage.startsWith('canvas-');
   const canvasSub = currentPage.startsWith('canvas-') ? currentPage.slice(7) : null;
   const tabActive = (sub) => isOnCanvas && (canvasSub === null ? false : canvasSub === sub);
@@ -69,7 +77,7 @@ const AppHeader = ({
       {!isOnHome && (
         <div className="canvas-tabs chat-view-tabs">
           <button className={`tab ${isOnChat ? 'active' : ''}`} onClick={onNavigateToChat}>Chat</button>
-          <button className={`tab ${tabActive('insights') ? 'active' : ''}`} onClick={() => goToCanvas('insights')}>Insights</button>
+          <button className={`tab ${isOnJourney ? 'active' : ''}`} onClick={() => goToCanvas('journey')}>Journey</button>
           <button className={`tab ${tabActive('workspace') ? 'active' : ''}`} onClick={() => goToCanvas('workspace')}>Workspace</button>
           <button className={`tab ${tabActive('deliverables') ? 'active' : ''}`} onClick={() => goToCanvas('deliverables')}>Documents</button>
         </div>
@@ -79,7 +87,7 @@ const AppHeader = ({
       {!isOnHome && (
         <select
           className="canvas-tabs-mobile"
-          value={isOnChat ? 'chat' : (canvasSub || 'workspace')}
+          value={isOnChat ? 'chat' : (isOnJourney ? 'journey' : (canvasSub || 'workspace'))}
           onChange={(e) => {
             const v = e.target.value;
             if (v === 'chat') onNavigateToChat();
@@ -87,7 +95,7 @@ const AppHeader = ({
           }}
         >
           <option value="chat">Chat</option>
-          <option value="insights">Insights</option>
+          <option value="journey">Journey</option>
           <option value="workspace">Workspace</option>
           <option value="deliverables">Documents</option>
         </select>

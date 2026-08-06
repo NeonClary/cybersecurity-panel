@@ -17,6 +17,9 @@ from app.core.database import get_database
 from app.core.session_manager import get_session_manager
 from app.models.user import User
 from app.api.routes.user_profile import PROFILE_FIELDS, enrich_profile_from_user
+from app.config import get_settings
+from app.core import user_knowledge as uk
+from app.core.bootstrap import chat_orchestrator, current_provider
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +28,7 @@ session_manager = get_session_manager()
 
 
 async def _attach_user_profile_context(session, user: User) -> None:
-    """Load Mongo profile + signup fields into session for persona prompts."""
+    """Load Mongo profile + knowledge summary into session for persona prompts."""
     try:
         db = get_database()
         doc = await db.user_profiles.find_one({"user_id": user.id})
@@ -37,10 +40,47 @@ async def _attach_user_profile_context(session, user: User) -> None:
                 if isinstance(val, list):
                     val = ", ".join(str(v) for v in val)
                 parts.append(f"{key}: {val}")
+        blocks = []
         if parts:
-            session.user_profile_context = "USER SECURITY PROFILE: " + "; ".join(parts)
+            blocks.append("USER SECURITY PROFILE: " + "; ".join(parts))
+        try:
+            summary = await uk.get_summary_for_provider(
+                user.id,
+                uk.is_small_context_provider(current_provider),
+            )
+            if summary:
+                blocks.append("USER KNOWLEDGE SUMMARY: " + summary)
+        except Exception as sum_err:
+            logger.warning(f"Could not load user knowledge summary: {sum_err}")
+        if blocks:
+            session.user_profile_context = "\n\n".join(blocks)
     except Exception as prof_err:
         logger.warning(f"Could not load user profile: {prof_err}")
+
+
+def _schedule_fact_extraction(user_id, message_text: str) -> None:
+    """Fire-and-forget inferred-fact extraction; never blocks the chat stream."""
+    try:
+        settings = get_settings()
+        if not settings.user_knowledge.extract_on_every_message:
+            return
+    except Exception:
+        return
+
+    llm_client = chat_orchestrator.llm_client
+    if llm_client is None:
+        return
+
+    async def _run():
+        try:
+            await uk.extract_facts_from_message(user_id, message_text, llm_client)
+        except Exception as exc:
+            logger.warning(f"Background fact extraction failed: {exc}")
+
+    try:
+        asyncio.create_task(_run())
+    except RuntimeError as exc:
+        logger.warning(f"Could not schedule fact extraction: {exc}")
 
 # Enhanced data models
 class UserInput(BaseModel):
@@ -115,6 +155,7 @@ async def chat_stream(
 
             # Append user message to in-memory session and persist to MongoDB
             session.append_message("user", message.user_input)
+            _schedule_fact_extraction(current_user.id, message.user_input)
             if message.chat_session_id:
                 await persist_message(message.chat_session_id, {
                     "id": str(ObjectId()),

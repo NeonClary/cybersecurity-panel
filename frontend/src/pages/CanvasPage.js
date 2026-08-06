@@ -814,7 +814,7 @@ function ToastStack() {
 }
 
 
-const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onSignOut }) => {
+const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNavigateToJourney, onNavigateToCanvas, onSignOut }) => {
   const { theme, toggleTheme } = useTheme();
   useAppConfig();
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'workspace');
@@ -1005,7 +1005,14 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onSig
         onSidebarToggle={setIsSidebarCollapsed}
         isMobileOpen={isMobileMenuOpen}
         onMobileToggle={setIsMobileMenuOpen}
-        onNavigateToCanvas={() => {}}
+        onNavigateToCanvas={(v) => {
+          if (v === 'journey') {
+            if (onNavigateToJourney) onNavigateToJourney();
+            else if (onNavigateToCanvas) onNavigateToCanvas('journey');
+          } else {
+            setView(v || 'workspace');
+          }
+        }}
         onSelectSession={(id) => onNavigateToChat && onNavigateToChat(id)}
         onNewChat={() => onNavigateToChat && onNavigateToChat()}
         pageContext="canvas"
@@ -1013,6 +1020,7 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onSig
         widgetGroups={widgetGroups}
         deliverableProjects={deliverableProjects}
         insightSections={insightSections}
+        onNavigateToJourney={onNavigateToJourney}
       />
       <div className={`canvas-main-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="canvas-app-shell">
@@ -1020,7 +1028,15 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onSig
             currentPage={`canvas-${view}`}
             onNavigateToHome={onNavigateToHome}
             onNavigateToChat={onNavigateToChat}
-            onNavigateToCanvas={(v) => setView(v || 'workspace')}
+            onNavigateToJourney={onNavigateToJourney}
+            onNavigateToCanvas={(v) => {
+              if (v === 'journey') {
+                if (onNavigateToJourney) onNavigateToJourney();
+                else if (onNavigateToCanvas) onNavigateToCanvas('journey');
+              } else {
+                setView(v || 'workspace');
+              }
+            }}
             onMobileMenu={() => setIsMobileMenuOpen(true)}
           >
             <button className="icon-btn" onClick={() => setTourForceShow(n => n + 1)} title="Show tour">

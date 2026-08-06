@@ -10,18 +10,18 @@
 #   * REACT_APP_API_URL is set to the empty string at build time so the SPA
 #     issues relative URLs and shares the FastAPI origin
 #
-# Build context: repo root (this file).
+# Build context: repo root (this file). Frontend sources live in ./frontend/
 # ---------------------------------------------------------------------------
 
 # ---- 1. Frontend build (CRA) ----------------------------------------------
 FROM node:20-bookworm AS frontend-build
 WORKDIR /app/frontend
 
-COPY phd-advisor-frontend/package.json phd-advisor-frontend/package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
-COPY phd-advisor-frontend/ ./
+COPY frontend/ ./
 
 # Empty REACT_APP_API_URL → CRA inlines '' so every fetch() hits the same
 # origin as the SPA (the FastAPI server below).
@@ -63,9 +63,8 @@ COPY --chown=user multi_llm_chatbot_backend/ ./
 
 # ---- Top-level configuration files (config.yaml + persona definitions) ----
 COPY --chown=user cybersecurity_config.yaml ./cybersecurity_config.yaml
-COPY --chown=user phd_config.yaml ./phd_config.yaml
-COPY --chown=user undergrad_config.yaml ./undergrad_config.yaml
 COPY --chown=user personas/ ./personas/
+COPY --chown=user tracks/ ./tracks/
 
 # ---- Frontend bundle ------------------------------------------------------
 # main.py mounts $HOME/app/static at "/" so the SPA is served same-origin

@@ -291,7 +291,8 @@ async def delete_account(
     current_user: User = Depends(get_current_active_user),
 ):
     """
-    Permanently delete the authenticated user's account, all chat sessions, and all PhD Canvas data.
+    Permanently delete the authenticated user's account, chat sessions, canvas,
+    profile, onboarding, user facts, and user summaries.
     @param body: DeleteAccountRequest with the user's password for confirmation
     @param current_user: Authenticated user from dependency injection
     @return: MessageResponse with a confirmation message
@@ -306,6 +307,12 @@ async def delete_account(
         uid = current_user.id
         await db.chat_sessions.delete_many({"user_id": uid})
         await db.phd_canvases.delete_many({"user_id": uid})
+        await db.user_profiles.delete_many({"user_id": uid})
+        await db.onboarding_conversations.delete_many({"user_id": uid})
+        await db.user_facts.delete_many({"user_id": uid})
+        await db.user_summaries.delete_many({"user_id": uid})
+        await db.goal_tracks.delete_many({"user_id": uid})
+        await db.assessments.delete_many({"user_id": uid})
         await db.users.delete_one({"_id": uid})
         return MessageResponse(message="Account deleted")
 

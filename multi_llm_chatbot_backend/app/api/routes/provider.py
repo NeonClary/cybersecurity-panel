@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query
 from app.config import get_settings
 from app.llm.improved_gemini_client import ImprovedGeminiClient
 from app.llm.improved_ollama_client import ImprovedOllamaClient
 from app.llm.improved_vllm_client import ImprovedVllmClient
 from app.models.default_personas import get_default_personas
 from app.core.bootstrap import chat_orchestrator, llm, current_provider, available_providers
+from app.core.model_status import get_model_status
 from pydantic import BaseModel
 import os
 import logging
@@ -109,3 +110,25 @@ async def get_current_model():
         "model": model_name,
         "provider": current_provider
     }
+
+
+@router.get("/models/status")
+async def models_status(refresh: bool = Query(False, description="Bypass short-lived probe cache")):
+    """Probe configured LLM APIs using the same generate() path as chat traffic.
+
+    Returns per-model status (online / unavailable / error). On total probe
+    failure, returns ``check_failed: true`` so the UI can fail open
+    (keep the unfiltered provider list).
+    """
+    try:
+        return await get_model_status(force_refresh=refresh)
+    except Exception as exc:
+        logger.warning("Model status check failed entirely: %s", exc)
+        return {
+            "models": [],
+            "online_providers": None,
+            "checked_at": None,
+            "cached": False,
+            "check_failed": True,
+            "error": str(exc)[:200],
+        }
