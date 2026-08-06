@@ -74,13 +74,13 @@ Backend uses `uvicorn --reload`; frontend uses CRA with file polling. Source is 
 
 Personas live in `personas/cyber_advisors/*.yaml` (Jerry Huaute lead + specialist panel). App config: `cybersecurity_config.yaml`.
 
-### Features (roadmap / in progress)
+### Features
 
-- Panel chat with streaming multi-advisor responses
+- Panel chat with streaming multi-advisor responses; Jerry Huaute always on the panel, urgency triage puts the incident expert first, generated follow-up chips after each panel reply
 - User profile: stated + inferred facts, dual LLM summaries (short for Neon, long for large models)
 - Security Journey progress tracks (ITIL, NIST CSF, CIS, certs, personal digital security, custom)
 - Document upload + RAG, export (TXT/PDF/DOCX)
-- Model Status health probes (Settings → Model Status)
+- Model Status health probes and provider selection (Settings → Model Status)
 
 ## Project layout
 
@@ -88,6 +88,7 @@ Personas live in `personas/cyber_advisors/*.yaml` (Jerry Huaute lead + specialis
 cybersecurity-panel/
 ├── cybersecurity_config.yaml
 ├── personas/cyber_advisors/
+├── tracks/                 # Security Journey track definitions
 ├── multi_llm_chatbot_backend/
 ├── frontend/
 ├── Dockerfile              # HF Spaces / prod
