@@ -163,7 +163,9 @@
   border-bottom: 1px solid var(--header-border);
   padding: 12px 24px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* header-right keeps at least its content width so it can't bleed left
+     over the centered tabs/select when its 1fr track gets too small */
+  grid-template-columns: minmax(0, 1fr) auto minmax(max-content, 1fr);
   align-items: center;
   gap: 12px;
   box-shadow: var(--header-shadow);
@@ -251,15 +253,6 @@
 }
 .canvas-page-with-sidebar .theme-toggle .theme-icon { display: block; }
 
-/* Match ChatPage: drop the brand subtitle, then the text block, when the
-   header runs out of room — never show a one-letter ellipsis. */
-@media (max-width: 1500px) {
-  .canvas-page-with-sidebar .brand-text p { display: none; }
-}
-@media (max-width: 1380px) {
-  .canvas-page-with-sidebar .brand-text { display: none; }
-}
-
 /* Tabs stay in normal flex/grid flow so they never slide under header-right controls. */
 .floating-header { position: sticky; }
 .floating-header > .chat-view-tabs {
@@ -267,20 +260,51 @@
   position: relative;
   z-index: 1;
 }
-.canvas-tabs-mobile { display: none; }
-@media (max-width: 900px) {
-  .floating-header > .chat-view-tabs { display: none; }
-  .canvas-tabs-mobile {
-    display: inline-block;
-    flex: 0 0 auto;
-    background: var(--canvas-surface, var(--bg-tertiary, #f3f4f6));
-    border: 1px solid var(--canvas-border, var(--border-primary, #e5e7eb));
-    color: var(--canvas-text, var(--text-primary, #111827));
-    font-family: inherit;
-    font-size: 13px;
-    padding: 6px 10px;
-    border-radius: 7px;
-  }
+.canvas-tabs-mobile {
+  display: none;
+  flex: 0 0 auto;
+  background: var(--canvas-surface, var(--bg-tertiary, #f3f4f6));
+  border: 1px solid var(--canvas-border, var(--border-primary, #e5e7eb));
+  color: var(--canvas-text, var(--text-primary, #111827));
+  font-family: inherit;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 7px;
+}
+
+/* ---- Header collapse (all pages: Chat, Journey, Workspace, Documents) ----
+   Driven by container queries on the header's OWN width, not the viewport,
+   because a 300px sidebar can shrink the header at any viewport size.
+   Collapse order as space runs out:
+     subtitle → brand text → brand icon → pill tabs become the mobile
+     select → Export/advisor labels become icon-only → home button.
+   Thresholds are sized so the widest header-right (Chat: advisor dropdown +
+   Export + help) always fits without clipping or overlap.
+   (Modals inside the header portal to <body>, so contain:layout is safe.) */
+.floating-header.app-header {
+  container-type: inline-size;
+  container-name: app-header;
+}
+@container app-header (max-width: 1200px) {
+  .floating-header.app-header .brand-text p { display: none; }
+}
+@container app-header (max-width: 1100px) {
+  .floating-header.app-header .brand-text { display: none; }
+}
+@container app-header (max-width: 940px) {
+  .floating-header.app-header .header-brand { display: none; }
+}
+@container app-header (max-width: 860px) {
+  .floating-header.app-header > .chat-view-tabs { display: none; }
+  .floating-header.app-header > .canvas-tabs-mobile { display: inline-block; }
+}
+@container app-header (max-width: 700px) {
+  .floating-header.app-header .export-text { display: none; }
+  .floating-header.app-header .advisor-count { display: none; }
+  .floating-header.app-header .advisor-status-button { min-width: 0; }
+}
+@container app-header (max-width: 560px) {
+  .floating-header.app-header .modern-home-btn { display: none; }
 }
 
 /* Shared view-tabs pill bar — used on both Canvas and Chat pages.

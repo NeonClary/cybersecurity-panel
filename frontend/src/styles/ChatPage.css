@@ -45,6 +45,7 @@
 .modern-home-btn {
   width: 44px;
   height: 44px;
+  flex-shrink: 0; /* never squish into a sliver; collapse rules hide it instead */
   border-radius: 12px;
   border: none;
   background: var(--bg-secondary);
@@ -102,20 +103,10 @@
   text-overflow: ellipsis;
 }
 
-/* When the header gets tight (sidebar open + pill tabs + controls), drop the
-   brand subtitle first and then the whole text block instead of ellipsizing
-   the product name down to a single letter. */
-@media (max-width: 1500px) {
-  .app-header .brand-text p {
-    display: none;
-  }
-}
-
-@media (max-width: 1380px) {
-  .app-header .brand-text {
-    display: none;
-  }
-}
+/* Brand subtitle/text collapse is handled by container queries on
+   .floating-header.app-header (see CanvasPage.css "Header collapse" block),
+   so it reacts to the header's real width — sidebar open or closed —
+   instead of the viewport. */
 
 .brand-text p {
   font-size: 13px;
