@@ -31,7 +31,6 @@ import CanvasWelcomeTour from '../components/canvas/CanvasWelcomeTour';
 import DeliverablesView, { TEMPLATES as DELIVERABLE_TEMPLATES } from '../components/canvas/CanvasDeliverables';
 import { MOD } from '../components/canvas/platform';
 import AboutYouModal from '../components/AboutYouModal';
-import AccountModal from '../components/AccountModal';
 import ClearDataModal from '../components/ClearDataModal';
 import SettingsModal from '../components/SettingsModal';
 import { fetchCanvas, saveWorkspace, debounce } from '../utils/canvasApi';
@@ -828,10 +827,9 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [tourForceShow, setTourForceShow] = useState(0);
   const [showAboutYou, setShowAboutYou] = useState(false);
-  const [showAccount, setShowAccount] = useState(false);
   const [showClearData, setShowClearData] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState('account');
+  const [settingsInitialTab, setSettingsInitialTab] = useState('profile');
   const hydratedRef = useRef(false);
   const [serverHydrated, setServerHydrated] = useState(false);
 
@@ -1113,7 +1111,10 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
         insightSections={insightSections}
         onNavigateToJourney={onNavigateToJourney}
         onOpenProfile={() => setShowAboutYou(true)}
-        onOpenAccount={() => setShowAccount(true)}
+        onOpenAccount={() => {
+          setSettingsInitialTab('profile');
+          setShowSettings(true);
+        }}
         onOpenClearData={() => setShowClearData(true)}
         onOpenModelStatus={() => {
           setSettingsInitialTab('model-status');
@@ -1174,17 +1175,6 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
         <AboutYouModal
           authToken={authToken}
           onClose={() => setShowAboutYou(false)}
-        />
-      )}
-      {showAccount && (
-        <AccountModal
-          user={user}
-          authToken={authToken}
-          onClose={() => setShowAccount(false)}
-          onAccountUpdated={(u) => {
-            localStorage.setItem('user', JSON.stringify(u));
-          }}
-          onAccountDeleted={onSignOut}
         />
       )}
       {showSettings && (

@@ -20,7 +20,6 @@ from app.api.routes.chat_sessions import (  # noqa: E402
     get_chat_session,
     update_chat_session,
     save_message_to_session,
-    delete_all_chat_sessions,
     delete_chat_session,
 )
 from app.models.user import User  # noqa: E402
@@ -340,54 +339,6 @@ class TestSaveMessageToSession(unittest.TestCase):
             )
 
         self.assertEqual(ctx.exception.status_code, 404)
-
-
-# ------------------------------------------------------------------
-# DELETE /chat-sessions (bulk delete)
-# ------------------------------------------------------------------
-
-
-@patch("app.api.routes.chat_sessions.get_database")
-class TestDeleteAllChatSessions(unittest.TestCase):
-
-    def test_soft_deletes_all_active_sessions(self, mock_get_db):
-        db = _mock_db()
-        db.chat_sessions.update_many.return_value = MagicMock(modified_count=3)
-        mock_get_db.return_value = db
-
-        user = _make_fake_user()
-        result = asyncio.run(delete_all_chat_sessions(current_user=user))
-
-        self.assertEqual(result["deleted_count"], 3)
-        self.assertIn("3", result["message"])
-
-        filter_arg = db.chat_sessions.update_many.call_args[0][0]
-        self.assertEqual(filter_arg["user_id"], user.id)
-        self.assertEqual(filter_arg["is_active"], True)
-
-        set_arg = db.chat_sessions.update_many.call_args[0][1]["$set"]
-        self.assertFalse(set_arg["is_active"])
-
-    def test_returns_zero_when_no_active_sessions(self, mock_get_db):
-        db = _mock_db()
-        db.chat_sessions.update_many.return_value = MagicMock(modified_count=0)
-        mock_get_db.return_value = db
-
-        user = _make_fake_user()
-        result = asyncio.run(delete_all_chat_sessions(current_user=user))
-
-        self.assertEqual(result["deleted_count"], 0)
-
-    def test_scoped_to_current_user(self, mock_get_db):
-        db = _mock_db()
-        db.chat_sessions.update_many.return_value = MagicMock(modified_count=1)
-        mock_get_db.return_value = db
-
-        user = _make_fake_user()
-        asyncio.run(delete_all_chat_sessions(current_user=user))
-
-        filter_arg = db.chat_sessions.update_many.call_args[0][0]
-        self.assertEqual(filter_arg["user_id"], FAKE_USER_ID)
 
 
 # ------------------------------------------------------------------

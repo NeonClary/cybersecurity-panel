@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { MessageCircle, Reply, X, Sparkles, Users, Settings2, FileText, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { MessageCircle, Reply, X, FileText, HelpCircle } from 'lucide-react';
 import EnhancedChatInput from '../components/EnhancedChatInput';
-import MessageBubble from '../components/MessageBubble';
 import ThinkingIndicator from '../components/ThinkingIndicator';
 import SuggestionsPanel from '../components/SuggestionsPanel';
 import AppHeader from '../components/AppHeader';
@@ -16,7 +15,6 @@ import AdvisorCarousel from '../components/AdvisorCarousel';
 import OnboardingChat from '../components/OnboardingChat';
 import AboutYouModal from '../components/AboutYouModal';
 import ClearDataModal from '../components/ClearDataModal';
-import AccountModal from '../components/AccountModal';
 import SettingsModal from '../components/SettingsModal';
 import IntakePanel from '../components/IntakePanel';
 
@@ -30,10 +28,6 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   const [activeAdvisorIds, setActiveAdvisorIds] = useState([]);
   const [collectedInfo, setCollectedInfo] = useState({});
   const [replyingTo, setReplyingTo] = useState(null);
-  const [currentProvider, setCurrentProvider] = useState('gemini');
-  const [isProviderSwitching, setIsProviderSwitching] = useState(false);
-  const [onlineProviders, setOnlineProviders] = useState(null); // null = fail-open / not filtered yet
-  const [statusCheckFailed, setStatusCheckFailed] = useState(false);
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const messagesEndRef = useRef(null);
   const { isDark } = useTheme();
@@ -68,7 +62,6 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   const [showAboutYou, setShowAboutYou] = useState(false);
   const [aboutYouInitialTab, setAboutYouInitialTab] = useState('about');
   const [showClearData, setShowClearData] = useState(false);
-  const [showAccount, setShowAccount] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('profile');
   const [userProfile, setUserProfile] = useState(null);
@@ -151,104 +144,6 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   useEffect(() => {
     scrollToBottom();
   }, [messages, thinkingAdvisors]);
-
-  const applyModelStatus = useCallback((data) => {
-    if (!data || data.check_failed || data.online_providers == null) {
-      console.warn('Model status check failed or incomplete; keeping unfiltered provider list.');
-      setStatusCheckFailed(true);
-      setOnlineProviders(null);
-      return;
-    }
-    setStatusCheckFailed(false);
-    setOnlineProviders(data.online_providers);
-  }, []);
-
-  const fetchModelStatus = useCallback(async (forceRefresh = false) => {
-    try {
-      const qs = forceRefresh ? '?refresh=true' : '';
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/models/status${qs}`);
-      if (!response.ok) {
-        throw new Error(`Model status HTTP ${response.status}`);
-      }
-      const data = await response.json();
-      applyModelStatus(data);
-      return data;
-    } catch (error) {
-      console.warn('Model status check failed; keeping unfiltered provider list.', error);
-      setStatusCheckFailed(true);
-      setOnlineProviders(null);
-      return null;
-    }
-  }, [applyModelStatus]);
-
-  const fetchCurrentProvider = useCallback(async () => {
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/current-provider`);
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentProvider(data.current_provider);
-        console.log('Loaded provider:', data.current_provider, 'Available:', data.available_providers);
-      }
-    } catch (error) {
-      console.error('Error fetching current provider:', error);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchCurrentProvider();
-    fetchModelStatus();
-  }, [fetchCurrentProvider, fetchModelStatus]);
-
-  const handleProviderSwitch = async (newProvider) => {
-    if (newProvider === currentProvider || isProviderSwitching) return;
-
-    setIsProviderSwitching(true);
-    try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/switch-provider`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          provider: newProvider
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentProvider(newProvider);
-        
-        const switchMessage = {
-          id: generateMessageId(),
-          type: 'system',
-          content: `✨ Switched to ${newProvider.charAt(0).toUpperCase() + newProvider.slice(1)} provider. Your advisors are now ready with the new AI model.`,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, switchMessage]);
-      } else {
-        const error = await response.json();
-        console.error('Failed to switch provider:', error);
-        const errorMessage = {
-          id: generateMessageId(),
-          type: 'error',
-          content: `Failed to switch to ${newProvider}: ${error.detail || 'Unknown error'}`,
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, errorMessage]);
-      }
-    } catch (error) {
-      console.error('Error switching provider:', error);
-      const errorMessage = {
-        id: generateMessageId(),
-        type: 'error',
-        content: `Error switching to ${newProvider}. Please try again.`,
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, errorMessage]);
-    } finally {
-      setIsProviderSwitching(false);
-    }
-  };
 
   const generateMessageId = () => {
     return Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -925,7 +820,10 @@ const handleNewChat = async (sessionId = null) => {
           setAboutYouInitialTab('about');
           setShowAboutYou(true);
         }}
-        onOpenAccount={() => setShowAccount(true)}
+        onOpenAccount={() => {
+          setSettingsInitialTab('profile');
+          setShowSettings(true);
+        }}
         onOpenClearData={() => setShowClearData(true)}
         onOpenModelStatus={() => {
           setSettingsInitialTab('model-status');
@@ -1162,17 +1060,6 @@ const handleNewChat = async (sessionId = null) => {
           onClose={() => { setShowOnboarding(false); loadProfile(); }}
         />
       )}
-      {showAccount && (
-        <AccountModal
-          user={user}
-          authToken={authToken}
-          onClose={() => setShowAccount(false)}
-          onAccountUpdated={(u) => {
-            localStorage.setItem('user', JSON.stringify(u));
-          }}
-          onAccountDeleted={onSignOut}
-        />
-      )}
       {showSettings && (
         <SettingsModal
           user={user}
@@ -1183,7 +1070,6 @@ const handleNewChat = async (sessionId = null) => {
           onUserUpdate={(u) => {
             localStorage.setItem('user', JSON.stringify(u));
           }}
-          onModelStatusChange={applyModelStatus}
         />
       )}
       {showClearData && (

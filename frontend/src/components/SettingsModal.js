@@ -70,7 +70,6 @@ const SettingsModal = ({
   onSignOut,
   onClose,
   initialTab = 'profile',
-  onModelStatusChange,
 }) => {
   const [activeTab, setActiveTab] = useState(initialTab || 'profile');
 
@@ -85,6 +84,7 @@ const SettingsModal = ({
 
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
+  const [email, setEmail] = useState(user?.email || '');
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -99,6 +99,8 @@ const SettingsModal = ({
   const [modelStatus, setModelStatus] = useState(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [statusError, setStatusError] = useState(null);
+  const [currentProvider, setCurrentProvider] = useState(null);
+  const [switchingProvider, setSwitchingProvider] = useState(null);
 
   const apiUrl = process.env.REACT_APP_API_URL;
 
@@ -108,9 +110,6 @@ const SettingsModal = ({
     if (Array.isArray(data.detail) && data.detail[0]?.msg) return data.detail[0].msg;
     return fallback;
   };
-
-  const onModelStatusChangeRef = useRef(onModelStatusChange);
-  onModelStatusChangeRef.current = onModelStatusChange;
 
   const fetchModelStatus = useCallback(async (forceRefresh = false) => {
     setStatusLoading(true);
@@ -123,28 +122,62 @@ const SettingsModal = ({
       }
       const data = await response.json();
       setModelStatus(data);
-      onModelStatusChangeRef.current?.(data);
     } catch (err) {
       console.warn('Model status check failed; keeping unfiltered provider list.', err);
       setStatusError(err.message || 'Could not load model status.');
-      const failed = {
+      setModelStatus({
         models: [],
         online_providers: null,
         check_failed: true,
         error: err.message || 'Network error',
-      };
-      setModelStatus(failed);
-      onModelStatusChangeRef.current?.(failed);
+      });
     } finally {
       setStatusLoading(false);
     }
   }, [apiUrl]);
 
+  const fetchCurrentProvider = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiUrl}/current-provider`);
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentProvider(data.current_provider);
+      }
+    } catch {
+      /* provider display is best-effort */
+    }
+  }, [apiUrl]);
+
+  const handleProviderSwitch = async (providerId) => {
+    if (providerId === currentProvider || switchingProvider) return;
+    setSwitchingProvider(providerId);
+    setMessage(null);
+    try {
+      const response = await fetch(`${apiUrl}/switch-provider`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: providerId }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessage({ type: 'error', text: extractError(data, `Could not switch to ${providerId}.`) });
+        return;
+      }
+      setCurrentProvider(providerId);
+      setMessage({ type: 'success', text: `Advisors now use the ${providerId} provider.` });
+    } catch {
+      setMessage({ type: 'error', text: 'Network error while switching provider.' });
+    } finally {
+      setSwitchingProvider(null);
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'model-status') {
       fetchModelStatus(false);
+      fetchCurrentProvider();
     }
-  }, [activeTab, fetchModelStatus]);
+  }, [activeTab, fetchModelStatus, fetchCurrentProvider]);
 
   useEffect(() => {
     setActiveTab(initialTab || 'profile');
@@ -153,22 +186,30 @@ const SettingsModal = ({
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
     setMessage(null);
-    if (!firstName.trim() && !lastName.trim()) {
-      setMessage({ type: 'error', text: 'Enter a first or last name.' });
+    if (!firstName.trim()) {
+      setMessage({ type: 'error', text: 'First name is required.' });
+      return;
+    }
+    if (!email.trim()) {
+      setMessage({ type: 'error', text: 'Email is required.' });
       return;
     }
     setIsSubmitting(true);
     try {
+      const payload = {
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+      };
+      if (email.trim() !== (user?.email || '')) {
+        payload.email = email.trim();
+      }
       const response = await fetch(`${apiUrl}/auth/me`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({
-          first_name: firstName.trim(),
-          last_name: lastName.trim(),
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok) {
@@ -178,6 +219,7 @@ const SettingsModal = ({
       onUserUpdate?.(data);
       setFirstName(data.firstName || '');
       setLastName(data.lastName || '');
+      setEmail(data.email || '');
       setMessage({ type: 'success', text: 'Profile updated.' });
     } catch (err) {
       setMessage({ type: 'error', text: 'Network error. Please try again.' });
@@ -319,7 +361,11 @@ const SettingsModal = ({
             <form onSubmit={handleProfileSubmit}>
               <div style={{ marginBottom: 16 }}>
                 <label style={label}>Email</label>
-                <input style={{ ...input, opacity: 0.6, cursor: 'not-allowed' }} value={user?.email || ''} disabled />
+                {user?.is_guest ? (
+                  <input style={{ ...input, opacity: 0.6, cursor: 'not-allowed' }} value={user?.email || ''} disabled />
+                ) : (
+                  <input type="email" style={input} value={email} onChange={(e) => setEmail(e.target.value)} />
+                )}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
                 <div>
@@ -426,18 +472,23 @@ const SettingsModal = ({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {(modelStatus?.models || []).map((m) => {
                   const tone = statusColors[m.status] || statusColors.unavailable;
+                  const isActive = m.provider === currentProvider;
+                  // Fail closed per model: only online + selectable providers can
+                  // be activated. Fail open if the whole check failed (no rows
+                  // render in that case, so nothing is blocked).
+                  const canActivate = m.status === 'online' && m.selectable !== false && !isActive;
                   return (
                     <div
                       key={m.id}
                       style={{
                         padding: '12px 14px',
                         borderRadius: 10,
-                        border: `1px solid ${tone.border}`,
+                        border: `1px solid ${isActive ? 'var(--accent-primary)' : tone.border}`,
                         background: 'var(--bg-secondary)',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
-                        <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <div style={{ minWidth: 0 }}>
                           <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>
                             {m.name}
                             {m.model ? (
@@ -451,19 +502,52 @@ const SettingsModal = ({
                             {typeof m.latency_ms === 'number' ? ` · ${m.latency_ms} ms` : ''}
                           </div>
                         </div>
-                        <span style={{
-                          fontSize: 12,
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.03em',
-                          padding: '4px 8px',
-                          borderRadius: 6,
-                          background: tone.bg,
-                          color: tone.color,
-                          border: `1px solid ${tone.border}`,
-                        }}>
-                          {m.status}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                          <span style={{
+                            fontSize: 12,
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.03em',
+                            padding: '4px 8px',
+                            borderRadius: 6,
+                            background: tone.bg,
+                            color: tone.color,
+                            border: `1px solid ${tone.border}`,
+                          }}>
+                            {m.status}
+                          </span>
+                          {isActive ? (
+                            <span style={{
+                              fontSize: 12,
+                              fontWeight: 600,
+                              padding: '4px 10px',
+                              borderRadius: 6,
+                              background: 'var(--accent-primary)',
+                              color: '#fff',
+                            }}>
+                              Active
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleProviderSwitch(m.provider)}
+                              disabled={!canActivate || !!switchingProvider}
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                padding: '4px 10px',
+                                borderRadius: 6,
+                                border: '1px solid var(--border-primary)',
+                                background: 'transparent',
+                                color: canActivate ? 'var(--accent-primary)' : 'var(--text-secondary)',
+                                cursor: canActivate && !switchingProvider ? 'pointer' : 'not-allowed',
+                                opacity: canActivate ? 1 : 0.5,
+                              }}
+                            >
+                              {switchingProvider === m.provider ? 'Switching…' : 'Use'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {m.status === 'error' && m.error && (
                         <div style={{

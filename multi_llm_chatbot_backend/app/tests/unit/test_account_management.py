@@ -13,12 +13,11 @@ from pydantic import ValidationError
 from app.api.routes.auth import (  # noqa: E402
     ChangePasswordRequest,
     DeleteAccountRequest,
-    UpdateProfileRequest,
     change_password,
     delete_account,
     update_profile,
 )
-from app.models.user import User  # noqa: E402
+from app.models.user import User, UserUpdate  # noqa: E402
 
 
 FAKE_USER_ID = ObjectId()
@@ -49,6 +48,8 @@ def _mock_db():
     db.onboarding_conversations.delete_many = AsyncMock()
     db.user_facts.delete_many = AsyncMock()
     db.user_summaries.delete_many = AsyncMock()
+    db.goal_tracks.delete_many = AsyncMock()
+    db.assessments.delete_many = AsyncMock()
     return db
 
 
@@ -149,7 +150,7 @@ class TestUpdateProfile(unittest.TestCase):
         db.users.find_one = AsyncMock(return_value=updated_doc)
         mock_get_db.return_value = db
 
-        body = UpdateProfileRequest(first_name="Alice")
+        body = UserUpdate(firstName="Alice")
         result = asyncio.run(update_profile(body=body, current_user=user))
 
         db.users.update_one.assert_called_once_with(
@@ -169,7 +170,7 @@ class TestUpdateProfile(unittest.TestCase):
         db.users.find_one = AsyncMock(return_value=updated_doc)
         mock_get_db.return_value = db
 
-        body = UpdateProfileRequest(first_name="Alice", last_name="Smith")
+        body = UserUpdate(firstName="Alice", lastName="Smith")
         result = asyncio.run(update_profile(body=body, current_user=user))
 
         db.users.update_one.assert_called_once_with(
@@ -179,11 +180,16 @@ class TestUpdateProfile(unittest.TestCase):
         self.assertEqual(result.firstName, "Alice")
         self.assertEqual(result.lastName, "Smith")
 
-    def test_empty_body_rejected(self, mock_get_db):
-        with self.assertRaises(ValidationError) as ctx:
-            UpdateProfileRequest()
+    def test_empty_body_is_noop(self, mock_get_db):
+        user = _make_fake_user()
+        db = _mock_db()
+        mock_get_db.return_value = db
 
-        self.assertIn("at least one field", str(ctx.exception).lower())
+        body = UserUpdate()
+        result = asyncio.run(update_profile(body=body, current_user=user))
+
+        db.users.update_one.assert_not_called()
+        self.assertEqual(result.firstName, "Test")
 
     def test_strips_whitespace(self, mock_get_db):
         user = _make_fake_user()
@@ -192,8 +198,7 @@ class TestUpdateProfile(unittest.TestCase):
         db.users.find_one = AsyncMock(return_value=updated_doc)
         mock_get_db.return_value = db
 
-        body = UpdateProfileRequest(first_name="  Alice  ")
-        self.assertEqual(body.first_name, "Alice")
+        body = UserUpdate(firstName="  Alice  ")
 
         asyncio.run(update_profile(body=body, current_user=user))
 
@@ -202,11 +207,22 @@ class TestUpdateProfile(unittest.TestCase):
             {"$set": {"firstName": "Alice"}},
         )
 
-    def test_whitespace_only_body_rejected(self, mock_get_db):
-        with self.assertRaises(ValidationError) as ctx:
-            UpdateProfileRequest(first_name="   ")
+    def test_knowledge_level_syncs_to_profile(self, mock_get_db):
+        user = _make_fake_user()
+        updated_doc = {**user.model_dump(by_alias=True), "academicStage": "expert"}
+        db = _mock_db()
+        db.users.find_one = AsyncMock(return_value=updated_doc)
+        db.user_profiles.update_one = AsyncMock()
+        mock_get_db.return_value = db
 
-        self.assertIn("at least one field", str(ctx.exception).lower())
+        body = UserUpdate(academicStage="expert")
+        asyncio.run(update_profile(body=body, current_user=user))
+
+        profile_call = db.user_profiles.update_one.call_args
+        self.assertEqual(profile_call[0][0], {"user_id": user.id})
+        self.assertEqual(
+            profile_call[0][1]["$set"]["knowledge_level"], "expert"
+        )
 
 
 # ------------------------------------------------------------------
@@ -235,6 +251,8 @@ class TestDeleteAccount(unittest.TestCase):
         db.onboarding_conversations.delete_many.assert_called_once_with({"user_id": user.id})
         db.user_facts.delete_many.assert_called_once_with({"user_id": user.id})
         db.user_summaries.delete_many.assert_called_once_with({"user_id": user.id})
+        db.goal_tracks.delete_many.assert_called_once_with({"user_id": user.id})
+        db.assessments.delete_many.assert_called_once_with({"user_id": user.id})
         db.users.delete_one.assert_called_once_with({"_id": user.id})
         self.assertEqual(result.message, "Account deleted")
 
