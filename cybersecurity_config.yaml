@@ -136,6 +136,9 @@ personas:
 orchestrator:
   min_words_without_keywords: 6
   conversation_history_token_threshold: 4000
+  required_advisor: "jerry_huaute"
+  triage_advisor: "incident_responder"
+  followup_count: 3
   specific_keywords:
     - "security"
     - "cyber"
@@ -227,9 +230,3 @@ user_knowledge:
 voice:
   stt_endpoint: "https://whisper.neonaiservices.com"
   tts_endpoint: "https://coqui.neonaiservices.com"
-
-user_knowledge:
-  short_summary_max_tokens: 150
-  long_summary_max_tokens: 600
-  small_model_context_budget: 4096
-  extract_on_every_message: true

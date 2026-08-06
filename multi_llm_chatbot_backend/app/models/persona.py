@@ -238,12 +238,24 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
     return "\n".join(parts).strip()
 
 class Persona:
-    def __init__(self, id: str, name: str, system_prompt: str, llm: LLMClient, temperature: int = 5):
+    def __init__(
+        self,
+        id: str,
+        name: str,
+        system_prompt: str,
+        llm: LLMClient,
+        temperature: int = 5,
+        role: str = "",
+        summary: str = "",
+    ):
         self.id = id
         self.name = name
         self.system_prompt = system_prompt
         self.llm = llm
         self.temperature = temperature
+        # Short descriptors used for routing prompts (kept tiny on purpose).
+        self.role = role
+        self.summary = summary
 
     async def respond(self, context: List[Dict], response_length: str = "medium") -> str:
         """Generate a compact, well-formed Markdown response suitable for the UI.

@@ -14,6 +14,19 @@ import re
 
 logger = logging.getLogger(__name__)
 
+# Cheap fallback signal for active-incident (triage) messages, used only when
+# the LLM routing call fails or returns garbage.
+_TRIAGE_FALLBACK = re.compile(
+    r"(hacked|hack into|compromis\w*|breach\w*|ransomware|ransom note|"
+    r"malware|infected|virus on|stolen|sextortion|extort\w*|scammed|"
+    r"locked out|unauthorized (access|login|charge)|suspicious (login|activity)|"
+    r"data leak|account.{0,20}taken over)",
+    re.IGNORECASE,
+)
+
+VALID_URGENCIES = ("triage", "advisory", "program")
+
+
 class ImprovedChatOrchestrator:
     """
     Enhanced orchestrator with document awareness and improved context handling
@@ -78,109 +91,6 @@ class ImprovedChatOrchestrator:
             tool_executor=tool_executor,
         )
 
-    # TODO: Investigate if this method is still needed and remove if not.
-    async def process_message(self, 
-                            user_input: str, 
-                            session_id: Optional[str] = None,
-                            response_length: str = "medium") -> Dict[str, Any]:
-        """
-        Process a user message through the orchestration pipeline
-        """
-        try:
-            # Get or create session
-            session = self.session_manager.get_session(session_id)
-            
-            # Add user message to session
-            session.append_message("user", user_input)
-            
-            # Determine if we need clarification
-            needs_clarification = self.needs_clarification(session, user_input)
-            
-            if needs_clarification:
-                # Generate clarification question
-                clarification = await self._generate_clarification_question(session)
-                session.append_message("system", f"Clarification request: {clarification}")
-                
-                return {
-                    "status": "clarification_needed",
-                    "message": clarification,
-                    "suggestions": self._get_clarification_suggestions(),
-                    "session_id": session.session_id
-                }
-            
-            # Generate responses from all personas
-            responses = await self.generate_persona_responses(session, response_length)
-            
-            return {
-                "status": "success",
-                "responses": responses,
-                "session_id": session.session_id
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in process_message: {str(e)}")
-            return {
-                "status": "error",
-                "message": "I'm having technical difficulties. Please try again.",
-                "error": str(e)
-            }
-
-    async def process_message_with_enhanced_context(self, user_input: str, session_id: str, response_length: str = "medium"):
-        """
-        Enhanced message processing with document awareness and better context management
-        """
-        try:
-            # Get session
-            session = self.session_manager.get_session(session_id)
-            
-            # Add user message to session
-            session.append_message("user", user_input)
-            
-            # Detect document references in the query
-            document_references = self._extract_document_references_from_query(user_input)
-            
-            # Get available documents for this session
-            rag_manager = get_rag_manager()
-            doc_stats = rag_manager.get_document_stats(session_id)
-            available_documents = [doc["filename"] for doc in doc_stats.get("documents", [])]
-            
-            # Generate enhanced persona responses
-            responses = await self.generate_persona_responses(session, response_length)
-            
-            return {
-                "status": "success",
-                "responses": responses,
-                "document_references_detected": bool(document_references),
-                "available_documents": available_documents,
-                "session_id": session_id
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in enhanced message processing: {str(e)}")
-            return {
-                "status": "error", 
-                "message": "I'm having technical difficulties processing your request.",
-                "suggestions": ["Please try rephrasing your question.", "Check if your documents uploaded successfully."]
-            }
-
-    def _extract_document_references_from_query(self, query: str) -> List[str]:
-        """Extract document references from user query"""
-        query_lower = query.lower()
-        references = []
-        
-        # Common document reference patterns
-        patterns = [
-            r"(?:my|the|in)\s+([a-zA-Z_\-]+\.(?:pdf|docx|txt))",  # specific files
-            r"(?:my|the)\s+(dissertation|thesis|proposal|chapter|manuscript)",  # document types
-            r"(?:in|from)\s+(?:my\s+)?([a-zA-Z_\-\s]+(?:chapter|section))",  # sections
-        ]
-        
-        for pattern in patterns:
-            matches = re.findall(pattern, query_lower)
-            references.extend(matches)
-        
-        return references[:3]  # Limit to first 3 references
-    
     def needs_clarification(self, session: ConversationContext, user_input: str) -> bool:
         """
         Determine if the user input needs clarification.
@@ -378,25 +288,6 @@ class ImprovedChatOrchestrator:
             "suggestions": fallback_suggestions,
         }
     
-    async def generate_persona_responses(self, session: ConversationContext, response_length: str = "medium"):
-        """
-        Generate responses from all personas with enhanced RAG integration
-        """
-        responses = []
-        
-        for persona_id, persona in self.personas.items():
-            logger.info(f"Generating response for {persona_id} with enhanced RAG")
-            
-            # Generate persona response with enhanced RAG
-            response_data = await self.generate_single_persona_response(session, persona, response_length)
-            
-            # Add persona response to session context
-            session.append_message(persona_id, response_data["response"])
-            
-            responses.append(response_data)
-        
-        return responses
-    
     async def generate_single_persona_response(self, session, persona, response_length: str = "medium"):
         """
         Enhanced version - Generate response from a single persona with enhanced RAG integration
@@ -557,9 +448,9 @@ class ImprovedChatOrchestrator:
         # Common patterns for document references
         document_indicators = [
             r"(?:my|the|in|from)\s+([a-zA-Z_\-]+\.(?:pdf|docx|txt|doc))",  # specific files
-            r"(?:my|the)\s+(dissertation|thesis|proposal|chapter|manuscript|paper)",  # document types
-            r"(?:in|from)\s+(?:my\s+)?([a-zA-Z_\-\s]+(?:chapter|section|proposal))",  # sections
-            r"(?:the|my)\s+([a-zA-Z_\-\s]+(?:document|file))",  # generic documents
+            r"(?:my|the|our)\s+(policy|policies|plan|playbook|runbook|report|assessment|architecture|diagram|questionnaire|contract|audit)",  # document types
+            r"(?:in|from)\s+(?:my\s+)?([a-zA-Z_\-\s]+(?:section|appendix|policy|plan))",  # sections
+            r"(?:the|my|our)\s+([a-zA-Z_\-\s]+(?:document|file))",  # generic documents
         ]
         
         for pattern in document_indicators:
@@ -570,15 +461,11 @@ class ImprovedChatOrchestrator:
         return None
 
     def _get_enhanced_persona_context_keywords(self, persona_id: str) -> str:
-        """
-        Enhanced persona-specific keywords for better document retrieval
-        """
-        enhanced_keywords = {
-            "methodologist": "methodology research design experimental approach data collection sampling validity reliability statistical analysis quantitative qualitative mixed-methods procedures protocol IRB ethics",
-            "theorist": "theory theoretical framework conceptual model literature review philosophy epistemology ontology paradigm abstract concepts hypothesis proposition postulate axiom",
-            "pragmatist": "practical application implementation action steps next steps recommendation solution strategy timeline concrete advice roadmap execution deliverables milestones"
-        }
-        return enhanced_keywords.get(persona_id, "")
+        """Retrieval keywords derived from the persona's own descriptors."""
+        persona = self.personas.get(persona_id)
+        if not persona:
+            return ""
+        return " ".join(part for part in (persona.role, persona.summary) if part)
 
     def _format_document_context_with_attribution(self, chunks: List[Dict], persona_id: str) -> str:
         """
@@ -651,33 +538,14 @@ Use this context to inform your response, and cite specific documents when refer
         """
         Get persona-specific instructions for handling document context
         """
-        instructions = {
-            "methodologist": """
-When analyzing the document context:
-- Focus on methodological rigor and research design elements
-- Identify potential validity threats or methodological gaps
-- Suggest specific improvements to research procedures
-- Reference exact methodological frameworks mentioned in their documents
-- Connect their approach to established research standards""",
-            
-            "theorist": """
-When analyzing the document context:
-- Examine theoretical positioning and conceptual clarity
-- Identify theoretical gaps or inconsistencies
-- Suggest theoretical frameworks that align with their work
-- Evaluate the coherence between theory and research questions
-- Reference specific theoretical concepts mentioned in their documents""",
-            
-            "pragmatist": """
-When analyzing the document context:
-- Extract actionable next steps from their current progress
-- Identify immediate bottlenecks or decision points
-- Prioritize tasks based on their timeline and constraints
-- Translate theoretical concepts into practical implementation steps
-- Reference specific deadlines or milestones mentioned in their documents"""
-        }
-        
-        return instructions.get(persona_id, "Provide helpful guidance based on the document context.")
+        persona = self.personas.get(persona_id)
+        lens = f" through your {persona.role} lens" if persona and persona.role else ""
+        return (
+            "When analyzing the document context:\n"
+            f"- Evaluate the material{lens} and cite the document by name.\n"
+            "- Point out concrete gaps, risks, or missing controls you can see in the text.\n"
+            "- Tie recommendations to specific passages rather than generic advice."
+        )
 
     async def _build_enhanced_context_for_persona(self, session, persona, user_message: str, document_context: str) -> List[Dict[str, str]]:
         """
@@ -755,6 +623,9 @@ When analyzing the document context:
                 "Use this background to calibrate technical depth, examples, and priorities."
             )
 
+        if getattr(session, "urgency_context", ""):
+            system_message += f"\n\n{session.urgency_context}"
+
         enhanced_context.append({
             "role": "system",
             "content": system_message,
@@ -805,27 +676,25 @@ When analyzing the document context:
     
     def _is_valid_response(self, response: str, persona_id: str) -> bool:
         """Validate response quality"""
-        if len(response) < 10 or len(response) > 5000:
+        if len(response) < 10 or len(response) > 8000:
             return False
-        
-        # Check for AI confusion indicators
+
+        # Check for AI confusion indicators (model talking to itself)
         confusion_indicators = [
-            f"Thank you, Dr. {persona_id.title()}",
             "Assistant:",
-            f"Dr. {persona_id.title()} Advisor:",
-            "excellent discussion, Assistant"
+            "excellent discussion, Assistant",
         ]
-        
+
         return not any(indicator in response for indicator in confusion_indicators)
-    
+
     def _get_persona_fallback(self, persona_id: str) -> str:
         """Get persona-specific fallback responses"""
-        fallbacks = {
-            "methodologist": "I'd be happy to help with your research methodology. What specific methodological approach are you considering?",
-            "theorist": "I'd like to explore the theoretical foundation of your work. What conceptual framework guides your research?",
-            "pragmatist": "Let's take a practical approach. What's the most pressing decision you need to make about your research right now?"
-        }
-        return fallbacks.get(persona_id, "I'd be happy to help. Could you provide more specific details about your question?")
+        persona = self.personas.get(persona_id)
+        focus = persona.role if persona and persona.role else "cybersecurity"
+        return (
+            f"I'd be happy to help with {focus.lower()}. "
+            "Could you share a little more about your situation so I can give specific guidance?"
+        )
     
     def get_session_info(self, session_id: str) -> Optional[Dict[str, Any]]:
         """Get information about a session"""
@@ -930,103 +799,231 @@ When analyzing the document context:
             }
         
 
-    async def get_top_personas(
+    def _candidate_pool(self, candidate_ids: Optional[List[str]]) -> Dict[str, Persona]:
+        """Resolve the advisor pool, respecting the user's active selection."""
+        if candidate_ids:
+            pool = {
+                pid: self.personas[pid]
+                for pid in candidate_ids
+                if pid in self.personas
+            }
+            if pool:
+                return pool
+        return dict(self.personas)
+
+    @staticmethod
+    def _heuristic_urgency(user_input: str) -> str:
+        return "triage" if _TRIAGE_FALLBACK.search(user_input or "") else "advisory"
+
+    def _apply_routing_rules(
+        self,
+        ranked: List[str],
+        pool: Dict[str, Persona],
+        k: int,
+        urgency: str,
+    ) -> List[str]:
+        """Enforce panel rules on the LLM ranking.
+
+        - The required lead advisor (Jerry) always responds when he is in
+          the user's active pool.
+        - In triage mode the incident expert responds first.
+        - The list is always exactly ``k`` valid, unique advisor IDs.
+        """
+        cfg = get_settings().orchestrator
+
+        order: List[str] = []
+        for pid in ranked:
+            if pid in pool and pid not in order:
+                order.append(pid)
+        for pid in pool:
+            if pid not in order:
+                order.append(pid)
+
+        top = order[:k]
+
+        required = cfg.required_advisor
+        if required in pool and required not in top and top:
+            top[-1] = required
+
+        if urgency == "triage":
+            triage = cfg.triage_advisor
+            if triage in pool:
+                if triage not in top and top:
+                    for i in range(len(top) - 1, -1, -1):
+                        if top[i] != required:
+                            top[i] = triage
+                            break
+                if triage in top:
+                    top.remove(triage)
+                    top.insert(0, triage)
+
+        # De-duplicate while preserving order, then refill to k if needed.
+        seen: List[str] = []
+        for pid in top:
+            if pid not in seen:
+                seen.append(pid)
+        for pid in order:
+            if len(seen) >= k:
+                break
+            if pid not in seen:
+                seen.append(pid)
+        return seen[:k]
+
+    async def route_message(
         self,
         session_id: str,
+        user_input: str,
         k: int = 3,
         candidate_ids: Optional[List[str]] = None,
-    ) -> List[str]:
-        """
-        Use the LLM to rank personas based on current session context.
-        Falls back to default persona order if LLM fails or returns invalid data.
+    ) -> Dict[str, Any]:
+        """Classify urgency and pick the responding advisors in one LLM call.
 
-        When ``candidate_ids`` is provided (e.g., from the header's advisor
-        selection dropdown) ranking is restricted to that pool so users only
-        receive responses from advisors they've enabled.
+        The routing prompt is profile-aware: it includes the user knowledge
+        summary loaded onto the session, so an executive asking about "risk"
+        is routed differently than a student. Falls back to a keyword urgency
+        heuristic plus registry order if the LLM call fails.
         """
+        if not self.personas:
+            logger.warning("No personas registered.")
+            return {"advisors": [], "urgency": "advisory"}
+
+        pool = self._candidate_pool(candidate_ids)
+        k = min(k, len(pool))
+
+        ranked: List[str] = []
+        urgency = self._heuristic_urgency(user_input)
+
         try:
             session = self.session_manager.get_session(session_id)
+            llm = self.llm_client or next(iter(pool.values())).llm
 
-            if not self.personas:
-                logger.warning("No personas registered.")
-                return []
-
-            if candidate_ids:
-                candidate_personas = {
-                    pid: self.personas[pid]
-                    for pid in candidate_ids
-                    if pid in self.personas
-                }
-                if not candidate_personas:
-                    candidate_personas = dict(self.personas)
-            else:
-                candidate_personas = dict(self.personas)
-
-            # Use the LLM from one of the existing persona objects
-            llm = next(iter(candidate_personas.values())).llm
-
-            # Use recent conversation context (last 5 messages)
-            recent_context = "\n".join(
-                msg['content'] for msg in session.get_recent_messages(5)
+            profile_block = (
+                getattr(session, "user_profile_context", "") or "(nothing known yet)"
+            )
+            recent = session.get_recent_messages(5)
+            convo = "\n".join(
+                f"{m.get('role', 'user')}: {str(m.get('content', ''))[:300]}"
+                for m in recent
+            )
+            advisor_cards = "\n".join(
+                f"- {p.id}: {p.name} — {p.role}. {p.summary}"
+                for p in pool.values()
             )
 
-            # Format available persona descriptions (only the candidate pool)
-            persona_descriptions = "\n".join([
-                f"- ID: {p.id}\n  Name: {p.name}\n  Prompt: {p.system_prompt.strip()}"
-                for p in candidate_personas.values()
-            ])
+            system_prompt = (
+                "You route messages for a cybersecurity advisor panel.\n"
+                "Given the user context and conversation, do two things:\n"
+                "1. Classify urgency: 'triage' (active incident happening now, e.g. "
+                "\"I think I've been hacked\"), 'advisory' (needs a recommendation), "
+                "or 'program' (long-term improvement, audits, maturity).\n"
+                f"2. Choose the {k} most relevant advisors for the latest message, "
+                "in order of relevance, considering who the user is (role, "
+                "knowledge level, organization) — not just the topic.\n\n"
+                "Respond ONLY with valid JSON:\n"
+                '{"urgency": "triage|advisory|program", "advisors": ["id1", "id2", ...]}'
+            )
+            user_prompt = (
+                f"--- User context ---\n{profile_block}\n\n"
+                f"--- Conversation (latest last) ---\n{convo}\n\n"
+                f"--- Advisors ---\n{advisor_cards}"
+            )
 
-            # Ensure k does not exceed the number of candidate personas
-            k = min(k, len(candidate_personas))
-
-            app_title = get_settings().app.title
-
-            prompt = f"""
-                        The user is seeking advice from {app_title}. Based on the conversation below, choose the top {k} most relevant advisors.
-
-                        Respond ONLY with a JSON list of exactly {k} advisor IDs in order of relevance.
-                        Example response: ["methodist", "pragmatist", "theorist"]
-
-                        --- Conversation ---
-                        {recent_context}
-
-                        --- Available Advisors ---
-                        {persona_descriptions}
-                      """.strip()
-
-            llm_response = await llm.generate(
-                system_prompt=f"You are an assistant that selects the best advisors for a user of {app_title}.",
-                context=[{"role": "user", "content": prompt}],
-                temperature=0.4,
+            raw = await llm.generate(
+                system_prompt=system_prompt,
+                context=[{"role": "user", "content": user_prompt}],
+                temperature=0.2,
                 max_tokens=150,
-                response_mime_type="application/json"
+                response_mime_type="application/json",
             )
 
-            # Step 1: Try direct JSON load
+            parsed: Any
             try:
-                top_ids = json.loads(llm_response.strip())
+                parsed = json.loads(raw.strip())
             except json.JSONDecodeError:
-                # Step 2: Fallback: try extracting list of quoted strings
-                top_ids = re.findall(r'"(.*?)"', llm_response)
-                logger.warning(f"Fallback JSON extraction used: {top_ids}")
+                match = re.search(r"\{.*\}", raw or "", re.DOTALL)
+                parsed = json.loads(match.group(0)) if match else {}
 
-            # Handle models that wrap the list in an object (e.g. {"advisor_ids": [...]})
-            if isinstance(top_ids, dict):
-                top_ids = next(iter(top_ids.values()), [])
-
-            # Step 3: Filter valid persona IDs against the candidate pool
-            valid_ids = [pid for pid in top_ids if pid in candidate_personas]
-
-            if len(valid_ids) < k:
-                logger.warning(f"LLM returned insufficient or invalid IDs. Got: {valid_ids}")
-                return list(candidate_personas.keys())[:k]
-
-            return valid_ids[:k]
+            if isinstance(parsed, list):
+                parsed = {"advisors": parsed}
+            if isinstance(parsed, dict):
+                llm_urgency = str(parsed.get("urgency", "")).strip().lower()
+                if llm_urgency in VALID_URGENCIES:
+                    urgency = llm_urgency
+                raw_ids = parsed.get("advisors")
+                if isinstance(raw_ids, list):
+                    ranked = [str(pid) for pid in raw_ids]
 
         except Exception as e:
-            logger.error(f"Error selecting top personas: {e}")
-            if candidate_ids:
-                fallback_ids = [pid for pid in candidate_ids if pid in self.personas]
-                if fallback_ids:
-                    return fallback_ids[:k]
-            return list(self.personas.keys())[:k]
+            logger.error(f"Routing LLM call failed, using fallbacks: {e}")
+
+        advisors = self._apply_routing_rules(ranked, pool, k, urgency)
+        logger.info(
+            "Routing result: urgency=%s advisors=%s (llm_ranked=%s)",
+            urgency, advisors, ranked,
+        )
+        return {"advisors": advisors, "urgency": urgency}
+
+    async def generate_followups(
+        self,
+        session_id: str,
+        count: Optional[int] = None,
+    ) -> List[str]:
+        """Generate short follow-up suggestions the user could send next.
+
+        Uses conversation context plus the user knowledge summary (plan §5.2).
+        Returns an empty list on any failure — the UI simply shows no chips.
+        """
+        cfg = get_settings().orchestrator
+        n = cfg.followup_count if count is None else count
+        if n <= 0:
+            return []
+
+        try:
+            session = self.session_manager.get_session(session_id)
+            llm = self.llm_client
+            if llm is None and self.personas:
+                llm = next(iter(self.personas.values())).llm
+            if llm is None:
+                return []
+
+            profile_block = getattr(session, "user_profile_context", "") or ""
+            recent = session.get_recent_messages(6)
+            convo = "\n".join(
+                f"{m.get('role', 'user')}: {str(m.get('content', ''))[:400]}"
+                for m in recent
+            )
+
+            system_prompt = (
+                "You suggest the user's next message to a cybersecurity advisor "
+                "panel. Write in the user's voice (first person), specific to "
+                "this conversation — natural next questions or actions, never "
+                "generic. Each suggestion is one sentence, at most 12 words.\n"
+                f"Respond ONLY with valid JSON: {{\"followups\": [{n} strings]}}"
+            )
+            user_prompt = (
+                (f"--- User context ---\n{profile_block}\n\n" if profile_block else "")
+                + f"--- Conversation (latest last) ---\n{convo}"
+            )
+
+            raw = await llm.generate(
+                system_prompt=system_prompt,
+                context=[{"role": "user", "content": user_prompt}],
+                temperature=0.5,
+                max_tokens=200,
+                response_mime_type="application/json",
+            )
+
+            match = re.search(r"\{.*\}", raw or "", re.DOTALL)
+            parsed = json.loads(match.group(0)) if match else {}
+            items = parsed.get("followups")
+            if not isinstance(items, list):
+                return []
+            cleaned = [
+                str(s).strip() for s in items
+                if isinstance(s, str) and str(s).strip()
+            ]
+            return cleaned[:n]
+
+        except Exception as e:
+            logger.warning(f"Follow-up generation failed: {e}")
+            return []

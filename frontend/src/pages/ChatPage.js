@@ -25,8 +25,8 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingAdvisors, setThinkingAdvisors] = useState([]);
+  const [followupChips, setFollowupChips] = useState([]);
   const [activeAdvisorIds, setActiveAdvisorIds] = useState([]);
-  const [collectedInfo, setCollectedInfo] = useState({});
   const [replyingTo, setReplyingTo] = useState(null);
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const messagesEndRef = useRef(null);
@@ -34,7 +34,6 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
 
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState('');
-  const [isSavingSession, setIsSavingSession] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
@@ -42,8 +41,6 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   const [userAvatarId, setUserAvatarId] = useState(
     () => localStorage.getItem('userAvatarId') || (user?.avatarId ?? null)
   );
-  const avatarOptions = config?.app?.user_avatars || [];
-
   const handleAvatarChange = async (id) => {
     setUserAvatarId(id);
     localStorage.setItem('userAvatarId', id);
@@ -206,6 +203,7 @@ const loadChatSession = async (sessionId) => {
       if (result.status === 'success') {
         setCurrentSessionId(sessionId);
         setCurrentSessionTitle(''); // Will be set from MongoDB data
+        setFollowupChips([]);
         
         // Load the messages from the synced context
         const formattedMessages = result.context.messages.map(msg => ({
@@ -296,6 +294,7 @@ const handleCurrentSessionDeleted = () => {
   setMessages([]);
   setReplyingTo(null);
   setThinkingAdvisors([]);
+  setFollowupChips([]);
   setUploadedDocuments([]);
 };
 
@@ -332,6 +331,7 @@ const handleNewChat = async (sessionId = null) => {
             setCurrentSessionId(newSessionId); // Set the new session ID immediately
             setCurrentSessionTitle(`Chat ${new Date().toLocaleDateString()}`);
             setReplyingTo(null);
+            setFollowupChips([]);
             setThinkingAdvisors([]);
             setUploadedDocuments([]);
             
@@ -442,6 +442,7 @@ const handleNewChat = async (sessionId = null) => {
     // ThinkingIndicators. This prevents the brief flash of thinking indicators
     // for every advisor in the active pool before ranking has run.
     setThinkingAdvisors(['system']);
+    setFollowupChips([]);
 
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat-stream`, {
@@ -505,6 +506,11 @@ const handleNewChat = async (sessionId = null) => {
                 suggestions: d.suggestions || [],
                 timestamp: new Date(),
               }]);
+              break;
+            case 'followups':
+              if (Array.isArray(d.suggestions) && d.suggestions.length > 0) {
+                setFollowupChips(d.suggestions);
+              }
               break;
             case 'progress':
               if (d.phase === 'selected' && Array.isArray(d.selected_advisors)) {
@@ -636,11 +642,6 @@ const handleNewChat = async (sessionId = null) => {
   setIsLoading(false);
   setThinkingAdvisors([]);
 };
-
-  const handleCopyMessage = (messageId, content) => {
-    // Optional: Show a toast notification or add to message history
-    console.log(`Copied message ${messageId}: ${content.substring(0, 50)}...`);
-  };
 
   const handleExpandMessage = async (messageId, advisorId) => {
     const advisor = advisors[advisorId];
@@ -1010,6 +1011,23 @@ const handleNewChat = async (sessionId = null) => {
           </div>
 
           <div className="floating-input-area">
+            {followupChips.length > 0 && !isLoading && (
+              <div className="followup-chips" role="group" aria-label="Suggested follow-ups">
+                {followupChips.map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="followup-chip"
+                    onClick={() => {
+                      setFollowupChips([]);
+                      handleInputSubmit(chip);
+                    }}
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+            )}
             {replyingTo && (
               <div className="reply-banner">
                 <div className="reply-info">

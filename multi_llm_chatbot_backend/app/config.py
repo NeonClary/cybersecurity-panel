@@ -218,6 +218,12 @@ class OrchestratorConfig(BaseModel):
     min_words_without_keywords: int = 6
     conversation_history_token_threshold: int = 4000
     specific_keywords: List[str] = []
+    # Advisor always included in the responding panel (the required lead).
+    required_advisor: str = "jerry_huaute"
+    # Advisor pulled to the front when an active incident (triage) is detected.
+    triage_advisor: str = "incident_responder"
+    # Number of generated follow-up chips after each panel response (0 = off).
+    followup_count: int = 3
     clarification_questions: List[str] = [
             "Could you provide more details about what you need help with?"]
     clarification_suggestions: List[str] = [

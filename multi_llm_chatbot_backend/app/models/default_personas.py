@@ -28,6 +28,8 @@ def _build_personas_dict() -> dict:
             "name": p.name,
             "system_prompt": full_prompt,
             "default_temperature": p.temperature,
+            "role": p.role,
+            "summary": p.summary,
         }
     return registry
 
@@ -56,6 +58,8 @@ def get_default_personas(llm: LLMClient) -> List[Persona]:
             system_prompt=data["system_prompt"],
             llm=llm,
             temperature=data.get("default_temperature", 5),
+            role=data.get("role", ""),
+            summary=data.get("summary", ""),
         )
         for pid, data in _get_registry().items()
     ]
@@ -74,6 +78,8 @@ def get_personas_with_llm_map(
             system_prompt=data["system_prompt"],
             llm=llm_map.get(pid, default_llm),
             temperature=data.get("default_temperature", 5),
+            role=data.get("role", ""),
+            summary=data.get("summary", ""),
         )
         for pid, data in _get_registry().items()
     ]

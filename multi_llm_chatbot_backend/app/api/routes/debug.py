@@ -4,7 +4,7 @@ from app.core.rag_manager import get_rag_manager
 from app.core.bootstrap import chat_orchestrator
 import logging
 
-from app.api.old_routes import get_or_create_session_for_request
+from app.api.utils import get_or_create_session_for_request_async
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ session_manager = get_session_manager()
 @router.get("/debug/personas")
 async def debug_personas(request: Request):
     try:
-        session_id = get_or_create_session_for_request(request)
+        session_id = await get_or_create_session_for_request_async(request)
         session = session_manager.get_session(session_id)
         rag_manager = get_rag_manager()
         rag_stats = rag_manager.get_document_stats(session_id)
@@ -43,12 +43,19 @@ async def debug_personas(request: Request):
         }
 
 @router.get("/debug/ranked-personas")
-async def get_ranked_personas(request: Request, k: int = Query(3, ge=1, le=10)):
+async def get_ranked_personas(
+    request: Request,
+    k: int = Query(3, ge=1, le=10),
+    user_input: str = Query(""),
+):
     try:
-        session_id = get_or_create_session_for_request(request)
-        top_personas = await chat_orchestrator.get_top_personas(session_id=session_id, k=k)
+        session_id = await get_or_create_session_for_request_async(request)
+        routing = await chat_orchestrator.route_message(
+            session_id=session_id, user_input=user_input, k=k
+        )
         return {
-            "ranked_personas": top_personas,
+            "ranked_personas": routing["advisors"],
+            "urgency": routing["urgency"],
             "available_personas": list(chat_orchestrator.personas.keys()),
             "session_id": session_id
         }
@@ -62,12 +69,12 @@ async def get_ranked_personas(request: Request, k: int = Query(3, ge=1, le=10)):
 @router.get("/debug/rag-status")
 async def debug_rag_status(request: Request):
     try:
-        session_id = get_or_create_session_for_request(request)
+        session_id = await get_or_create_session_for_request_async(request)
         rag_manager = get_rag_manager()
         session_stats = session_manager.get_session_stats(session_id)
 
         test_search = rag_manager.search_documents(
-            query="test methodology research",
+            query="test incident response policy",
             session_id=session_id,
             persona_context="",
             n_results=3

@@ -109,7 +109,7 @@ class SwitchChatRequest(BaseModel):
 class NewChatRequest(BaseModel):
     title: Optional[str] = "New Chat"
 
-ChatStreamEventType = Literal["error", "progress", "clarification", "advisor"]
+ChatStreamEventType = Literal["error", "progress", "clarification", "advisor", "followups"]
 
 
 class ChatStreamLine(BaseModel):
@@ -199,10 +199,10 @@ async def chat_stream(
                 ).to_ndjson()
                 return
 
-            # Always relevance-rank to the top 3 advisors, scoped to the
-            # user's active-advisor selection (the header dropdown) when one is
-            # provided. The dropdown filters the candidate pool; the LLM
-            # ranking still picks the top 3 from that pool.
+            # Route in one LLM call: urgency classification + profile-aware
+            # ranking, scoped to the user's active-advisor selection when one
+            # is provided. Jerry (the required lead) is always included; in
+            # triage mode the incident expert responds first.
             if message.active_advisors:
                 candidate_ids = [
                     pid for pid in message.active_advisors
@@ -210,11 +210,27 @@ async def chat_stream(
                 ]
             else:
                 candidate_ids = list(chat_orchestrator.personas.keys())
-            top_personas = await chat_orchestrator.get_top_personas(
+            routing = await chat_orchestrator.route_message(
                 session_id=sid,
+                user_input=message.user_input,
                 k=3,
                 candidate_ids=candidate_ids,
             )
+            top_personas = routing["advisors"]
+            urgency = routing["urgency"]
+
+            # Triage short-circuit (plan §5.5): personas lead with immediate
+            # first steps instead of profiling questions.
+            if urgency == "triage":
+                session.urgency_context = (
+                    "ACTIVE INCIDENT TRIAGE: The user may be dealing with an "
+                    "active security incident right now. Lead with calm, "
+                    "concrete first steps they should take immediately. Do "
+                    "not ask profiling questions first; at most one short "
+                    "clarifying question at the end."
+                )
+            else:
+                session.urgency_context = ""
 
             # Tell the client which advisors will respond so it can show
             # thinking indicators for just those, not the entire active pool.
@@ -223,6 +239,7 @@ async def chat_stream(
                 data={
                     "phase": "selected",
                     "selected_advisors": top_personas,
+                    "urgency": urgency,
                 },
             ).to_ndjson()
 
@@ -265,6 +282,19 @@ async def chat_stream(
                 yield line.to_ndjson()
 
             await asyncio.gather(*tasks, return_exceptions=True)
+
+            # Generated follow-up chips (plan §5.2): short next-message
+            # suggestions built from conversation + user summary.
+            try:
+                followups = await chat_orchestrator.generate_followups(sid)
+            except Exception as fu_err:
+                logger.warning(f"Follow-up generation errored: {fu_err}")
+                followups = []
+            if followups:
+                yield ChatStreamLine(
+                    type="followups",
+                    data={"suggestions": followups},
+                ).to_ndjson()
 
             # Regenerate the dual user summaries after each completed chat
             # except the first one in this session (plan §4.2 trigger).

@@ -630,6 +630,43 @@
   left: 70px;
 }
 
+/* Generated follow-up suggestion chips above the input */
+.followup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 768px;
+  margin: 0 16px 10px 16px;
+  box-sizing: border-box;
+}
+
+.followup-chip {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--border-primary);
+  border-radius: 22px;
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.3;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  max-width: 100%;
+}
+
+.followup-chip:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--bg-secondary);
+}
+
+[data-theme="dark"] .followup-chip {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
 /* Reply Banner in ChatPage - matches input width and fixes dark mode */
 .floating-input-area .reply-banner {
   background: var(--bg-primary);
