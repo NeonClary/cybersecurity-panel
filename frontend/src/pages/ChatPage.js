@@ -18,7 +18,6 @@ import AboutYouModal from '../components/AboutYouModal';
 import ClearDataModal from '../components/ClearDataModal';
 import AccountModal from '../components/AccountModal';
 import SettingsModal from '../components/SettingsModal';
-import ProviderDropdown from '../components/ProviderDropdown';
 import IntakePanel from '../components/IntakePanel';
 
 const ACTIVE_ADVISORS_STORAGE_KEY = 'cybersecurityActiveAdvisorIds';
@@ -959,13 +958,6 @@ const handleNewChat = async (sessionId = null) => {
             onNavigateToJourney={onNavigateToJourney}
             onMobileMenu={handleMobileMenuToggle}
           >
-            <ProviderDropdown
-              currentProvider={currentProvider}
-              onProviderChange={handleProviderSwitch}
-              isLoading={isProviderSwitching}
-              onlineProviders={onlineProviders}
-              statusCheckFailed={statusCheckFailed}
-            />
             <AdvisorStatusDropdown
               advisors={advisors}
               activeAdvisorIds={activeAdvisorIds}
