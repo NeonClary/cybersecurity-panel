@@ -958,7 +958,7 @@ const DeliverablesView = ({ allStates, authToken }) => {
           <div className={`notion-page ${paperLike ? 'serif' : ''}`}>
             <h1 className="notion-page-title">{project.name}</h1>
             <div className="notion-page-meta">
-              {totalWords} words · ~{readingMinutes(totalWords)} min read · {template.sections.length} sections{paperLike ? ' · academic paper' : ''}
+              {totalWords} words · ~{readingMinutes(totalWords)} min read · {template.sections.length} sections{paperLike ? ' · formal report' : ''}
             </div>
             {template.sections.map(s => {
               const text = sections[s.id] || '';

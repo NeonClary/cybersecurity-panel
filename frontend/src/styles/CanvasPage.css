@@ -251,6 +251,15 @@
 }
 .canvas-page-with-sidebar .theme-toggle .theme-icon { display: block; }
 
+/* Match ChatPage: drop the brand subtitle, then the text block, when the
+   header runs out of room — never show a one-letter ellipsis. */
+@media (max-width: 1500px) {
+  .canvas-page-with-sidebar .brand-text p { display: none; }
+}
+@media (max-width: 1380px) {
+  .canvas-page-with-sidebar .brand-text { display: none; }
+}
+
 /* Tabs stay in normal flex/grid flow so they never slide under header-right controls. */
 .floating-header { position: sticky; }
 .floating-header > .chat-view-tabs {
@@ -398,6 +407,21 @@
   justify-content: space-between;
   gap: 24px;
   margin-bottom: 22px;
+}
+@media (max-width: 640px) {
+  /* Stack title above the action buttons so Export/History don't get pushed
+     off-screen on phones. */
+  .canvas-page-with-sidebar .page-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .canvas-page-with-sidebar .page-header > div:first-child {
+    min-width: 0;
+  }
+  .canvas-page-with-sidebar .page-title-editable {
+    font-size: 22px;
+  }
 }
 .canvas-page-with-sidebar .page-title { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--canvas-text); }
 .canvas-page-with-sidebar .page-sub { color: var(--canvas-text-3); font-size: 13px; margin-top: 6px; }
@@ -2346,6 +2370,10 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
   border: none;
   outline: none;
   width: 100%;
+  /* Don't let the save indicator crush the title to a couple of characters
+     on narrow screens */
+  flex: 1 1 auto;
+  min-width: 140px;
   font-family: inherit;
   font-size: 28px;
   font-weight: 700;

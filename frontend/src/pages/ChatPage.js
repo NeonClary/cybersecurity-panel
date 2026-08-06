@@ -893,7 +893,6 @@ const handleNewChat = async (sessionId = null) => {
             {!hasMessages ? (
               <div className="welcome-state">
                 <IntakePanel onSubmit={handleSendMessage} />
-                <AdvisorCarousel />
                 <SuggestionsPanel onSuggestionClick={handleSendMessage} />
               </div>
             ) : (

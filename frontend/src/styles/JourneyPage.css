@@ -10,10 +10,21 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* The shared Sidebar is position: fixed — offset the page content the same
+     way Chat and Workspace do, or the sidebar overlaps the Journey page. */
+  margin-left: 300px;
+  transition: margin-left 0.3s ease;
 }
 
 .journey-main.sidebar-collapsed {
-  /* Sidebar collapses itself; keep content full-width */
+  margin-left: 70px;
+}
+
+@media (max-width: 768px) {
+  .journey-main,
+  .journey-main.sidebar-collapsed {
+    margin-left: 0;
+  }
 }
 
 .journey-content {

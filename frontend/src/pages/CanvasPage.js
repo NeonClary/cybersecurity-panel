@@ -871,7 +871,11 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
           setWidgetStates(ws.states);
           localStorage.setItem(STATES_KEY, JSON.stringify(ws.states));
         }
-        if (ws.view && typeof ws.view === 'string') {
+        if (ws.view && typeof ws.view === 'string' && !localStorage.getItem(VIEW_KEY)) {
+          // Only fall back to the server-saved view when this browser has no
+          // local preference. App.js writes VIEW_KEY when the user deep-links
+          // (e.g. header "Documents" tab from Chat) — that explicit intent
+          // must not be clobbered by a stale server value.
           setView(ws.view);
           localStorage.setItem(VIEW_KEY, ws.view);
         }

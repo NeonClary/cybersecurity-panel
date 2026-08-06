@@ -12,7 +12,7 @@ const SuggestionsPanel = ({ onSuggestionClick }) => {
       <div className="suggestions-header">
         <h2 className="suggestions-title">Getting Started</h2>
         <p className="suggestions-subtitle">
-          Choose a topic to get advice from all personas
+          Choose a topic to get advice from your advisors
         </p>
       </div>
       

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Icon from './CanvasIcon';
 import { MOD } from './platform';
 
@@ -8,22 +8,22 @@ const STEPS = [
   {
     title: 'Welcome to your Security Canvas',
     icon: 'shield',
-    body: 'This is your security operations workspace. Two views ΓÇö Insights (highlights from your chats) and Workspace (a customizable dashboard of widgets). It starts empty so you can build it the way you want.',
+    body: 'This is your security operations workspace. Two views — Insights (highlights from your chats) and Workspace (a customizable dashboard of widgets). It starts empty so you can build it the way you want.',
   },
   {
     title: 'Add widgets from the palette',
     icon: 'plus',
-    body: `Click "Add widget" on the Workspace view, or hit ${MOD}+K and search. There are 30+ widgets ΓÇö incidents, deadlines, controls, reading, plus challenge widgets that push back on weak assumptions.`,
+    body: `Click "Add widget" on the Workspace view, or hit ${MOD}+K and search — task boards, deadlines, reading queues, security resources, plus challenge widgets that push back on weak assumptions.`,
   },
   {
     title: 'Make it yours',
     icon: 'layout',
-    body: 'Drag widget headers to reorder. Click the size pill (S/M/L) to resize. Hover and click trash to remove. Layout and content auto-save to your browser.',
+    body: 'Drag widget headers to reorder. Click the size pill (S/M/L) to resize. Hover and click trash to remove. Layout and content auto-save to your account.',
   },
   {
     title: 'Try the challenge widgets',
     icon: 'gavel',
-    body: 'Reviewer 2, Devil\'s Advocate, and Scope Realism are tuned to push back, not validate. They\'re where the real work gets sharpened. Add them last ΓÇö when you\'re ready for honest feedback.',
+    body: 'Red Team Reviewer, Devil\'s Advocate, and Scope Realism are tuned to push back, not validate. They\'re where the real work gets sharpened. Add them last — when you\'re ready for honest feedback.',
   },
 ];
 

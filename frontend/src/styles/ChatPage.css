@@ -102,6 +102,21 @@
   text-overflow: ellipsis;
 }
 
+/* When the header gets tight (sidebar open + pill tabs + controls), drop the
+   brand subtitle first and then the whole text block instead of ellipsizing
+   the product name down to a single letter. */
+@media (max-width: 1500px) {
+  .app-header .brand-text p {
+    display: none;
+  }
+}
+
+@media (max-width: 1380px) {
+  .app-header .brand-text {
+    display: none;
+  }
+}
+
 .brand-text p {
   font-size: 13px;
   color: var(--text-secondary);
