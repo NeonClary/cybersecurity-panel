@@ -311,6 +311,20 @@ async def delete_account(
                 )
         db = get_database()
         uid = current_user.id
+
+        # Purge uploaded-document chunks (ChromaDB) for each of the user's
+        # chats before the chat sessions themselves are removed.
+        try:
+            from app.core.rag_manager import get_rag_manager
+            rag = get_rag_manager()
+            sessions = await db.chat_sessions.find(
+                {"user_id": uid}
+            ).to_list(length=1000)
+            for s in sessions:
+                rag.delete_session_documents(f"chat_{s['_id']}")
+        except Exception as rag_err:
+            logger.warning(f"RAG purge during account deletion failed: {rag_err}")
+
         await db.chat_sessions.delete_many({"user_id": uid})
         await db.phd_canvases.delete_many({"user_id": uid})
         await db.user_profiles.delete_many({"user_id": uid})
