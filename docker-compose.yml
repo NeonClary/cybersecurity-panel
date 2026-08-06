@@ -72,6 +72,7 @@ services:
       - ./multi_llm_chatbot_backend:/app/multi_llm_chatbot_backend
       - ./cybersecurity_config.yaml:/app/cybersecurity_config.yaml:ro
       - ./personas:/app/personas:ro
+      - ./tracks:/app/tracks:ro
       - cybersecurity_data:/data
       - type: bind
         source: ${SHARED_ENV_FILE:-C:/Users/dream/.secrets/shared.env}

@@ -12,6 +12,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 COPY multi_llm_chatbot_backend /app/multi_llm_chatbot_backend
 COPY cybersecurity_config.yaml /app/cybersecurity_config.yaml
 COPY personas /app/personas
+COPY tracks /app/tracks
 ENV PYTHONPATH=/app/multi_llm_chatbot_backend \
     PYTHONUNBUFFERED=1 \
     DATA_DIR=/data \
