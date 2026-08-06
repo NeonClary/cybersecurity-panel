@@ -262,7 +262,7 @@ const Sidebar = ({
                         </button>
                         <button className="user-menu-item" onClick={() => { setShowUserMenu(false); if (onOpenProfile) onOpenProfile(); }}>
                           <UserCircle size={16} />
-                          <span>Profile</span>
+                          <span>About you</span>
                         </button>
                         <button className="user-menu-item" onClick={() => { setShowUserMenu(false); if (onOpenAccount) onOpenAccount(); }}>
                           <KeyRound size={16} />

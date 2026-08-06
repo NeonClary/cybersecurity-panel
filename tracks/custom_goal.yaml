@@ -1,47 +1,58 @@
 id: custom_goal
 name: Custom Goal
 description: >
-  A blank track you and the advisor panel can fill together — for an
-  internal assessment, a board deadline, a product launch, or any other
-  goal you choose.
+  Panel-assisted custom track. Define your own milestones with the advisors
+  (e.g. "pass SOC 2 in Q4", "stand up MFA org-wide", "home lab readiness").
+  Replace or extend the placeholder items as your plan takes shape.
 audience: any
 levels:
   - id: define
-    name: Define the goal
-    description: Clarify what success looks like and by when.
+    name: Define the Goal
+    description: Clarify what success looks like, by when, and who is involved.
     items:
-      - id: custom_def_1
-        title: State the outcome
-        description: Write one sentence describing the result you need.
-      - id: custom_def_2
-        title: Set a target date
-        description: Pick a realistic deadline or milestone date.
-      - id: custom_def_3
-        title: Name stakeholders
-        description: Who else is involved — IT, legal, leadership, vendors?
+      - id: custom_df_1
+        title: Goal statement written
+        description: One clear sentence describing the outcome you want.
+      - id: custom_df_2
+        title: Success criteria listed
+        description: Measurable conditions that prove the goal is done.
+      - id: custom_df_3
+        title: Target date set
+        description: Agree a realistic deadline or review checkpoint.
+      - id: custom_df_4
+        title: Stakeholders identified
+        description: Note who must approve, fund, or help execute.
+
   - id: plan
-    name: Plan the work
-    description: Break the goal into owned, checkable steps.
+    name: Build the Plan
+    description: Break the goal into checkable work items with owners and order.
     items:
-      - id: custom_plan_1
-        title: List workstreams
-        description: Split into 3–7 workstreams the panel can help refine.
-      - id: custom_plan_2
-        title: Identify blockers
-        description: Note skills, budget, access, or approvals you still need.
-      - id: custom_plan_3
-        title: Agree first sprint
-        description: Choose the next 1–2 weeks of concrete actions.
+      - id: custom_pl_1
+        title: Work breakdown drafted
+        description: List the major workstreams or phases toward the goal.
+      - id: custom_pl_2
+        title: Dependencies mapped
+        description: Note blockers, vendor wait times, and prerequisite tasks.
+      - id: custom_pl_3
+        title: Owner per workstream
+        description: Assign a responsible person (or yourself) for each stream.
+      - id: custom_pl_4
+        title: Resources & budget noted
+        description: Capture tools, time, or spend needed — even roughly.
+
   - id: execute
-    name: Execute & review
-    description: Do the work, measure progress, adjust.
+    name: Execute & Track
+    description: Do the work, check items off, and adjust as reality changes.
     items:
-      - id: custom_exec_1
-        title: Complete first milestone
-        description: Finish the first agreed deliverable or checklist block.
-      - id: custom_exec_2
-        title: Midpoint check-in
-        description: Review progress with the panel; adjust the plan if needed.
-      - id: custom_exec_3
-        title: Close the goal
-        description: Confirm done criteria met; capture lessons for next time.
+      - id: custom_ex_1
+        title: First milestone completed
+        description: Ship the first concrete deliverable or control.
+      - id: custom_ex_2
+        title: Progress review cadence
+        description: Schedule a weekly or biweekly check-in on this goal.
+      - id: custom_ex_3
+        title: Risks & blockers logged
+        description: Keep a short list of what is slowing progress and how to unblock it.
+      - id: custom_ex_4
+        title: Goal closed or redefined
+        description: Mark complete when success criteria are met, or rewrite the goal consciously.

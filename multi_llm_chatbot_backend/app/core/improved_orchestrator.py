@@ -692,7 +692,28 @@ When analyzing the document context:
         history_tokens = self.context_manager._estimate_tokens_for_messages(
             conversation_messages
         )
-        threshold = get_settings().orchestrator.conversation_history_token_threshold
+        settings = get_settings()
+        threshold = settings.orchestrator.conversation_history_token_threshold
+        try:
+            from app.core import user_knowledge as uk
+            from app.core.bootstrap import current_provider as active_provider
+
+            if uk.is_small_context_provider(active_provider):
+                # Cap total history used for Neon/~25B-class models (~4096 default).
+                threshold = min(
+                    threshold,
+                    int(settings.user_knowledge.small_model_context_budget),
+                )
+                self.context_manager.max_context_tokens = int(
+                    settings.user_knowledge.small_model_context_budget
+                )
+            else:
+                # Large models: allow the full conversation; keep a high ceiling.
+                self.context_manager.max_context_tokens = max(
+                    self.context_manager.max_context_tokens, 32000
+                )
+        except Exception:
+            pass
 
         # Check if we actually have meaningful document content
         has_documents = bool(document_context and document_context.strip() and len(document_context.strip()) > 50)
@@ -706,12 +727,12 @@ When analyzing the document context:
             system_message = f"""{persona.system_prompt}
 
     CURRENT SESSION CONTEXT:
-    The student has uploaded the following documents: {doc_list}
+    The user has uploaded the following documents: {doc_list}
 
     DOCUMENT CONTENT:
     {document_context}
 
-    IMPORTANT: When the student refers to "my document," "my dissertation," "my proposal," etc., they are referring to one of their uploaded documents. Use the document context above to understand which specific document they mean and reference it by name in your response.
+    IMPORTANT: When the user refers to "my document," "my policy," "my architecture," etc., they are referring to one of their uploaded documents. Use the document context above and reference it by name in your response.
 
     Always cite your sources when referencing information from their documents using the format: "According to your [document_name]..." or "In your [section_name] from [document_name]..."
     """
@@ -719,10 +740,10 @@ When analyzing the document context:
             # NO DOCUMENTS - Explicitly tell persona not to reference documents
             system_message = f"""{persona.system_prompt}
 
-    IMPORTANT: The student has NOT uploaded any documents yet. Do not reference any specific documents, files, or assume you have access to their research materials.
+    IMPORTANT: The user has NOT uploaded any documents yet. Do not reference specific documents, files, or assume you have access to their materials.
 
-    If they mention "my document," "my dissertation," "my proposal," etc., you should:
-    1. Acknowledge that you don't have access to their specific documents
+    If they mention "my document," "my policy," "my architecture," etc., you should:
+    1. Acknowledge that you don't have access to those files yet
     2. Ask them to upload the relevant files for more targeted advice
     3. Provide general guidance based on best practices in your area of expertise
 

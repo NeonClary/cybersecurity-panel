@@ -20,6 +20,7 @@ const JourneyPage = ({
   onNavigateToHome,
   onNavigateToChat,
   onNavigateToCanvas,
+  onNavigateToJourney,
   onSignOut,
 }) => {
   const [tracks, setTracks] = useState([]);
@@ -67,12 +68,19 @@ const JourneyPage = ({
 
   const toggleItem = async (itemId, checked) => {
     const path = checked
-      ? `/api/journey/me/items/${itemId}/uncomplete`
-      : `/api/journey/me/items/${itemId}/complete`;
+      ? `/api/journey/me/items/${encodeURIComponent(itemId)}/uncomplete`
+      : `/api/journey/me/items/${encodeURIComponent(itemId)}/complete`;
     const resp = await api(path, authToken, { method: 'POST' });
     if (resp.ok) {
       const me = await resp.json();
       setProgress(me);
+      if (me.active_track_id) {
+        setActiveTrack((prev) =>
+          prev?.id === me.active_track_id
+            ? prev
+            : tracks.find((t) => t.id === me.active_track_id) || prev
+        );
+      }
     }
   };
 
@@ -89,8 +97,9 @@ const JourneyPage = ({
         isMobileOpen={isMobileMenuOpen}
         onMobileToggle={setIsMobileMenuOpen}
         onNavigateToCanvas={onNavigateToCanvas}
-        onNavigateToJourney={() => {}}
+        onNavigateToJourney={onNavigateToJourney}
         onSelectSession={() => onNavigateToChat()}
+        pageContext="journey"
       />
       <div className={`journey-main ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <AppHeader
@@ -98,6 +107,7 @@ const JourneyPage = ({
           onNavigateToHome={onNavigateToHome}
           onNavigateToChat={onNavigateToChat}
           onNavigateToCanvas={onNavigateToCanvas}
+          onNavigateToJourney={onNavigateToJourney}
           onMobileMenu={() => setIsMobileMenuOpen(true)}
         >
           <button type="button" className="icon-btn" onClick={load} title="Refresh">

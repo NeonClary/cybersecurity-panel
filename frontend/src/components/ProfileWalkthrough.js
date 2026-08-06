@@ -72,7 +72,17 @@ const initFormFromProfile = (steps, profile) => {
   return init;
 };
 
-const ProfileWalkthrough = ({ authToken, onClose, existingProfile }) => {
+const fieldStyle = {
+  width: '100%', padding: '10px 12px', borderRadius: 8, minHeight: 44,
+  border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
+  color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box',
+};
+
+/**
+ * Profile form walkthrough. When `embedded` is true, renders panel content only
+ * (no overlay) for use inside AboutYouModal.
+ */
+const ProfileWalkthrough = ({ authToken, onClose, existingProfile, embedded = false }) => {
   const { config } = useAppConfig();
   const steps = useMemo(() => buildSteps(config), [config]);
   const [step, setStep] = useState(0);
@@ -131,12 +141,12 @@ const ProfileWalkthrough = ({ authToken, onClose, existingProfile }) => {
     setSaving(true);
     await saveProfile();
     setSaving(false);
-    onClose();
+    if (!embedded && onClose) onClose();
   };
 
   const handleClose = async () => {
     await saveProfile();
-    onClose();
+    if (onClose) onClose();
   };
 
   const currentStep = steps[step];
@@ -149,6 +159,124 @@ const ProfileWalkthrough = ({ authToken, onClose, existingProfile }) => {
     return <option key={o} value={o}>{o}</option>;
   });
 
+  const formContent = loading ? (
+    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)', fontSize: 14 }}>
+      Loading profile...
+    </div>
+  ) : (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
+          {currentStep.title} ({step + 1}/{steps.length})
+        </h3>
+        {!embedded && (
+          <button
+            onClick={handleClose}
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--text-secondary)', minWidth: 44, minHeight: 44,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <X size={18} />
+          </button>
+        )}
+      </div>
+
+      <div style={{ height: 4, background: 'var(--bg-secondary)', borderRadius: 2, marginBottom: 20 }}>
+        <div style={{
+          height: '100%', borderRadius: 2, background: 'var(--accent-primary)',
+          width: `${((step + 1) / steps.length) * 100}%`, transition: 'width 0.3s',
+        }} />
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {currentStep.fields.map((f) => (
+          <div key={f.key}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
+              {f.label}
+            </label>
+            {f.type === 'select' ? (
+              <select
+                value={formData[f.key] || ''}
+                onChange={(e) => handleChange(f.key, e.target.value)}
+                style={fieldStyle}
+              >
+                <option value="">Select...</option>
+                {renderSelectOptions(f.options)}
+              </select>
+            ) : f.type === 'textarea' ? (
+              <textarea
+                value={formData[f.key] || ''}
+                onChange={(e) => handleChange(f.key, e.target.value)}
+                placeholder={f.placeholder}
+                rows={3}
+                style={{ ...fieldStyle, minHeight: 80, resize: 'vertical' }}
+              />
+            ) : (
+              <input
+                type="text"
+                value={formData[f.key] || ''}
+                onChange={(e) => handleChange(f.key, e.target.value)}
+                placeholder={f.placeholder}
+                style={fieldStyle}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24, gap: 10 }}>
+        <button
+          type="button"
+          onClick={() => setStep((s) => s - 1)}
+          disabled={step === 0}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4, padding: '10px 16px',
+            minHeight: 44, borderRadius: 8, border: '1px solid var(--border-primary)',
+            background: 'var(--bg-secondary)', color: 'var(--text-primary)',
+            cursor: step === 0 ? 'default' : 'pointer', opacity: step === 0 ? 0.4 : 1,
+            fontSize: 13,
+          }}
+        >
+          <ChevronLeft size={14} /> Back
+        </button>
+        {isLast ? (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4, padding: '10px 16px',
+              minHeight: 44, borderRadius: 8, border: 'none',
+              background: 'var(--accent-primary)', color: '#fff',
+              cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            }}
+          >
+            <Check size={14} /> {saving ? 'Saving...' : 'Save Profile'}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setStep((s) => s + 1)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4, padding: '10px 16px',
+              minHeight: 44, borderRadius: 8, border: 'none',
+              background: 'var(--accent-primary)', color: '#fff',
+              cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            }}
+          >
+            Next <ChevronRight size={14} />
+          </button>
+        )}
+      </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div>{formContent}</div>;
+  }
+
   return (
     <div onClick={handleClose} style={{
       position: 'fixed', inset: 0, zIndex: 9999,
@@ -160,117 +288,7 @@ const ProfileWalkthrough = ({ authToken, onClose, existingProfile }) => {
         width: '90%', maxWidth: 480, padding: 24,
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
       }}>
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-secondary)', fontSize: 14 }}>
-            Loading profile...
-          </div>
-        ) : <>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
-            {currentStep.title} ({step + 1}/{steps.length})
-          </h3>
-          <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
-            <X size={18} />
-          </button>
-        </div>
-
-        <div style={{ height: 4, background: 'var(--bg-secondary)', borderRadius: 2, marginBottom: 20 }}>
-          <div style={{
-            height: '100%', borderRadius: 2, background: 'var(--accent-primary)',
-            width: `${((step + 1) / steps.length) * 100}%`, transition: 'width 0.3s',
-          }} />
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {currentStep.fields.map((f) => (
-            <div key={f.key}>
-              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4 }}>
-                {f.label}
-              </label>
-              {f.type === 'select' ? (
-                <select
-                  value={formData[f.key] || ''}
-                  onChange={(e) => handleChange(f.key, e.target.value)}
-                  style={{
-                    width: '100%', padding: '8px 10px', borderRadius: 8,
-                    border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)', fontSize: 13,
-                  }}
-                >
-                  <option value="">Select...</option>
-                  {renderSelectOptions(f.options)}
-                </select>
-              ) : f.type === 'textarea' ? (
-                <textarea
-                  value={formData[f.key] || ''}
-                  onChange={(e) => handleChange(f.key, e.target.value)}
-                  placeholder={f.placeholder}
-                  rows={3}
-                  style={{
-                    width: '100%', padding: '8px 10px', borderRadius: 8,
-                    border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)', fontSize: 13, resize: 'vertical',
-                  }}
-                />
-              ) : (
-                <input
-                  type="text"
-                  value={formData[f.key] || ''}
-                  onChange={(e) => handleChange(f.key, e.target.value)}
-                  placeholder={f.placeholder}
-                  style={{
-                    width: '100%', padding: '8px 10px', borderRadius: 8,
-                    border: '1px solid var(--border-primary)', background: 'var(--bg-secondary)',
-                    color: 'var(--text-primary)', fontSize: 13,
-                  }}
-                />
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 24 }}>
-          <button
-            onClick={() => setStep((s) => s - 1)}
-            disabled={step === 0}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4, padding: '8px 14px',
-              borderRadius: 8, border: '1px solid var(--border-primary)',
-              background: 'var(--bg-secondary)', color: 'var(--text-primary)',
-              cursor: step === 0 ? 'default' : 'pointer', opacity: step === 0 ? 0.4 : 1,
-              fontSize: 13,
-            }}
-          >
-            <ChevronLeft size={14} /> Back
-          </button>
-          {isLast ? (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4, padding: '8px 16px',
-                borderRadius: 8, border: 'none',
-                background: 'var(--accent-primary)', color: '#fff',
-                cursor: 'pointer', fontSize: 13, fontWeight: 600,
-              }}
-            >
-              <Check size={14} /> {saving ? 'Saving...' : 'Save Profile'}
-            </button>
-          ) : (
-            <button
-              onClick={() => setStep((s) => s + 1)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4, padding: '8px 14px',
-                borderRadius: 8, border: 'none',
-                background: 'var(--accent-primary)', color: '#fff',
-                cursor: 'pointer', fontSize: 13, fontWeight: 600,
-              }}
-            >
-              Next <ChevronRight size={14} />
-            </button>
-          )}
-        </div>
-        </>}
+        {formContent}
       </div>
     </div>
   );

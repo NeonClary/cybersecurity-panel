@@ -14,7 +14,7 @@ import '../styles/ChatPage.css';
 import '../styles/EnhancedChatInput.css';
 import AdvisorCarousel from '../components/AdvisorCarousel';
 import OnboardingChat from '../components/OnboardingChat';
-import ProfileWalkthrough from '../components/ProfileWalkthrough';
+import AboutYouModal from '../components/AboutYouModal';
 import ClearDataModal from '../components/ClearDataModal';
 import AccountModal from '../components/AccountModal';
 import SettingsModal from '../components/SettingsModal';
@@ -66,7 +66,8 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   };
 
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [showProfileForm, setShowProfileForm] = useState(false);
+  const [showAboutYou, setShowAboutYou] = useState(false);
+  const [aboutYouInitialTab, setAboutYouInitialTab] = useState('about');
   const [showClearData, setShowClearData] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -921,7 +922,10 @@ const handleNewChat = async (sessionId = null) => {
         refreshTrigger={sidebarRefreshTrigger}
         userAvatarId={userAvatarId}
         onAvatarChange={handleAvatarChange}
-        onOpenProfile={() => setShowProfileForm(true)}
+        onOpenProfile={() => {
+          setAboutYouInitialTab('about');
+          setShowAboutYou(true);
+        }}
         onOpenAccount={() => setShowAccount(true)}
         onOpenClearData={() => setShowClearData(true)}
         onOpenModelStatus={() => {
@@ -1128,17 +1132,21 @@ const handleNewChat = async (sessionId = null) => {
               }
               showProfileButtons={!userProfile}
               onOpenOnboarding={() => setShowOnboarding(true)}
-              onOpenProfileForm={() => setShowProfileForm(true)}
+              onOpenProfileForm={() => {
+                setAboutYouInitialTab('profile');
+                setShowAboutYou(true);
+              }}
             />
           </div>
         </div>
       </div>
 
-      {showProfileForm && (
-        <ProfileWalkthrough
+      {showAboutYou && (
+        <AboutYouModal
           authToken={authToken}
           existingProfile={userProfile}
-          onClose={() => { setShowProfileForm(false); loadProfile(); }}
+          initialTab={aboutYouInitialTab}
+          onClose={() => { setShowAboutYou(false); loadProfile(); }}
         />
       )}
       {showOnboarding && (

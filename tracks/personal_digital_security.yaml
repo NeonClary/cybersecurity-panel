@@ -1,71 +1,94 @@
 id: personal_digital_security
 name: Personal Digital Security
 description: >
-  Practical steps to protect your accounts, devices, backups, and identity
-  at home — for individuals and families.
+  Practical steps for individuals to harden everyday digital life — passwords
+  and MFA, backups, device security, then monitoring and identity protection.
 audience: individual
 levels:
-  - id: accounts
-    name: Accounts & authentication
-    description: Lock down the keys to your digital life.
+  - id: passwords_mfa
+    name: Passwords & MFA
+    description: >
+      Strong unique credentials and multi-factor authentication on the
+      accounts that matter most.
     items:
-      - id: pds_a_1
-        title: Password manager
-        description: Install a reputable password manager and migrate key accounts.
-      - id: pds_a_2
-        title: Unique passwords
-        description: Replace reused passwords on email, banking, and work accounts.
-      - id: pds_a_3
-        title: Enable MFA
-        description: Turn on multi-factor authentication (prefer app/passkey over SMS).
-      - id: pds_a_4
-        title: Review recovery options
-        description: Confirm recovery email/phone are yours and up to date.
+      - id: pds_pm_1
+        title: Password manager installed
+        description: Use a reputable password manager and migrate important logins into it.
+      - id: pds_pm_2
+        title: Unique passwords for email & banking
+        description: No reused passwords on email, financial, or work accounts.
+      - id: pds_pm_3
+        title: MFA on email
+        description: Enable authenticator-app or hardware MFA on your primary email.
+      - id: pds_pm_4
+        title: MFA on financial & social accounts
+        description: Turn on MFA for banks, brokerages, and major social platforms.
+      - id: pds_pm_5
+        title: Recoverability review
+        description: Update recovery emails/phones and store backup MFA codes safely.
+
   - id: backups
-    name: Backups & recovery
-    description: Survive ransomware, loss, and accidental deletion.
+    name: Backups
+    description: >
+      Reliable copies of important files so ransomware, theft, or device loss
+      does not become a permanent loss.
     items:
-      - id: pds_b_1
+      - id: pds_bk_1
         title: Identify critical data
-        description: List photos, docs, and credentials you cannot afford to lose.
-      - id: pds_b_2
-        title: Automated backups
-        description: Enable cloud or local backup for those critical files.
-      - id: pds_b_3
-        title: Offline / immutable copy
-        description: Keep at least one backup the ransomware cannot reach.
-      - id: pds_b_4
-        title: Test a restore
-        description: Restore one file successfully so you know recovery works.
-  - id: devices
-    name: Device security
-    description: Keep phones, laptops, and home network hardened.
+        description: List photos, documents, tax records, and work files you cannot lose.
+      - id: pds_bk_2
+        title: Automated backup enabled
+        description: Turn on cloud or local automatic backup for critical folders.
+      - id: pds_bk_3
+        title: Offline / secondary copy
+        description: Keep at least one secondary copy (external drive or second cloud).
+      - id: pds_bk_4
+        title: Restore test
+        description: Restore one file from backup to confirm it works.
+      - id: pds_bk_5
+        title: Backup account secured
+        description: Protect backup destinations with a strong unique password and MFA.
+
+  - id: device_security
+    name: Device Security
+    description: >
+      Harden phones, laptops, and home network so everyday devices are harder
+      to compromise.
     items:
-      - id: pds_d_1
-        title: OS and app updates
-        description: Turn on automatic updates for OS, browser, and office apps.
-      - id: pds_d_2
-        title: Full-disk encryption
-        description: Enable BitLocker, FileVault, or device encryption.
-      - id: pds_d_3
-        title: Screen lock
-        description: Require PIN/biometrics; short auto-lock timeout.
-      - id: pds_d_4
-        title: Router defaults
-        description: Change default Wi-Fi admin password; use WPA3/WPA2.
-  - id: monitoring
-    name: Monitoring & identity
-    description: Catch compromise early and protect your identity.
+      - id: pds_ds_1
+        title: OS & apps updated
+        description: Enable automatic updates on phone and computer.
+      - id: pds_ds_2
+        title: Full-disk encryption & screen lock
+        description: Use PIN/biometrics plus device encryption (BitLocker/FileVault/phone default).
+      - id: pds_ds_3
+        title: Endpoint protection
+        description: Keep built-in or third-party malware protection enabled.
+      - id: pds_ds_4
+        title: Home Wi-Fi secured
+        description: Strong router password, WPA2/WPA3, and admin password changed from default.
+      - id: pds_ds_5
+        title: Untrusted software hygiene
+        description: Install apps only from trusted stores; remove unused software/extensions.
+
+  - id: monitoring_identity
+    name: Monitoring & Identity Protection
+    description: >
+      Ongoing awareness — breach alerts, account activity review, and recovery
+      readiness if something goes wrong.
     items:
-      - id: pds_m_1
-        title: Breach monitoring
-        description: Check whether your email appears in known breaches; rotate if so.
-      - id: pds_m_2
-        title: Login alerts
-        description: Enable new-login / new-device alerts on email and banking.
-      - id: pds_m_3
-        title: Credit freeze option
-        description: Know how to freeze credit; freeze if identity risk is elevated.
-      - id: pds_m_4
-        title: Phishing habits
-        description: Pause before clicking; verify unexpected payment or HR requests.
+      - id: pds_mi_1
+        title: Breach notification enrolled
+        description: Use a reputable breach-alert service (or credit/ID monitoring) for your email.
+      - id: pds_mi_2
+        title: Account activity review habit
+        description: Periodically check login/devices for email, Google/Apple, and banking.
+      - id: pds_mi_3
+        title: Credit / identity freeze option known
+        description: Know how to place a credit freeze or fraud alert in your country.
+      - id: pds_mi_4
+        title: Scam response plan
+        description: Have a short checklist for phishing, sextortion, and account-takeover events.
+      - id: pds_mi_5
+        title: Emergency contacts & exports
+        description: Export critical contacts and know how to reach bank/fraud lines quickly.
