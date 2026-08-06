@@ -163,11 +163,13 @@
   border-bottom: 1px solid var(--header-border);
   padding: 12px 24px;
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   box-shadow: var(--header-shadow);
   flex-shrink: 0;
+  min-width: 0;
+  overflow: visible;
 }
 .canvas-page-with-sidebar .floating-header .header-right { justify-self: end; }
 
@@ -175,11 +177,17 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+  overflow: hidden;
 }
 .canvas-page-with-sidebar .header-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  min-width: 0;
+  position: relative;
+  z-index: 2;
 }
 .canvas-page-with-sidebar .mobile-menu-button {
   display: none;
@@ -200,6 +208,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  overflow: hidden;
 }
 .canvas-page-with-sidebar .brand-icon {
   width: 40px;
@@ -210,11 +220,14 @@
   align-items: center;
   justify-content: center;
   color: #fff;
+  flex-shrink: 0;
 }
 .canvas-page-with-sidebar .brand-text {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+  overflow: hidden;
 }
 .canvas-page-with-sidebar .brand-text h1 {
   font-size: 20px;
@@ -223,29 +236,34 @@
   margin: 0;
   line-height: 1.2;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .canvas-page-with-sidebar .brand-text p {
   font-size: 13px;
   color: var(--canvas-text-3);
   margin: 0;
   line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .canvas-page-with-sidebar .theme-toggle .theme-icon { display: block; }
 
-/* When the tabs sit in ChatPage's flex .floating-header, absolutely-position
-   them so they center regardless of header-left/header-right widths. */
+/* Tabs stay in normal flex/grid flow so they never slide under header-right controls. */
 .floating-header { position: sticky; }
 .floating-header > .chat-view-tabs {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
 }
 .canvas-tabs-mobile { display: none; }
 @media (max-width: 900px) {
   .floating-header > .chat-view-tabs { display: none; }
   .canvas-tabs-mobile {
     display: inline-block;
+    flex: 0 0 auto;
     background: var(--canvas-surface, var(--bg-tertiary, #f3f4f6));
     border: 1px solid var(--canvas-border, var(--border-primary, #e5e7eb));
     color: var(--canvas-text, var(--text-primary, #111827));

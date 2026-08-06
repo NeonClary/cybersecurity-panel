@@ -26,14 +26,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   box-shadow: var(--header-shadow);
   flex-shrink: 0;
+  min-width: 0;
+  overflow: visible;
 }
 
 .header-left {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .modern-home-btn {
@@ -61,6 +67,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .brand-icon {
@@ -72,12 +80,15 @@
   align-items: center;
   justify-content: center;
   color: white;
+  flex-shrink: 0;
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .brand-text h1 {
@@ -86,6 +97,9 @@
   color: var(--text-primary);
   margin: 0;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .brand-text p {
@@ -93,12 +107,21 @@
   color: var(--text-secondary);
   margin: 0;
   line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  justify-content: flex-end;
+  gap: 12px;
+  flex: 1 0 auto;
+  min-width: 0;
+  flex-wrap: nowrap;
+  position: relative;
+  z-index: 2;
 }
 
 .header-controls {
@@ -806,6 +829,9 @@
 .provider-dropdown {
   position: relative;
   display: inline-block;
+  flex-shrink: 0;
+  z-index: 3;
+  pointer-events: auto;
 }
 
 .provider-button {
@@ -1160,8 +1186,9 @@
   
   .header-left {
     gap: 12px;
-    flex: 0; /* Don't let it grow */
+    flex: 0 0 auto;
     min-width: 0;
+    overflow: visible;
   }
   
   /* Hide brand elements on mobile to reduce clutter */
@@ -1172,9 +1199,10 @@
   
   .header-right {
     gap: 8px;
-    flex: 1; /* Let header-right take available space */
-    justify-content: flex-end; /* Align items to the right */
-    flex-shrink: 0;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    flex-shrink: 1;
+    min-width: 0;
   }
   
   /* Ensure mobile menu button is visible */
