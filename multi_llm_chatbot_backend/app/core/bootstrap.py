@@ -21,6 +21,14 @@ current_provider = settings.llm.provider or "vllm"
 available_providers = ["ollama", "gemini", "vllm"]
 
 
+def set_current_provider(provider: str) -> None:
+    """Update the active provider. Always read it as ``bootstrap.current_provider``
+    (module attribute) — a ``from bootstrap import current_provider`` at module
+    load captures a stale copy that never sees switches."""
+    global current_provider
+    current_provider = provider
+
+
 def _load_shared_env_var(name: str) -> str:
     explicit = os.environ.get("SHARED_ENV", "").strip()
     candidates = [Path(explicit)] if explicit else []

@@ -20,7 +20,7 @@ from app.models.user import User
 from app.api.routes.user_profile import PROFILE_FIELDS, enrich_profile_from_user
 from app.config import get_settings
 from app.core import user_knowledge as uk
-from app.core.bootstrap import chat_orchestrator, current_provider
+from app.core import bootstrap
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ async def _attach_user_profile_context(session, user: User) -> None:
         try:
             summary = await uk.get_summary_for_provider(
                 user.id,
-                uk.is_small_context_provider(current_provider),
+                uk.is_small_context_provider(bootstrap.current_provider),
             )
             if summary:
                 blocks.append("USER KNOWLEDGE SUMMARY: " + summary)

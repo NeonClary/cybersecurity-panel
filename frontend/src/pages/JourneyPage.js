@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Circle, Map, RefreshCw } from 'lucide-react';
+import {
+  CheckCircle2, Circle, Map, RefreshCw,
+  TrendingUp, TrendingDown, Minus, ClipboardCheck,
+} from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import Sidebar from '../components/Sidebar';
 import AboutYouModal from '../components/AboutYouModal';
@@ -29,6 +32,11 @@ const JourneyPage = ({
   const [tracks, setTracks] = useState([]);
   const [progress, setProgress] = useState(null);
   const [activeTrack, setActiveTrack] = useState(null);
+  const [assessments, setAssessments] = useState([]);
+  const [showAssessmentForm, setShowAssessmentForm] = useState(false);
+  const [newScores, setNewScores] = useState({ confidence: 3, coverage: 3, readiness: 3 });
+  const [assessmentNotes, setAssessmentNotes] = useState('');
+  const [savingAssessment, setSavingAssessment] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -42,9 +50,10 @@ const JourneyPage = ({
     setLoading(true);
     setError(null);
     try {
-      const [tracksResp, meResp] = await Promise.all([
+      const [tracksResp, meResp, assessResp] = await Promise.all([
         api('/api/journey/tracks', authToken),
         api('/api/journey/me', authToken),
+        api('/api/journey/me/assessments', authToken),
       ]);
       if (!tracksResp.ok) throw new Error('Failed to load tracks');
       if (!meResp.ok) throw new Error('Failed to load progress');
@@ -54,6 +63,10 @@ const JourneyPage = ({
       setTracks(list);
       setProgress(me);
       setActiveTrack(list.find((t) => t.id === me.active_track_id) || null);
+      if (assessResp.ok) {
+        const items = await assessResp.json();
+        setAssessments(Array.isArray(items) ? items : []);
+      }
     } catch (e) {
       setError(e.message || 'Could not load journey');
     } finally {
@@ -90,6 +103,38 @@ const JourneyPage = ({
       }
     }
   };
+
+  const submitAssessment = async () => {
+    setSavingAssessment(true);
+    try {
+      const resp = await api('/api/journey/me/assessments', authToken, {
+        method: 'POST',
+        body: JSON.stringify({
+          scores: newScores,
+          notes: assessmentNotes.trim() || null,
+        }),
+      });
+      if (resp.ok) {
+        setShowAssessmentForm(false);
+        setAssessmentNotes('');
+        setNewScores({ confidence: 3, coverage: 3, readiness: 3 });
+        await load();
+      }
+    } finally {
+      setSavingAssessment(false);
+    }
+  };
+
+  const avgScore = (a) => {
+    const vals = Object.values(a?.scores || {}).filter((v) => typeof v === 'number');
+    if (!vals.length) return null;
+    return vals.reduce((s, v) => s + v, 0) / vals.length;
+  };
+
+  // Assessments arrive newest-first; trend compares latest vs previous
+  const latestAvg = assessments.length > 0 ? avgScore(assessments[0]) : null;
+  const prevAvg = assessments.length > 1 ? avgScore(assessments[1]) : null;
+  const trendDelta = latestAvg != null && prevAvg != null ? latestAvg - prevAvg : null;
 
   const checked = new Set(progress?.checked_item_ids || []);
 
@@ -159,10 +204,14 @@ const JourneyPage = ({
             <>
               <section className="journey-progress-card">
                 <div className="journey-progress-meta">
-                  <strong>{progress?.level_name || 'No track selected'}</strong>
+                  <strong>
+                    {progress?.level_name
+                      ? `Level ${(progress.level_index ?? 0) + 1} of ${progress.level_count || '?'}: ${progress.level_name}`
+                      : 'No track selected'}
+                  </strong>
                   <span>
-                    {typeof progress?.pct_overall === 'number'
-                      ? `${Math.round(progress.pct_overall)}% overall`
+                    {progress?.active_track_id
+                      ? `${Math.round(progress.pct_overall || 0)}% overall · ${Math.round(progress.pct_in_level || 0)}% of current level`
                       : 'Pick a track to begin'}
                   </span>
                 </div>
@@ -172,6 +221,107 @@ const JourneyPage = ({
                     style={{ width: `${Math.min(100, progress?.pct_overall || 0)}%` }}
                   />
                 </div>
+                {progress?.active_track_id && (
+                  <div
+                    className="journey-progress-bar journey-progress-bar--level"
+                    role="progressbar"
+                    aria-label="Current level progress"
+                    aria-valuenow={progress?.pct_in_level || 0}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  >
+                    <div
+                      className="journey-progress-fill journey-progress-fill--level"
+                      style={{ width: `${Math.min(100, progress?.pct_in_level || 0)}%` }}
+                    />
+                  </div>
+                )}
+              </section>
+
+              <section className="journey-assessments">
+                <div className="journey-assessments-head">
+                  <h2>
+                    <ClipboardCheck size={18} />
+                    Self-assessments
+                  </h2>
+                  <button
+                    type="button"
+                    className="journey-assess-new"
+                    onClick={() => setShowAssessmentForm((v) => !v)}
+                  >
+                    {showAssessmentForm ? 'Cancel' : 'New assessment'}
+                  </button>
+                </div>
+
+                {trendDelta != null && (
+                  <p className={`journey-trend ${trendDelta > 0 ? 'up' : trendDelta < 0 ? 'down' : 'flat'}`}>
+                    {trendDelta > 0 ? <TrendingUp size={16} /> : trendDelta < 0 ? <TrendingDown size={16} /> : <Minus size={16} />}
+                    {trendDelta > 0
+                      ? `Improving: +${trendDelta.toFixed(1)} since your previous assessment`
+                      : trendDelta < 0
+                        ? `Down ${Math.abs(trendDelta).toFixed(1)} since your previous assessment`
+                        : 'Holding steady since your previous assessment'}
+                  </p>
+                )}
+
+                {showAssessmentForm && (
+                  <div className="journey-assess-form">
+                    {Object.entries(newScores).map(([dim, val]) => (
+                      <label key={dim} className="journey-assess-slider">
+                        <span className="journey-assess-dim">{dim}</span>
+                        <input
+                          type="range"
+                          min={1}
+                          max={5}
+                          step={1}
+                          value={val}
+                          onChange={(e) =>
+                            setNewScores((prev) => ({ ...prev, [dim]: Number(e.target.value) }))
+                          }
+                        />
+                        <span className="journey-assess-val">{val}/5</span>
+                      </label>
+                    ))}
+                    <textarea
+                      rows={2}
+                      placeholder="Notes (optional) — what changed since last time?"
+                      value={assessmentNotes}
+                      onChange={(e) => setAssessmentNotes(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="journey-assess-save"
+                      disabled={savingAssessment}
+                      onClick={submitAssessment}
+                    >
+                      {savingAssessment ? 'Saving…' : 'Save assessment'}
+                    </button>
+                  </div>
+                )}
+
+                {assessments.length === 0 && !showAssessmentForm ? (
+                  <p className="journey-assess-empty">
+                    No assessments yet. Rate your confidence, coverage, and readiness to
+                    see your trend over time.
+                  </p>
+                ) : (
+                  <ul className="journey-assess-list">
+                    {assessments.slice(0, 5).map((a) => {
+                      const avg = avgScore(a);
+                      return (
+                        <li key={a.id}>
+                          <span className="journey-assess-date">
+                            {a.created_at ? new Date(a.created_at).toLocaleDateString() : '—'}
+                          </span>
+                          <span className="journey-assess-score">
+                            {avg != null ? `${avg.toFixed(1)}/5` : '—'}
+                          </span>
+                          <span className="journey-assess-notes">{a.notes || ''}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </section>
 
               <section className="journey-tracks">

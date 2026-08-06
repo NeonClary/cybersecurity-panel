@@ -1,9 +1,7 @@
-// Deliverables view — multi-project PhD deliverable center.
-// Each "project" is a draft of a template (paper, slides, poster, CV, etc.).
-// You can keep many projects in flight, switch between them, version-rollback,
-// drag in citations from your Bibliography or arXiv, embed images, render math,
-// and export to Markdown / LaTeX / HTML / Print.
-// AI passes are stubbed (need LLM endpoint) but every static signal works today.
+// Documents view — multi-project security deliverable center.
+// Each "project" is a draft of a template (assessment report, IR plan, policy,
+// briefing slides, etc.). You can keep many projects in flight, switch between
+// them, version-rollback, embed images, and export to Markdown / HTML / Print.
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -34,137 +32,135 @@ export const TEMPLATES = [
   {
     id: 'research-paper',
     name: 'Security Assessment Report',
-    desc: 'Executive summary → Scope → Findings → Risk rating → Remediation → Appendix',
+    desc: 'Executive summary → Scope → Findings → Risk ratings → Remediation → Appendix',
     icon: 'book',
     mode: 'paper',
     sections: [
-      { id: 'abstract', name: 'Abstract', target: 250, hint: 'One paragraph: question, method, finding, implication.', checks: ['hasNumber', 'hasFinding'] },
-      { id: 'intro', name: 'Introduction', target: 1000, hint: 'Frame the problem, state the gap, name your contribution.', checks: ['hasGap', 'hasCitation'] },
-      { id: 'methods', name: 'Methods', target: 800, hint: 'Reproducibility-first: subjects, materials, procedure, analysis.', checks: ['hasCitation', 'hasNumber'] },
-      { id: 'results', name: 'Results', target: 800, hint: 'Lead with the effect. Numbers + figure refs. No interpretation here.', checks: ['hasNumber', 'hasFigure'] },
-      { id: 'discussion', name: 'Discussion', target: 1000, hint: 'What it means, what it doesn\'t, limits, future work.', checks: ['hasLimit', 'hasCitation'] },
-      { id: 'refs', name: 'References', target: 0, hint: 'Bibliography list. Drop @keys here from the Bibliography widget.', checks: [] },
+      { id: 'abstract', name: 'Executive summary', target: 250, hint: 'One paragraph for leadership: what was assessed, top risks, headline recommendation.', checks: ['hasNumber', 'hasFinding'] },
+      { id: 'intro', name: 'Scope & methodology', target: 600, hint: 'Systems in scope, testing window, methodology and tools, rules of engagement.', checks: ['hasNumber'] },
+      { id: 'results', name: 'Findings', target: 1000, hint: 'One finding per block: description, evidence, affected assets. Reference screenshots/tables.', checks: ['hasNumber', 'hasFigure'] },
+      { id: 'methods', name: 'Risk ratings', target: 400, hint: 'Severity × likelihood per finding. Say which rating scale you used.', checks: ['hasRisk', 'hasNumber'] },
+      { id: 'discussion', name: 'Remediation plan', target: 800, hint: 'Prioritized fixes with owner and target date per item.', checks: ['hasOwner', 'hasDate'] },
+      { id: 'refs', name: 'Appendix', target: 0, hint: 'Raw output, full host lists, references (@key).', checks: [] },
     ],
   },
   {
     id: 'thesis-chapter',
     name: 'Incident Report',
-    desc: 'Timeline → Impact → Root cause → Containment → Lessons learned',
+    desc: 'Overview → Timeline → Impact → Root cause → Containment → Lessons learned',
     icon: 'book',
     mode: 'paper',
     sections: [
-      { id: 'overview', name: 'Overview', target: 200, hint: 'What this chapter does and why it\'s here.', checks: [] },
-      { id: 'background', name: 'Background', target: 1500, hint: 'Lit review focused on this chapter\'s question.', checks: ['hasCitation'] },
-      { id: 'methods', name: 'Methods', target: 1500, hint: 'Reproducibility-first.', checks: ['hasCitation', 'hasNumber'] },
-      { id: 'results', name: 'Results', target: 2000, hint: 'Findings + figures.', checks: ['hasFigure', 'hasNumber'] },
-      { id: 'discussion', name: 'Discussion', target: 1500, hint: 'How it fits the larger thesis.', checks: ['hasLimit'] },
+      { id: 'overview', name: 'Overview', target: 200, hint: 'What happened, when detected, current status — in plain language.', checks: [] },
+      { id: 'background', name: 'Timeline', target: 600, hint: 'Timestamped sequence: initial access → detection → escalation → containment.', checks: ['hasNumber'] },
+      { id: 'methods', name: 'Impact', target: 400, hint: 'Systems, data, users, and money affected. Numbers over adjectives.', checks: ['hasNumber'] },
+      { id: 'results', name: 'Root cause', target: 500, hint: 'Technical root cause and the control gaps that let it happen.', checks: ['hasGap'] },
+      { id: 'discussion', name: 'Containment & lessons learned', target: 600, hint: 'What stopped it, what changes now, with owners and dates.', checks: ['hasOwner', 'hasDate'] },
     ],
   },
   {
     id: 'nsf-grfp',
-    name: 'NSF GRFP',
-    desc: 'Personal Statement (3 pages) + Research Plan (2 pages).',
+    name: 'Security Policy',
+    desc: 'Purpose → Scope → Policy statements → Roles → Exceptions → Enforcement.',
     icon: 'award',
     mode: 'document',
     sections: [
-      { id: 'personal', name: 'Personal Statement', target: 1500, hint: 'Background, experiences, broader impacts. Write as a story.', checks: ['hasBroaderImpacts'] },
-      { id: 'research', name: 'Research Plan', target: 1000, hint: 'Question, hypothesis, approach, intellectual merit.', checks: ['hasHypothesis', 'hasMerit'] },
+      { id: 'personal', name: 'Purpose & scope', target: 250, hint: 'Why this policy exists, who and what it covers. Short beats thorough.', checks: [] },
+      { id: 'research', name: 'Policy statements', target: 800, hint: 'Numbered, testable statements ("MFA is required for…"). Include roles, exceptions process, enforcement.', checks: ['hasNumber', 'hasOwner'] },
     ],
   },
   {
     id: 'conference-abstract',
-    name: 'Conference Abstract',
-    desc: 'Single section, 250 words. Lead with the result.',
+    name: 'Executive Briefing',
+    desc: 'Single section, 250 words. Lead with the risk and the ask.',
     icon: 'send',
     mode: 'document',
     sections: [
-      { id: 'abs', name: 'Abstract', target: 250, hint: 'One paragraph. Lead with finding, end with implication.', checks: ['hasFinding', 'hasNumber'] },
+      { id: 'abs', name: 'Briefing', target: 250, hint: 'One paragraph for the board: risk, business impact, what you need approved.', checks: ['hasFinding', 'hasNumber'] },
     ],
   },
   {
     id: 'defense-slides',
-    name: 'Defense Slides',
-    desc: 'Title → Outline → Background → Question → Methods → Results → Discussion → Q&A',
+    name: 'Security Briefing Slides',
+    desc: 'Title → Agenda → Threat landscape → Posture → Gaps → Plan → Budget → Q&A',
     icon: 'kanban',
     mode: 'slides',
     sections: [
-      { id: 'title', name: 'Title slide', target: 30, hint: 'Title, your name, advisor, date.', checks: [] },
-      { id: 'outline', name: 'Outline', target: 60, hint: '5–7 bullet points covering the talk arc.', checks: [] },
-      { id: 'background', name: 'Background', target: 200, hint: 'Just enough context to follow the question.', checks: ['hasCitation'] },
-      { id: 'question', name: 'Question', target: 80, hint: 'Single sentence, falsifiable.', checks: [] },
-      { id: 'methods', name: 'Methods', target: 200, hint: 'High-level. Save details for backup slides.', checks: ['hasNumber'] },
-      { id: 'results', name: 'Results', target: 300, hint: 'One slide per finding. Lead with the headline.', checks: ['hasFigure', 'hasNumber'] },
-      { id: 'discussion', name: 'Discussion', target: 200, hint: 'Implications + limits + next steps.', checks: ['hasLimit'] },
+      { id: 'title', name: 'Title slide', target: 30, hint: 'Topic, your name, audience, date.', checks: [] },
+      { id: 'outline', name: 'Agenda', target: 60, hint: '5–7 bullets covering the talk arc.', checks: [] },
+      { id: 'background', name: 'Threat landscape', target: 200, hint: 'What is targeting orgs like yours right now. Cite sources.', checks: ['hasRisk'] },
+      { id: 'question', name: 'Current posture', target: 120, hint: 'Where you stand today — one honest slide.', checks: ['hasNumber'] },
+      { id: 'methods', name: 'Gaps & risks', target: 200, hint: 'Top gaps ranked by business impact.', checks: ['hasRisk'] },
+      { id: 'results', name: 'Plan', target: 300, hint: 'One slide per initiative. Lead with the outcome.', checks: ['hasDate', 'hasNumber'] },
+      { id: 'discussion', name: 'Budget & asks', target: 200, hint: 'What you need: money, headcount, decisions.', checks: ['hasNumber'] },
       { id: 'qa', name: 'Anticipated Q&A', target: 300, hint: 'Hardest 5 questions and your answers.', checks: [] },
     ],
   },
   {
     id: 'poster',
-    name: 'Conference Poster',
-    desc: '4-quadrant scientific poster: Intro · Methods · Results · Discussion.',
+    name: 'Risk Snapshot (1-pager)',
+    desc: '4-quadrant one-pager: Context · Top risks · Mitigations · Next steps.',
     icon: 'layout',
     mode: 'poster',
     sections: [
-      { id: 'title', name: 'Title & Authors', target: 30, hint: 'Title, your name, advisor, affiliation.', checks: [] },
-      { id: 'intro', name: 'Introduction', target: 200, hint: 'Question, gap, why-care.', checks: ['hasGap'] },
-      { id: 'methods', name: 'Methods', target: 200, hint: 'High-level: subjects, design, analysis.', checks: ['hasNumber'] },
-      { id: 'results', name: 'Results', target: 250, hint: 'Headline finding + 1–2 figures.', checks: ['hasFigure', 'hasNumber'] },
-      { id: 'discussion', name: 'Discussion', target: 200, hint: 'What it means + next steps.', checks: ['hasLimit'] },
-      { id: 'refs', name: 'References / Acks', target: 80, hint: '5–10 citations + funding + contact.', checks: ['hasCitation'] },
+      { id: 'title', name: 'Title & owner', target: 30, hint: 'System or program name, owner, date.', checks: [] },
+      { id: 'intro', name: 'Context', target: 200, hint: 'What this system does and why it matters to the business.', checks: [] },
+      { id: 'methods', name: 'Top risks', target: 200, hint: '3–5 risks ranked by impact × likelihood.', checks: ['hasRisk'] },
+      { id: 'results', name: 'Mitigations', target: 250, hint: 'Current and planned controls per risk.', checks: ['hasNumber'] },
+      { id: 'discussion', name: 'Next steps', target: 200, hint: 'Decisions needed, owners, dates.', checks: ['hasOwner', 'hasDate'] },
+      { id: 'refs', name: 'References', target: 80, hint: 'Framework mappings, related reports (@key).', checks: [] },
     ],
   },
   {
     id: 'cv',
-    name: 'Academic CV',
-    desc: 'Standard sections: Education · Pubs · Talks · Awards · Service · Skills.',
+    name: 'Security Résumé',
+    desc: 'Standard sections: Summary · Experience · Certs · Projects · Skills.',
     icon: 'user',
     mode: 'document',
     sections: [
-      { id: 'header', name: 'Header', target: 40, hint: 'Name, position, affiliation, contact.', checks: [] },
-      { id: 'education', name: 'Education', target: 100, hint: 'Most recent first. Degree · Year · Institution.', checks: [] },
-      { id: 'publications', name: 'Publications', target: 300, hint: 'Drop @keys from Bibliography. Group by type if needed.', checks: ['hasCitation'] },
-      { id: 'talks', name: 'Invited talks & posters', target: 150, hint: 'Title · Venue · Year.', checks: [] },
-      { id: 'awards', name: 'Awards & funding', target: 100, hint: 'Most recent first. Amount + year if applicable.', checks: [] },
-      { id: 'service', name: 'Service & teaching', target: 100, hint: 'Reviewing, mentorship, TA roles.', checks: [] },
-      { id: 'skills', name: 'Skills', target: 60, hint: 'Methods, languages, software.', checks: [] },
+      { id: 'header', name: 'Header', target: 40, hint: 'Name, target role, location, contact.', checks: [] },
+      { id: 'education', name: 'Summary', target: 100, hint: '2–3 sentences: who you are, your specialty, one quantified win.', checks: ['hasNumber'] },
+      { id: 'publications', name: 'Experience', target: 300, hint: 'Most recent first. Lead each bullet with impact + numbers.', checks: ['hasNumber'] },
+      { id: 'talks', name: 'Certifications & training', target: 150, hint: 'Cert · Issuer · Year. In-progress ones count — say so.', checks: [] },
+      { id: 'awards', name: 'Projects & home lab', target: 100, hint: 'CTFs, detections you wrote, lab builds — with links.', checks: [] },
+      { id: 'service', name: 'Community & service', target: 100, hint: 'Meetups, open source, mentoring, writing.', checks: [] },
+      { id: 'skills', name: 'Skills', target: 60, hint: 'Tools, platforms, languages — grouped, not a wall.', checks: [] },
     ],
   },
   {
     id: 'cover-letter',
     name: 'Cover Letter',
-    desc: 'For job applications, journal submissions, or postdoc inquiries.',
+    desc: 'For security job applications — specific, quantified, short.',
     icon: 'send',
     mode: 'document',
     sections: [
       { id: 'header', name: 'Header', target: 40, hint: 'Date, recipient, salutation.', checks: [] },
-      { id: 'opener', name: 'Opening paragraph', target: 100, hint: 'Why you\'re writing + the position/journal.', checks: [] },
-      { id: 'body', name: 'Why me', target: 250, hint: 'Specific achievements that match the call. Numbers > adjectives.', checks: ['hasNumber'] },
-      { id: 'fit', name: 'Why this place', target: 150, hint: 'What about this group / journal makes it the right fit.', checks: [] },
+      { id: 'opener', name: 'Opening paragraph', target: 100, hint: 'Why you\'re writing + the role.', checks: [] },
+      { id: 'body', name: 'Why me', target: 250, hint: 'Specific achievements that match the posting. Numbers > adjectives.', checks: ['hasNumber'] },
+      { id: 'fit', name: 'Why this team', target: 150, hint: 'What about this company / security team makes it the right fit.', checks: [] },
       { id: 'close', name: 'Close', target: 60, hint: 'Thanks + next step + signature.', checks: [] },
     ],
   },
   {
     id: 'irb-protocol',
-    name: 'IRB Protocol',
-    desc: 'Standard sections for human-subjects research approval.',
+    name: 'Incident Response Plan',
+    desc: 'Roles → Severity levels → Playbooks → Communications → Evidence → Recovery.',
     icon: 'shield',
     mode: 'document',
     sections: [
-      { id: 'overview', name: 'Study overview', target: 200, hint: 'One-paragraph summary of purpose and procedures.', checks: [] },
-      { id: 'background', name: 'Background & significance', target: 400, hint: 'Why this study? What gap does it close?', checks: ['hasGap', 'hasCitation'] },
-      { id: 'aims', name: 'Specific aims & hypotheses', target: 250, hint: '2–3 aims. Each falsifiable.', checks: ['hasHypothesis'] },
-      { id: 'participants', name: 'Participants & recruitment', target: 300, hint: 'Inclusion/exclusion criteria, sample size, recruitment plan.', checks: ['hasNumber'] },
-      { id: 'procedures', name: 'Procedures', target: 500, hint: 'Step-by-step what subjects experience. Time burden in minutes.', checks: ['hasNumber'] },
-      { id: 'risks', name: 'Risks & mitigation', target: 200, hint: 'Anticipated risks (physical, psychological, privacy) + mitigations.', checks: ['hasLimit'] },
-      { id: 'benefits', name: 'Benefits', target: 100, hint: 'Direct + societal benefits. Be honest about minimal direct benefits.', checks: [] },
-      { id: 'consent', name: 'Consent process', target: 200, hint: 'Who consents, when, written or verbal, capacity considerations.', checks: [] },
-      { id: 'data', name: 'Data handling & confidentiality', target: 200, hint: 'Storage, access, identifiers, retention period.', checks: [] },
+      { id: 'overview', name: 'Purpose & scope', target: 200, hint: 'What counts as an incident here, and who this plan is for.', checks: [] },
+      { id: 'background', name: 'Roles & contacts', target: 300, hint: 'Incident commander, deputies, legal, PR, on-call tree — with phone numbers.', checks: ['hasOwner'] },
+      { id: 'aims', name: 'Severity levels', target: 250, hint: 'SEV1–SEV3 definitions with example scenarios and response SLAs.', checks: ['hasNumber'] },
+      { id: 'procedures', name: 'Response playbooks', target: 500, hint: 'Step-by-step for your top scenarios: ransomware, BEC, account takeover, data exposure.', checks: ['hasNumber'] },
+      { id: 'consent', name: 'Communications plan', target: 200, hint: 'Who is notified when — internal, customers, regulators, law enforcement.', checks: ['hasDate'] },
+      { id: 'risks', name: 'Evidence handling', target: 200, hint: 'What to preserve, what never to wipe, chain of custody.', checks: ['hasLimit'] },
+      { id: 'data', name: 'Recovery & post-incident', target: 200, hint: 'Restore order, validation steps, blameless review within N days.', checks: ['hasNumber'] },
     ],
   },
   {
     id: 'meeting-prep',
-    name: 'Advisor Meeting Prep',
-    desc: 'Bring this to your 1:1 — agenda, updates, decisions needed, follow-ups.',
+    name: 'Stakeholder Meeting Prep',
+    desc: 'Bring this to your 1:1 or steering meeting — agenda, updates, decisions, follow-ups.',
     icon: 'message',
     mode: 'document',
     sections: [
@@ -173,53 +169,53 @@ export const TEMPLATES = [
       { id: 'blockers', name: 'Blockers', target: 150, hint: 'What you need from them to move forward.', checks: ['hasLimit'] },
       { id: 'decisions', name: 'Decisions needed', target: 200, hint: 'Frame as A/B options with your recommendation.', checks: [] },
       { id: 'questions', name: 'Questions', target: 150, hint: 'Open questions you genuinely want their take on.', checks: [] },
-      { id: 'followup', name: 'Action items (post-meeting)', target: 100, hint: 'Fill in during/after. Owner + due date for each.', checks: [] },
+      { id: 'followup', name: 'Action items (post-meeting)', target: 100, hint: 'Fill in during/after. Owner + due date for each.', checks: ['hasOwner'] },
     ],
   },
   {
     id: 'dissertation-formatting',
-    name: 'Dissertation Formatting Checklist',
-    desc: 'Catch-everything pass before ProQuest submission.',
+    name: 'Audit Evidence Checklist',
+    desc: 'Catch-everything pass before the auditors arrive.',
     icon: 'shield',
     mode: 'document',
     sections: [
-      { id: 'frontmatter', name: 'Front matter', target: 0, hint: 'Title page, copyright, abstract, dedication, acknowledgements, ToC, list of figures/tables.', checks: [] },
-      { id: 'margins', name: 'Margins & spacing', target: 0, hint: 'Verify school requirements. Most: 1" margins, double-spaced body, single-spaced quotes/captions.', checks: ['hasNumber'] },
-      { id: 'fonts', name: 'Fonts & typography', target: 0, hint: 'One body font (Times/Garamond/Cambria) at 12pt. Captions 10–11pt. Headings consistent.', checks: ['hasNumber'] },
-      { id: 'pagenumbers', name: 'Page numbering', target: 0, hint: 'Roman for front matter, Arabic from Intro onward. Check section breaks.', checks: [] },
-      { id: 'figures', name: 'Figures & tables', target: 0, hint: 'Captions below figures, above tables. Numbered. Cited in text before they appear.', checks: ['hasFigure'] },
-      { id: 'citations', name: 'Citations & references', target: 0, hint: 'Consistent style throughout. Every cite has a reference; every reference is cited.', checks: ['hasCitation'] },
-      { id: 'appendices', name: 'Appendices', target: 0, hint: 'Lettered (A, B, C). Each cited in the body at least once.', checks: [] },
-      { id: 'proquest', name: 'ProQuest submission', target: 0, hint: 'PDF/A format, embedded fonts, no broken links, abstract under word limit.', checks: [] },
+      { id: 'frontmatter', name: 'Policies & procedures', target: 0, hint: 'Current versions, approval signatures, review dates within the last year.', checks: ['hasDate'] },
+      { id: 'margins', name: 'Access reviews', target: 0, hint: 'Quarterly review exports, sign-offs, revocation tickets for leavers.', checks: ['hasDate'] },
+      { id: 'fonts', name: 'Change management', target: 0, hint: 'Sampled changes with approvals; emergency-change log.', checks: ['hasNumber'] },
+      { id: 'pagenumbers', name: 'Vulnerability management', target: 0, hint: 'Scan reports, remediation SLAs, exception approvals.', checks: ['hasNumber'] },
+      { id: 'figures', name: 'Backup & recovery', target: 0, hint: 'Backup job logs and the last successful restore test.', checks: ['hasDate'] },
+      { id: 'citations', name: 'Security awareness', target: 0, hint: 'Training completion rates, phishing simulation results.', checks: ['hasNumber'] },
+      { id: 'appendices', name: 'Incident records', target: 0, hint: 'Incident log, post-mortems, evidence that lessons were applied.', checks: [] },
+      { id: 'proquest', name: 'Vendor / third-party', target: 0, hint: 'Vendor list, SOC 2 / ISO reports collected, contract security clauses.', checks: [] },
     ],
   },
   {
     id: 'faculty-hunt',
-    name: 'Faculty / Advisor Hunt',
-    desc: 'For prospective PhDs or finding committee members — research the people.',
+    name: 'Vendor / MSP Evaluation',
+    desc: 'Choosing a security vendor or managed provider — research before you sign.',
     icon: 'user',
     mode: 'document',
     sections: [
-      { id: 'criteria', name: 'What you\'re looking for', target: 150, hint: 'Research area, methodology, working style, mentorship reputation.', checks: [] },
-      { id: 'shortlist', name: 'Shortlist (5–10 names)', target: 400, hint: 'For each: name, institution, 2–3 representative papers, why they fit.', checks: ['hasCitation'] },
-      { id: 'pubs', name: 'Recent publications', target: 300, hint: 'What have they published in the last 2 years? Drop @keys from Bibliography.', checks: ['hasCitation'] },
-      { id: 'students', name: 'Current/recent students', target: 200, hint: 'Lab size, time-to-defense, where students go after.', checks: ['hasNumber'] },
-      { id: 'reachout', name: 'Outreach plan', target: 200, hint: 'When to email, what to send, who to mention.', checks: [] },
-      { id: 'notes', name: 'Conversation notes', target: 0, hint: 'After meetings/emails — vibes, fit signals, red flags.', checks: [] },
+      { id: 'criteria', name: 'Requirements', target: 150, hint: 'What you actually need: coverage hours, response SLA, compliance support, budget band.', checks: ['hasNumber'] },
+      { id: 'shortlist', name: 'Shortlist (3–5 vendors)', target: 400, hint: 'For each: name, offering, pricing model, why they fit.', checks: ['hasNumber'] },
+      { id: 'pubs', name: 'Diligence', target: 300, hint: 'SOC 2 / ISO status, breach history, references from similar-size customers.', checks: [] },
+      { id: 'students', name: 'Trial / PoC notes', target: 200, hint: 'What you tested, response times observed, gaps found.', checks: ['hasNumber'] },
+      { id: 'reachout', name: 'Negotiation plan', target: 200, hint: 'Contract terms to push on: exit clause, data ownership, SLA credits.', checks: [] },
+      { id: 'notes', name: 'Decision log', target: 0, hint: 'Final choice and why — future-you will want this.', checks: [] },
     ],
   },
   {
     id: 'research-statement',
-    name: 'Research Statement',
-    desc: 'For faculty applications: past work, current direction, future arc.',
+    name: 'Security Program Strategy',
+    desc: 'Annual strategy: where you are, where you\'re going, what it costs.',
     icon: 'sparkles',
     mode: 'document',
     sections: [
-      { id: 'overview', name: 'Overview', target: 200, hint: 'One paragraph: your research identity in 2–3 sentences.', checks: [] },
-      { id: 'past', name: 'Past work', target: 600, hint: 'What you\'ve done. Lead with results, cite your own papers.', checks: ['hasCitation', 'hasFinding'] },
-      { id: 'current', name: 'Current direction', target: 400, hint: 'What you\'re working on now and why it matters.', checks: ['hasGap'] },
-      { id: 'future', name: 'Future research', target: 600, hint: '3–5 year arc. 1–2 funding-ready specific aims.', checks: ['hasHypothesis'] },
-      { id: 'broader', name: 'Broader impacts', target: 200, hint: 'Outreach, mentorship, what your group will look like.', checks: ['hasBroaderImpacts'] },
+      { id: 'overview', name: 'Overview', target: 200, hint: 'One paragraph: program mission and this year\'s theme.', checks: [] },
+      { id: 'past', name: 'Current state', target: 600, hint: 'Honest posture assessment: what works, key metrics, incidents handled.', checks: ['hasNumber', 'hasFinding'] },
+      { id: 'current', name: 'Gaps & risks', target: 400, hint: 'Top gaps ranked by business risk.', checks: ['hasGap', 'hasRisk'] },
+      { id: 'future', name: 'Roadmap', target: 600, hint: '12–18 month arc: initiatives with quarters, owners, and outcomes.', checks: ['hasDate', 'hasOwner'] },
+      { id: 'broader', name: 'Budget & resourcing', target: 200, hint: 'Headcount, tooling, training — and what happens if it is not funded.', checks: ['hasNumber'] },
     ],
   },
 ];
@@ -251,13 +247,13 @@ const SLASH_COMMANDS = [
 const CHECKS = {
   hasNumber: { test: (s) => /\d/.test(s), label: 'Mentions at least one number' },
   hasCitation: { test: (s) => /@\w+/.test(s), label: 'Cites at least one source (@key)' },
-  hasFinding: { test: (s) => /\b(we (find|show|report|demonstrate)|finding|result)/i.test(s), label: 'States a finding' },
+  hasFinding: { test: (s) => /\b(we (find|found|identified|observed)|finding|result|observed)/i.test(s), label: 'States a finding' },
   hasGap: { test: (s) => /\b(gap|lack|missing|unknown|unclear|despite)/i.test(s), label: 'Names a gap' },
-  hasFigure: { test: (s) => /\b(fig(ure)?|table)\.?\s*\d/i.test(s), label: 'References a figure or table' },
+  hasFigure: { test: (s) => /\b(fig(ure)?|table|screenshot)\.?\s*\d/i.test(s), label: 'References a figure, table, or screenshot' },
   hasLimit: { test: (s) => /\b(limit|caveat|however|future work|did not|cannot)/i.test(s), label: 'Acknowledges a limit' },
-  hasBroaderImpacts: { test: (s) => /\b(broader impact|outreach|community|underrepresented|access|teaching)/i.test(s), label: 'Addresses broader impacts' },
-  hasHypothesis: { test: (s) => /\b(hypothes|predict|aim ?\d)/i.test(s), label: 'States a hypothesis or aim' },
-  hasMerit: { test: (s) => /\b(intellectual merit|novel|advances|contribut)/i.test(s), label: 'Frames intellectual merit' },
+  hasRisk: { test: (s) => /\b(risk|threat|likelihood|impact|severity|critical|high|medium|low)/i.test(s), label: 'Names a risk or severity' },
+  hasOwner: { test: (s) => /\b(owner|responsible|accountable|assigned|@\w+)/i.test(s), label: 'Assigns an owner' },
+  hasDate: { test: (s) => /\b(by|due|deadline|q[1-4]|week|month|\d{4}-\d{2}|\d{1,2}\/\d{1,2})/i.test(s), label: 'Sets a date or deadline' },
 };
 
 const wordCount = (s) => (s || '').trim().split(/\s+/).filter(Boolean).length;
@@ -330,6 +326,7 @@ const loadStore = () => {
 // ============================================================================
 const DeliverablesView = ({ allStates, authToken }) => {
   const [store, setStore] = useState(loadStore);
+  const [uploadedDocs, setUploadedDocs] = useState([]);
   const hydratedRef = useRef(false);
   const [serverHydrated, setServerHydrated] = useState(false);
 
@@ -359,6 +356,24 @@ const DeliverablesView = ({ allStates, authToken }) => {
   }, [authToken]);
 
   useEffect(() => { localStorage.setItem(STORE_KEY, JSON.stringify(store)); }, [store]);
+
+  // Uploaded RAG documents (from chat uploads) — shown alongside drafted
+  // artifacts so Documents is the single place to see what the panel knows.
+  useEffect(() => {
+    if (!authToken) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const resp = await fetch(`${process.env.REACT_APP_API_URL || ''}/my-documents`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        if (!resp.ok || cancelled) return;
+        const data = await resp.json();
+        if (!cancelled) setUploadedDocs(Array.isArray(data.documents) ? data.documents : []);
+      } catch { /* non-fatal — panel just stays hidden */ }
+    })();
+    return () => { cancelled = true; };
+  }, [authToken]);
 
   useEffect(() => {
     if (!serverHydrated || !authToken || !hydratedRef.current) return undefined;
@@ -557,7 +572,7 @@ const DeliverablesView = ({ allStates, authToken }) => {
         <div className="canvas-presets">
           <div className="canvas-presets-head">
             <div className="canvas-presets-title">{projectList.length > 0 ? 'Or start a new draft' : 'Pick a template'}</div>
-            <div className="canvas-presets-sub">9 templates · paper, slides, poster, CV, cover letter, and more.</div>
+            <div className="canvas-presets-sub">{TEMPLATES.length} templates · assessment report, IR plan, policy, briefing slides, and more.</div>
           </div>
           <div className="canvas-presets-grid">
             {TEMPLATES.map(t => (
@@ -573,16 +588,29 @@ const DeliverablesView = ({ allStates, authToken }) => {
           </div>
         </div>
 
-        {/* TODO(LLM): "Upload project brief → AI generates a custom outline" */}
-        <div className="canvas-presets" style={{ marginTop: 18 }}>
-          <div className="canvas-presets-head">
-            <div className="canvas-presets-title">From a project brief</div>
-            <div className="canvas-presets-sub">Upload your brief and the AI will draft a custom outline. <em>(Needs LLM endpoint — coming soon.)</em></div>
+        {/* Uploaded RAG documents from chat sessions */}
+        {uploadedDocs.length > 0 && (
+          <div className="canvas-presets" style={{ marginTop: 18 }}>
+            <div className="canvas-presets-head">
+              <div className="canvas-presets-title">Uploaded documents</div>
+              <div className="canvas-presets-sub">
+                Files you uploaded in chat — the advisors can reference these by name.
+              </div>
+            </div>
+            <div className="canvas-presets-grid">
+              {uploadedDocs.map((d, i) => (
+                <div key={`${d.chat_session_id}-${d.filename}-${i}`} className="canvas-preset-card" style={{ cursor: 'default' }}>
+                  <div className="canvas-preset-icon"><Icon name="book" size={18}/></div>
+                  <div className="canvas-preset-content">
+                    <div className="canvas-preset-name">{d.title || d.filename}</div>
+                    <div className="canvas-preset-desc">{d.file_type?.toUpperCase()} · {d.chunks} section{d.chunks === 1 ? '' : 's'} indexed</div>
+                    <div className="canvas-preset-meta">from chat: {d.chat_title}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
-          <button className="btn" disabled title="Needs LLM endpoint">
-            <Icon name="download" size={13} style={{ transform: 'rotate(180deg)' }}/>Upload project brief
-          </button>
-        </div>
+        )}
       </>
     );
   }

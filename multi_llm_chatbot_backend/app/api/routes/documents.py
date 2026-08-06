@@ -245,9 +245,9 @@ async def search_documents(request: Request, query: str = Body(..., embed=True),
         rag_manager = get_rag_manager()
 
         persona_contexts = {
-            "methodologist": "methodology research design analysis",
-            "theorist": "theory theoretical framework conceptual",
-            "pragmatist": "practical application implementation"
+            "incident_responder": "incident response containment forensics recovery",
+            "grc_advisor": "compliance policy audit framework governance",
+            "security_architect": "architecture controls network identity hardening",
         }
         persona_context = persona_contexts.get(persona, "")
 
@@ -290,6 +290,43 @@ async def get_uploaded_filenames(request: Request):
     except Exception as e:
         logger.error(f"Error getting uploaded files: {str(e)}")
         return {"files": []}
+
+
+@router.get("/my-documents")
+async def get_my_documents(current_user: User = Depends(get_current_active_user)):
+    """All documents the user has uploaded across their chat sessions.
+
+    Plan §8: the Documents page lists uploaded RAG docs alongside generated
+    artifacts, so users can see everything the panel can reference.
+    """
+    db = get_database()
+    rag_manager = get_rag_manager()
+    documents = []
+    try:
+        sessions = await db.chat_sessions.find(
+            {"user_id": current_user.id, "is_active": True}
+        ).to_list(length=500)
+    except Exception as e:
+        logger.error(f"Error listing chat sessions for documents: {e}")
+        sessions = []
+
+    for s in sessions:
+        session_id = f"chat_{s['_id']}"
+        try:
+            stats = rag_manager.get_document_stats(session_id)
+        except Exception:
+            continue
+        for doc in stats.get("documents", []):
+            documents.append({
+                "filename": doc.get("filename"),
+                "title": doc.get("title") or doc.get("filename"),
+                "file_type": doc.get("file_type", "unknown"),
+                "chunks": doc.get("chunks", 0),
+                "chat_session_id": str(s["_id"]),
+                "chat_title": s.get("title") or "Untitled chat",
+            })
+
+    return {"documents": documents, "count": len(documents)}
 
 
 @router.get("/document-insights/{filename}")

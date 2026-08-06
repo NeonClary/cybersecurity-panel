@@ -97,7 +97,7 @@ export function DevilsAdvocateWidget({ state, setState, openModal }) {
           className="btn"
           title="Open Devil's Advocate in the main chat (history lives there)"
           onClick={() => handoffToChat("Devil's Advocate",
-            `Take the position of devil's advocate on my claim: "${state.claim || 'my current hypothesis'}". Be ruthless.`)}
+            `Take the position of devil's advocate on my claim: "${state.claim || 'my current security plan'}". Be ruthless.`)}
         >
           <Icon name="message" size={13}/>Open in chat
         </button>
@@ -142,7 +142,7 @@ export function ScopeRealismWidget({ state, openModal }) {
           className="btn"
           title="Open Scope Realism in the main chat (history lives there)"
           onClick={() => handoffToChat('Scope Realism',
-            `Run a brutal feasibility check on my goal: "${state.target || 'my current research scope'}". Be specific about what's at risk.`)}
+            `Run a brutal feasibility check on my goal: "${state.target || 'my current rollout scope'}". Be specific about what's at risk.`)}
         >
           <Icon name="message" size={13}/>Open in chat
         </button>
@@ -158,43 +158,43 @@ export function ScopeRealismWidget({ state, openModal }) {
 const REVIEW_TEMPLATES = [
   {
     severity: 8,
-    major: 'The hypothesis is presented before its operationalization. You write that L2/3 spiking "encodes" prediction error without specifying what spike-pattern feature you will measure (rate? latency? variance?), what range of values would count as "encoding," or what would falsify the claim.',
+    major: 'The policy states what is required but never who enforces it or how compliance is measured. "MFA must be enabled where practical" is not a control — "where practical" is an exception process wearing a trench coat. Every attacker reads that clause the same way your least-motivated admin does.',
     minor: [
-      'Sample size of n=4 animals is described as "preliminary" without a power calculation or a stopping rule.',
-      'GLM with history kernel is presented as the analysis but no mention of how its outputs map to the proposed predictive-coding interpretation.',
-      'No engagement with adaptation as a confound — the obvious alternative explanation for any oddball-driven decrease in firing.',
-      'Reference to "predictive coding" is loose. Rao & Ballard, Bastos, and Friston make different commitments. Which one are you testing?',
+      'No owner is named for any control. Unowned controls decay within two quarters.',
+      'Scope says "all systems" but the procedures only cover corporate laptops — SaaS, BYOD, and service accounts are unaddressed.',
+      'Review cadence is "periodically." Auditors will read that as "never." Name a quarter.',
+      'No consequence is defined for violations, which makes the whole document advisory.',
     ],
     suggestions: [
-      'Add a single sentence specifying the measurable signature you predict, with directionality.',
-      'Either control for arousal/pupil or acknowledge it as a limit upfront.',
-      'Add a stopping rule and target effect size before scaling beyond n=4.',
+      'Rewrite each requirement as testable: who, what, by when, verified how.',
+      'Add an exceptions section with an approver, an expiry date, and a register.',
+      'Name a control owner per section, not one owner for the whole policy.',
     ],
   },
   {
     severity: 7,
-    major: 'You claim the GLM analyses are "consistent with" the hypothesis. This phrase is doing too much work. Consistency with PE encoding is also consistency with at least three alternative explanations (adaptation, arousal, attention). Without a positive test that PE encoding predicts but the alternatives do not, "consistent with" is unfalsifiable.',
+    major: 'The plan claims the rollout will "significantly reduce risk" without a baseline or a target. Reduced from what, to what, measured how? Without numbers this is a budget request, not a security plan — and the CFO will treat it as one.',
     minor: [
-      'Mouse V1 is justified by convention rather than by what makes it the right model for this question.',
-      'No statement of what would change your mind.',
-      'Figure-free abstract for an empirical claim is a red flag for reviewers.',
+      'Timeline has no dependencies: identity cleanup is scheduled after the SSO migration that depends on it.',
+      'No statement of what happens to legacy systems that cannot meet the new baseline.',
+      'Success criteria are activities ("deploy EDR") rather than outcomes ("alerts triaged within 30 minutes").',
     ],
     suggestions: [
-      'Replace "consistent with" with a specific signed prediction the data either matches or doesn\'t.',
-      'List 1-2 results that, if observed, would refute the hypothesis.',
+      'Add a current-state metric and a 90-day target for each initiative.',
+      'List the top 2 risks to the plan itself and the fallback for each.',
     ],
   },
   {
     severity: 9,
-    major: 'This reads like an introduction, not an abstract. There is no result. There is no number. The strongest claim is that your "preliminary analyses are consistent" with your hypothesis — which is the lowest possible bar in empirical neuroscience. If the actual finding is interesting, lead with the finding, not with the framing.',
+    major: 'This reads like a product brochure, not an incident report. There is no timeline, no root cause, and no number. The strongest claim is that the incident was "handled swiftly with no evidence of data exposure" — absence of evidence in an environment with 30-day log retention is not evidence of absence, and any regulator will say so.',
     minor: [
-      'Word "preliminary" appears three times in three sentences. Cut two.',
-      '"Oddball stimulus paradigm" is jargon-without-citation; one sentence of definition or one citation, not zero.',
-      'No mention of layer-specificity, despite L2/3 being the core claim.',
+      'The word "sophisticated" appears twice describing an attack that started with a phished password.',
+      '"No customer action is required" is asserted before the impact section establishes it.',
+      'Lessons-learned section contains zero committed changes with owners or dates.',
     ],
     suggestions: [
-      'Lead sentence: "We find that <effect>" — even if the effect is small, name it.',
-      'Cut "we hypothesize that" entirely. Hypotheses go in the intro of the paper, not the abstract.',
+      'Lead with the facts: detection time, dwell time, systems touched, records at risk.',
+      'Every lesson learned gets an owner and a date, or it is a wish, not a lesson.',
     ],
   },
 ];
@@ -313,10 +313,10 @@ export function ReviewerModal({ data, onClose }) {
 }
 
 const HARDER_COUNTERS = [
-  { lbl: 'Reverse causation', text: 'You assume PE drives spike changes. The opposite mapping — that some intrinsic cortical state drives both the spike pattern and the perceived "surprise" — is observationally indistinguishable in your design.' },
-  { lbl: 'Definition shift', text: 'You will be tempted, when results don\'t fit, to redefine "prediction error" until they do. Pre-register your operationalization or you cannot honestly claim to have tested PC.' },
-  { lbl: 'Wrong layer', text: 'Most predictive-coding accounts place PE signaling in L4 or L5b, not L2/3. Your prior for finding PE in L2/3 should be lower than you\'re writing.' },
-  { lbl: 'Mouse vs. theory', text: 'Predictive coding theories were built on primate visual hierarchies with rich top-down attention. Mouse V1 lacks several of the assumed circuits. You may be testing the theory on a substrate it doesn\'t apply to.' },
+  { lbl: 'Compliance ≠ security', text: 'Your plan optimizes for passing the audit, not stopping the attacker. Every control maps to a framework line item; none map to the actual intrusion paths in your last three incidents.' },
+  { lbl: 'Insider blind spot', text: 'Everything here assumes the threat is outside the perimeter. A disgruntled admin with legitimate credentials defeats every control on this list without triggering one alert.' },
+  { lbl: 'Operational decay', text: 'Day-one coverage is not the question. Who tunes these detections in month six, when the person who built them has left and the alert queue is 400 deep?' },
+  { lbl: 'Vendor dependency', text: 'Your resilience story depends on three SaaS vendors staying up and honest. Their breach is your breach, and your plan has no section for it.' },
 ];
 
 export function DevilsModal({ data, onClose }) {
@@ -333,7 +333,7 @@ export function DevilsModal({ data, onClose }) {
         data.onUpdate({ counters: nc });
         fireToast('Stronger counter added: "' + next.lbl + '"', 'critic');
       } else {
-        fireToast('No more counters — your hypothesis is more robust than I thought.');
+        fireToast('No more counters — your plan is more robust than I thought.');
       }
       setPushing(false);
     }, 800);
@@ -345,7 +345,7 @@ export function DevilsModal({ data, onClose }) {
         <div className="modal-icon critic"><Icon name="scale" size={18}/></div>
         <div style={{ flex: 1 }}>
           <div className="modal-title">Devil's Advocate</div>
-          <div className="modal-sub">The strongest counter-arguments to your hypothesis, ranked by how much they should worry you.</div>
+          <div className="modal-sub">The strongest counter-arguments to your plan, ranked by how much they should worry you.</div>
         </div>
         <button className="icon-btn" onClick={onClose}><Icon name="x" size={16}/></button>
       </div>
@@ -414,10 +414,10 @@ export function ScopeModal({ data, onClose }) {
         <div style={{ marginTop: 16 }}>
           <div className="label" style={{ marginBottom: 8 }}>Recommended actions</div>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--canvas-text-2)', lineHeight: 1.6 }}>
-            <li><strong style={{ color: 'var(--canvas-text)' }}>Commit to a PC formulation by May 31.</strong> Theory clarity is your bottleneck, not data.</li>
-            <li>Build a writing buffer. Your 9-day streak is great; 90 days is the minimum to absorb the inevitable lab/family/health setbacks.</li>
-            <li>Cut a chapter. A 5-chapter dissertation that ships beats a 6-chapter one that doesn't.</li>
-            <li>Calibrate against your cohort: median time-to-defense in your program is 5.8 years. You are projecting 5.2.</li>
+            <li><strong style={{ color: 'var(--canvas-text)' }}>Lock the scope in writing.</strong> Scope creep — not effort — is what sinks security rollouts.</li>
+            <li>Build slack into the timeline. Vendor delays, change freezes, and on-call weeks will eat 20–30% of it.</li>
+            <li>Cut a phase. A rollout that ships MFA and backups this quarter beats one that promises everything next year.</li>
+            <li>Assign a single owner per milestone; shared ownership reads as no ownership in the post-mortem.</li>
           </ul>
         </div>
       </div>

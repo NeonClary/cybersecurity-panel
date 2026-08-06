@@ -1,100 +1,107 @@
 from fastapi import APIRouter, Body, HTTPException, Query
-from app.config import get_settings
-from app.llm.improved_gemini_client import ImprovedGeminiClient
-from app.llm.improved_ollama_client import ImprovedOllamaClient
-from app.llm.improved_vllm_client import ImprovedVllmClient
 from app.models.default_personas import get_default_personas
-from app.core.bootstrap import chat_orchestrator, llm, current_provider, available_providers
+from app.core import bootstrap
+from app.core.bootstrap import chat_orchestrator
 from app.core.model_status import get_model_status
 from pydantic import BaseModel
-import os
 import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-def create_llm_client(provider: str = None):
-    global current_provider
-    if provider is None:
-        provider = current_provider
-
-    if provider == "gemini":
-        try:
-            return ImprovedGeminiClient(model_name=os.getenv("GEMINI_MODEL"))
-        except ValueError as e:
-            logger.warning(f"Gemini API key not found, falling back to Ollama: {e}")
-            return ImprovedOllamaClient(model_name="llama3.2:1b")
-    elif provider == "ollama":
-        return ImprovedOllamaClient(model_name="llama3.2:1b")
-    elif provider == "vllm":
-        settings = get_settings()
-        if not settings.llm.vllm.api_url:
-            raise ValueError("No vLLM endpoint configured. Set llm.vllm.api_url in your config.")
-        return ImprovedVllmClient(
-            api_url=settings.llm.vllm.api_url,
-            api_key=settings.llm.vllm.api_key,
-        )
-    else:
-        raise ValueError(f"Unknown provider: {provider}")
-
-# NOTE: Personas and `llm` are already created and registered by
-# app/core/bootstrap.py with the correct ResilientLLMClient wrapping
-# (primary vLLM + OpenAI fallback). Re-registering them here at module
-# import time replaces them with a raw vLLM client that lacks the
-# fallback wrapper AND lacks the api_username/api_key wiring, breaking
-# both auth and failover. Bootstrap already handles initial setup.
 
 class ProviderSwitch(BaseModel):
     provider: str
 
+
+def _model_name(client) -> str:
+    name = getattr(client, "model_name", None)
+    if not name:
+        # ResilientLLMClient wraps the primary client
+        primary = getattr(client, "primary", None)
+        name = getattr(primary, "model_name", None)
+    return name or "unknown"
+
+
 @router.get("/current-provider")
 async def get_current_provider():
     return {
-        "current_provider": current_provider,
-        "available_providers": available_providers,
+        "current_provider": bootstrap.current_provider,
+        "available_providers": bootstrap.available_providers,
         "model_info": {
-            "name": llm.model_name if hasattr(llm, 'model_name') else "gemini-2.0-flash",
-            "provider": current_provider
-        }
+            "name": _model_name(bootstrap.llm),
+            "provider": bootstrap.current_provider,
+        },
     }
+
 
 @router.post("/switch-provider")
 async def switch_provider(provider_data: ProviderSwitch):
-    global current_provider, llm
-
-    if provider_data.provider not in available_providers:
-        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider_data.provider}. Available: {available_providers}")
-
-    try:
-        from app.core.bootstrap import (
-            create_orchestrator_llm,
-            create_persona_llm,
+    if provider_data.provider not in bootstrap.available_providers:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unknown provider: {provider_data.provider}. "
+                f"Available: {bootstrap.available_providers}"
+            ),
         )
 
-        current_provider = provider_data.provider
-        new_llm = create_orchestrator_llm()
-        llm = new_llm
+    # Fail closed (plan §10): refuse to switch to a provider whose health
+    # probe says it is not online. If the probe itself fails, fail open so a
+    # broken status checker can't lock the user out of switching.
+    try:
+        payload = await get_model_status(force_refresh=False)
+        entry = next(
+            (
+                m for m in (payload.get("models") or [])
+                if m.get("provider") == provider_data.provider
+            ),
+            None,
+        )
+        if entry and entry.get("status") != "online":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Provider '{provider_data.provider}' is "
+                    f"{entry.get('status', 'unavailable')} right now; refusing to switch. "
+                    "Refresh Model Status and try again."
+                ),
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("Provider health gate skipped (probe failed): %s", exc)
 
+    previous = bootstrap.current_provider
+    try:
+        bootstrap.set_current_provider(provider_data.provider)
+        new_llm = bootstrap.create_orchestrator_llm()
+        bootstrap.llm = new_llm
         chat_orchestrator.llm_client = new_llm
 
-        persona_llm = create_persona_llm()
+        persona_llm = bootstrap.create_persona_llm()
         new_personas = get_default_personas(persona_llm)
         chat_orchestrator.personas.clear()
         for persona in new_personas:
             chat_orchestrator.register_persona(persona)
 
         return {
-            "message": f"Successfully switched to {current_provider}",
-            "current_provider": current_provider,
+            "message": f"Successfully switched to {bootstrap.current_provider}",
+            "current_provider": bootstrap.current_provider,
             "model_info": {
-                "name": new_llm.model_name if hasattr(new_llm, 'model_name') else "gemini-2.0-flash",
-                "provider": current_provider
-            }
+                "name": _model_name(new_llm),
+                "provider": bootstrap.current_provider,
+            },
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to switch to {provider_data.provider}: {str(e)}")
+        bootstrap.set_current_provider(previous)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to switch to {provider_data.provider}: {str(e)}",
+        )
+
 
 @router.post("/switch-model")
 async def switch_model(model_name: str = Body(...)):
@@ -103,12 +110,12 @@ async def switch_model(model_name: str = Body(...)):
     else:
         return await switch_provider(ProviderSwitch(provider="ollama"))
 
+
 @router.get("/current-model")
 async def get_current_model():
-    model_name = llm.model_name if hasattr(llm, 'model_name') else "gemini-2.0-flash"
     return {
-        "model": model_name,
-        "provider": current_provider
+        "model": _model_name(bootstrap.llm),
+        "provider": bootstrap.current_provider,
     }
 
 

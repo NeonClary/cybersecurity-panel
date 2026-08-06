@@ -720,7 +720,7 @@ export function GoalModal({ data, onClose }) {
         <div className="modal-icon"><Icon name="bullseye" size={18}/></div>
         <div style={{ flex: 1 }}>
           <div className="modal-title">{editing ? 'Edit goal' : 'New goal'}</div>
-          <div className="modal-sub">Quarterly OKR or dissertation milestone.</div>
+          <div className="modal-sub">Quarterly OKR or security program milestone.</div>
         </div>
         <button className="icon-btn" onClick={onClose}><Icon name="x" size={16}/></button>
       </div>

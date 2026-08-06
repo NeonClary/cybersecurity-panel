@@ -876,7 +876,7 @@ export function GoalsWidget({ state, setState, openModal }) {
           </div>
         ))}
         {goals.length === 0 && (
-          <EmptyState icon="bullseye" title="No goals yet" hint="Quarterly OKRs, dissertation milestones, anything you want to track."/>
+          <EmptyState icon="bullseye" title="No goals yet" hint="Quarterly OKRs, security program milestones, anything you want to track."/>
         )}
       </div>
       <button className="add-tiny" onClick={add}>+ New goal</button>
@@ -1439,23 +1439,22 @@ export function DocumenterWidget({ state, setState }) {
   );
 }
 
-// ===== PhD Journey — standard milestones with status + notes =====
-// Captures the "General Journey" list: courses, prelim, lit review, IRB,
-// committee, topic, comps, defense, ProQuest. Each milestone has a status
-// (open/in-progress/completed) and an inline note.
+// ===== Security Program Roadmap — standard milestones with status + notes =====
+// Assessment → hardening → detection → audit → steady state. Each milestone
+// has a status (open/in-progress/completed) and an inline note.
 const PHD_MILESTONES = [
-  { id: 'courses', label: 'Course selection & dissertation credits', hint: 'Plan term-by-term. Check funding constraints.' },
-  { id: 'prelim', label: 'Preliminary exam', hint: 'Department format varies — consult your handbook.' },
-  { id: 'lit-review', label: 'Literature review', hint: 'Coverage + critique. Bibliography widget pairs well here.' },
-  { id: 'topic', label: 'Pick dissertation topic', hint: 'Narrow until your advisor pushes back.' },
-  { id: 'committee', label: 'Select committee', hint: 'Pros/cons of a co-chair: more buy-in, more scheduling.' },
-  { id: 'irb', label: 'IRB approval', hint: 'Allow 6–12 weeks. Pre-fill paperwork early.' },
-  { id: 'data', label: 'Data collection', hint: 'Pilot first. Plan for the inevitable instrument failure.' },
-  { id: 'comps', label: 'Comprehensive exam', hint: 'Department format varies.' },
-  { id: 'analysis', label: 'Data analysis & visualization', hint: 'Make the figures before the prose.' },
-  { id: 'writing', label: 'Write dissertation', hint: 'One chapter at a time. Aim for "good enough to defend".' },
-  { id: 'defense', label: 'Oral defense', hint: 'Slides + practice Q&A. Use the Defense Slides template.' },
-  { id: 'proquest', label: 'Final admin (ProQuest upload)', hint: 'Read the formatting checklist before you start formatting.' },
+  { id: 'inventory', label: 'Asset & data inventory', hint: 'You cannot protect what you have not listed. Include SaaS and shadow IT.' },
+  { id: 'risk-assessment', label: 'Initial risk assessment', hint: 'Rank by business impact, not by what is technically interesting.' },
+  { id: 'quick-wins', label: 'Quick wins: MFA, backups, patching', hint: 'MFA everywhere practical, tested backups, patch cadence.' },
+  { id: 'policies', label: 'Core policies drafted', hint: 'Acceptable use, access control, incident response. Short beats perfect.' },
+  { id: 'access-review', label: 'Access & privilege review', hint: 'Least privilege, offboarding checklist, service-account cleanup.' },
+  { id: 'logging', label: 'Logging & detection baseline', hint: 'Get the logs flowing first; tune alerts second.' },
+  { id: 'ir-plan', label: 'Incident response plan & contacts', hint: 'Who calls whom at 2am. Print it — the wiki may be down.' },
+  { id: 'training', label: 'Security awareness training', hint: 'Short, recurring, and phishing-focused beats annual marathon.' },
+  { id: 'tabletop', label: 'Tabletop exercise', hint: 'Run your IR plan against a ransomware scenario. Note the gaps.' },
+  { id: 'audit', label: 'Audit / assessment readiness', hint: 'Map controls to your framework; collect evidence as you go.' },
+  { id: 'review-cycle', label: 'Quarterly review cycle', hint: 'Risks, exceptions, metrics. Keep the panel honest.' },
+  { id: 'steady-state', label: 'Steady state & continuous improvement', hint: 'Security is a program, not a project.' },
 ];
 
 export function PhdJourneyWidget({ state, setState }) {
@@ -1527,33 +1526,35 @@ export function PhdJourneyWidget({ state, setState }) {
   );
 }
 
-// ===== PhD Resources — curated links + open-source apps =====
-// Static curated list of useful PhD tools and resources, plus user-added links.
+// ===== Security Resources — curated links + community references =====
+// Static curated list of useful security frameworks, tools, and training,
+// plus user-added links.
 const PHD_RESOURCE_GROUPS = [
   {
-    label: 'Open-source PhD tools',
+    label: 'Frameworks & guidance',
     items: [
-      { name: 'Zotero', href: 'https://www.zotero.org/', desc: 'Reference manager — free and open source' },
-      { name: 'Obsidian', href: 'https://obsidian.md/', desc: 'Local-first knowledge graph for notes' },
-      { name: 'JabRef', href: 'https://www.jabref.org/', desc: 'BibTeX-native reference manager' },
-      { name: 'Pandoc', href: 'https://pandoc.org/', desc: 'Universal document converter' },
-      { name: 'Quarto', href: 'https://quarto.org/', desc: 'Scientific publishing with R/Python/Julia' },
+      { name: 'NIST Cybersecurity Framework', href: 'https://www.nist.gov/cyberframework', desc: 'The reference framework for security programs' },
+      { name: 'CIS Critical Security Controls', href: 'https://www.cisecurity.org/controls', desc: 'Prioritized safeguards by implementation group' },
+      { name: 'OWASP Top 10', href: 'https://owasp.org/www-project-top-ten/', desc: 'Most critical web application risks' },
+      { name: 'MITRE ATT&CK', href: 'https://attack.mitre.org/', desc: 'Adversary tactics and techniques knowledge base' },
+      { name: 'CISA Known Exploited Vulnerabilities', href: 'https://www.cisa.gov/known-exploited-vulnerabilities-catalog', desc: 'Patch-first list of actively exploited CVEs' },
     ],
   },
   {
-    label: 'Writing & formatting',
+    label: 'Tools & practice',
     items: [
-      { name: 'Overleaf', href: 'https://www.overleaf.com/', desc: 'Browser LaTeX editor with templates' },
-      { name: 'LaTeX Templates', href: 'https://www.latextemplates.com/', desc: 'Thesis, CV, poster templates' },
-      { name: 'Hemingway Editor', href: 'https://hemingwayapp.com/', desc: 'Plain-language readability check' },
+      { name: 'Have I Been Pwned', href: 'https://haveibeenpwned.com/', desc: 'Check accounts against known breaches' },
+      { name: 'Shodan', href: 'https://www.shodan.io/', desc: 'See what of yours is exposed to the internet' },
+      { name: 'TryHackMe', href: 'https://tryhackme.com/', desc: 'Guided hands-on security labs' },
+      { name: 'Security Headers', href: 'https://securityheaders.com/', desc: 'One-click scan of your site\u2019s HTTP headers' },
     ],
   },
   {
-    label: 'Community & career',
+    label: 'Community & news',
     items: [
-      { name: 'Academic Twitter / #PhDChat', href: 'https://twitter.com/search?q=%23PhDChat', desc: 'Peers + advisors discussing the grind' },
-      { name: 'ORCID', href: 'https://orcid.org/', desc: 'Permanent researcher ID for citations + grants' },
-      { name: 'Conferences & CFPs (WikiCFP)', href: 'http://www.wikicfp.com/', desc: 'Upcoming deadlines across fields' },
+      { name: 'Krebs on Security', href: 'https://krebsonsecurity.com/', desc: 'Investigative security journalism' },
+      { name: 'SANS Internet Storm Center', href: 'https://isc.sans.edu/', desc: 'Daily threat diaries and handler notes' },
+      { name: 'r/cybersecurity', href: 'https://www.reddit.com/r/cybersecurity/', desc: 'Practitioner discussion and career advice' },
     ],
   },
 ];
@@ -1622,28 +1623,7 @@ export function PhdResourcesWidget({ state, setState }) {
 // ===== Stub — roadmap preview card =====
 // Shows what's coming for this widget type so adding it from the palette
 // doesn't feel like a dead end.
-const STUB_PLANS = {
-  'concept-map': ['Drag papers as nodes', 'Connect by theme', 'Auto-cluster by citation overlap'],
-  'highlights': ['Pull quotes with auto-citation', 'Search across all notes'],
-  'paper-tldr': ['Drop a PDF', 'Get claim / method / limits / gaps', 'Save to Bibliography in one click'],
-  'outline': ['Collapsible tree', 'Drop Insights into slots', 'Promote to Deliverable section'],
-  'latex': ['Render math as you type', 'Snippet library', 'Copy as image / TeX'],
-  'draft-locker': ['Versioned chapter drafts', 'Diff between versions', 'Roll back any change'],
-  'gantt': ['Proposal → IRB → defense timeline', 'Critical-path highlighting', 'Drag to reschedule'],
-  'mood': ['Daily slider', 'Trend graph', 'Correlate with productive days'],
-  'sleep': ['Sleep duration vs. word output', 'Energy heatmap', 'Apple Health import'],
-  'focus': ['Curated ambient playlists', 'Focus session timer', 'Auto-pause on Pomodoro break'],
-  'cfp': ['CFP deadlines by venue', 'Fit score by topic', 'Submission status pipeline'],
-  'grants': ['Grant deadlines + amounts', 'Award log', 'Generate budget justification'],
-  'crm': ['Collaborators with last touch', 'Quick-add from Meeting Log', 'Reminders for cold contacts'],
-  'cv': ['Track outputs over time', 'Auto-generate CV from Bibliography', 'Highlight by impact factor'],
-  'datasets': ['Public datasets by domain', 'Saved searches', 'License + access notes'],
-  'methods': ['When to use what test', 'Examples + citations', 'Saved templates per chapter'],
-  'discounts': ['Software & services with edu pricing', 'Discount expiration tracking'],
-  'assumption': ['Names hidden assumptions', 'Asks "what if wrong?"', 'Logs to a hypothesis tree'],
-  'whats-missing': ['Gap analysis on lit review', 'Compares to top venues', 'Suggests targeted reads'],
-  'calibrator': ['Challenges every "results show" claim', 'Asks for the prior', 'Flags p-hacking patterns'],
-};
+const STUB_PLANS = {};
 
 export function StubWidget({ meta }) {
   const plan = STUB_PLANS[meta.type] || [];
