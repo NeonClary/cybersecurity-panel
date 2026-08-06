@@ -16,6 +16,7 @@ from app.core.auth import (
 )
 from app.core.database import get_database
 from app.core.guest_demo import resolve_persona, seed_guest_demo, clear_guest_sample_data
+from app.core import user_knowledge
 import logging
 import secrets
 
@@ -149,6 +150,10 @@ async def login(user_credentials: UserLogin):
             {"$set": {"last_login": datetime.utcnow()}}
         )
         user.last_login = datetime.utcnow()
+
+        # Session-start trigger: refresh the dual user summaries (plan §4.2).
+        user_knowledge.schedule_summary_regeneration(user.id)
+
         
         # Create access token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -368,6 +373,10 @@ async def explore_as_guest(body: GuestExploreRequest):
             persona,
             free_text=(body.free_text or "").strip() or None,
         )
+
+        # Session-start trigger: summarize the seeded demo facts so advisors
+        # have user context from the first guest message.
+        user_knowledge.schedule_summary_regeneration(user.id)
 
         access_token = create_access_token(
             data={"sub": str(user.id)},

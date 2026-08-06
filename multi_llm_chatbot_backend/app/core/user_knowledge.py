@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -298,6 +299,36 @@ async def regenerate_summaries(user_id: Any, llm: LLMClient) -> Dict[str, Any]:
         upsert=True,
     )
     return doc
+
+
+def schedule_summary_regeneration(user_id: Any) -> None:
+    """Fire-and-forget dual-summary regeneration; never blocks the caller.
+
+    Wired to the two triggers from the plan: user-session start (login /
+    guest entry) and after each completed chat except the first in a
+    session (see ``should_regenerate_after_chat``).
+    """
+    try:
+        from app.core.bootstrap import chat_orchestrator
+
+        llm = chat_orchestrator.llm_client
+        if llm is None and chat_orchestrator.personas:
+            llm = next(iter(chat_orchestrator.personas.values())).llm
+    except Exception:
+        return
+    if llm is None:
+        return
+
+    async def _run() -> None:
+        try:
+            await regenerate_summaries(user_id, llm)
+        except Exception as exc:
+            LOG.warning("Background summary regeneration failed: %s", exc)
+
+    try:
+        asyncio.create_task(_run())
+    except RuntimeError as exc:
+        LOG.warning("Could not schedule summary regeneration: %s", exc)
 
 
 async def get_summary_for_provider(

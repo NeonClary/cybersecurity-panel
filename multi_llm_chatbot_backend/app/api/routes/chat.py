@@ -266,6 +266,14 @@ async def chat_stream(
 
             await asyncio.gather(*tasks, return_exceptions=True)
 
+            # Regenerate the dual user summaries after each completed chat
+            # except the first one in this session (plan §4.2 trigger).
+            user_msg_count = len(
+                [m for m in session.messages if m.get("role") == "user"]
+            )
+            if uk.should_regenerate_after_chat(user_msg_count):
+                uk.schedule_summary_regeneration(current_user.id)
+
             yield ChatStreamLine(
                 type="progress",
                 data={"phase": "complete"},
