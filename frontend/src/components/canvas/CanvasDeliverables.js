@@ -13,6 +13,7 @@ import 'katex/dist/katex.min.css';
 import Icon from './CanvasIcon';
 import { MOD } from './platform';
 import LatexEditor from './CanvasLatexEditor';
+import { fetchCanvas, saveDeliverables, debounce } from '../../utils/canvasApi';
 
 // Markdown plugins shared across all rendered blocks. remark-math + rehype-katex
 // give us real LaTeX math (`$...$` inline, `$$...$$` block) inside any preview.
@@ -327,9 +328,61 @@ const loadStore = () => {
 // ============================================================================
 // Main view
 // ============================================================================
-const DeliverablesView = ({ allStates }) => {
+const DeliverablesView = ({ allStates, authToken }) => {
   const [store, setStore] = useState(loadStore);
+  const hydratedRef = useRef(false);
+  const [serverHydrated, setServerHydrated] = useState(false);
+
+  // Prefer server store when available; keep localStorage as cache.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!authToken) {
+        hydratedRef.current = true;
+        setServerHydrated(true);
+        return;
+      }
+      const remote = await fetchCanvas(authToken);
+      if (cancelled) return;
+      const d = remote?.deliverables;
+      if (d?.projects && Object.keys(d.projects).length) {
+        setStore(d);
+        localStorage.setItem(STORE_KEY, JSON.stringify(d));
+      } else if (Object.keys(store.projects || {}).length) {
+        await saveDeliverables(authToken, store);
+      }
+      hydratedRef.current = true;
+      setServerHydrated(true);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken]);
+
   useEffect(() => { localStorage.setItem(STORE_KEY, JSON.stringify(store)); }, [store]);
+
+  useEffect(() => {
+    if (!serverHydrated || !authToken || !hydratedRef.current) return undefined;
+    const persist = debounce(async () => {
+      const ok = await saveDeliverables(authToken, store);
+      if (!ok) {
+        fireToast('Documents saved locally (server sync failed)', 'danger');
+      }
+    }, 900);
+    persist();
+    return () => persist.cancel();
+  }, [store, authToken, serverHydrated]);
+
+  // Refresh when CanvasPage seeds localStorage from server before this mounts
+  useEffect(() => {
+    const onStorage = () => {
+      try {
+        const next = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
+        if (next?.projects) setStore(next);
+      } catch { /* ignore */ }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   const project = store.projects[store.activeProjectId] || null;
   const template = project ? TEMPLATES.find(t => t.id === project.templateId) : null;

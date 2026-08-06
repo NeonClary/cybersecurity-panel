@@ -5,7 +5,13 @@ import logging
 from bson import ObjectId
 
 from app.models.user import User
-from app.models.phd_canvas import PhdCanvas, CanvasResponse, UpdateCanvasRequest
+from app.models.phd_canvas import (
+    PhdCanvas,
+    CanvasResponse,
+    UpdateCanvasRequest,
+    SaveWorkspaceRequest,
+    SaveDeliverablesRequest,
+)
 from app.core.auth import get_current_active_user
 from app.core.database import get_database
 
@@ -37,6 +43,22 @@ def get_canvas_manager():
     from app.core.canvas_manager import get_canvas_manager
     return get_canvas_manager()
 
+
+def _to_canvas_response(canvas: PhdCanvas) -> CanvasResponse:
+    return CanvasResponse(
+        id=str(canvas.id),
+        user_id=str(canvas.user_id),
+        sections=canvas.sections,
+        workspace=getattr(canvas, "workspace", None) or {},
+        deliverables=getattr(canvas, "deliverables", None) or {},
+        created_at=canvas.created_at,
+        last_updated=canvas.last_updated,
+        last_chat_processed=canvas.last_chat_processed,
+        total_insights=canvas.total_insights,
+        auto_update=canvas.auto_update,
+        print_optimized=canvas.print_optimized,
+    )
+
 @router.get("/phd-canvas", response_model=CanvasResponse)
 async def get_phd_canvas(
     current_user: User = Depends(get_current_active_user)
@@ -45,25 +67,59 @@ async def get_phd_canvas(
     try:
         canvas_manager = get_canvas_manager()
         canvas = await canvas_manager.get_or_create_canvas(str(current_user.id))
-        
-        # Convert to response model
-        return CanvasResponse(
-            id=str(canvas.id),
-            user_id=str(canvas.user_id),
-            sections=canvas.sections,
-            created_at=canvas.created_at,
-            last_updated=canvas.last_updated,
-            last_chat_processed=canvas.last_chat_processed,
-            total_insights=canvas.total_insights,
-            auto_update=canvas.auto_update,
-            print_optimized=canvas.print_optimized
-        )
+        return _to_canvas_response(canvas)
         
     except Exception as e:
         logger.error(f"Error getting PhD canvas for user {current_user.id}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve PhD canvas"
+        )
+
+@router.put("/phd-canvas/workspace", response_model=CanvasResponse)
+async def put_canvas_workspace(
+    request: SaveWorkspaceRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Save workspace layout and widget states for the logged-in user."""
+    try:
+        canvas_manager = get_canvas_manager()
+        workspace = {
+            "layout": request.layout,
+            "states": request.states,
+        }
+        if request.view is not None:
+            workspace["view"] = request.view
+        if request.task_statuses is not None:
+            workspace["task_statuses"] = request.task_statuses
+        canvas = await canvas_manager.save_workspace(str(current_user.id), workspace)
+        return _to_canvas_response(canvas)
+    except Exception as e:
+        logger.error(f"Error saving workspace for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save workspace",
+        )
+
+@router.put("/phd-canvas/deliverables", response_model=CanvasResponse)
+async def put_canvas_deliverables(
+    request: SaveDeliverablesRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    """Save Documents / deliverables store for the logged-in user."""
+    try:
+        canvas_manager = get_canvas_manager()
+        deliverables = {
+            "activeProjectId": request.activeProjectId,
+            "projects": request.projects or {},
+        }
+        canvas = await canvas_manager.save_deliverables(str(current_user.id), deliverables)
+        return _to_canvas_response(canvas)
+    except Exception as e:
+        logger.error(f"Error saving deliverables for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save deliverables",
         )
 
 @router.post("/phd-canvas/update", response_model=CanvasResponse)
@@ -92,17 +148,7 @@ async def update_phd_canvas(
             logger.info(f"Processing incremental canvas update for user {current_user.id}")
             canvas = await canvas_manager.update_canvas(str(current_user.id), request)
         
-        return CanvasResponse(
-            id=str(canvas.id),
-            user_id=str(canvas.user_id),
-            sections=canvas.sections,
-            created_at=canvas.created_at,
-            last_updated=canvas.last_updated,
-            last_chat_processed=canvas.last_chat_processed,
-            total_insights=canvas.total_insights,
-            auto_update=canvas.auto_update,
-            print_optimized=canvas.print_optimized
-        )
+        return _to_canvas_response(canvas)
         
     except Exception as e:
         logger.error(f"Error updating PhD canvas for user {current_user.id}: {e}")

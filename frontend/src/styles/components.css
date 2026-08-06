@@ -17,10 +17,10 @@
   --border-secondary: #D1D5DB;
   --border-tertiary: #F3F4F6;
   
-  /* Accent Colors */
-  --accent-primary: #6366F1;
-  --accent-secondary: #8B5CF6;
-  --accent-gradient: linear-gradient(135deg, #6366F1, #8B5CF6);
+  /* Accent Colors — teal / slate (Jerry #0F766E) */
+  --accent-primary: #0F766E;
+  --accent-secondary: #14B8A6;
+  --accent-gradient: linear-gradient(135deg, #0F766E, #0D9488);
   
   /* Shadow Colors */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -29,8 +29,8 @@
   --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   
   /* Feature Colors */
-  --feature-bg: #EFF6FF;
-  --feature-icon-color: #6366F1;
+  --feature-bg: #F0FDFA;
+  --feature-icon-color: #0F766E;
   
   /* Error Colors */
   --error-bg: #FEF2F2;
@@ -40,13 +40,13 @@
   /* Input Colors */
   --input-bg: #FFFFFF;
   --input-border: #D1D5DB;
-  --input-focus: #6366F1;
-  --input-focus-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  --input-focus: #0F766E;
+  --input-focus-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 
   /* App header (floating bar) */
-  --header-bg: #EBF5FF;
-  --header-border: rgba(59, 130, 246, 0.2);
-  --header-shadow: 0 4px 20px rgba(37, 99, 235, 0.1);
+  --header-bg: #F0FDFA;
+  --header-border: rgba(15, 118, 110, 0.18);
+  --header-shadow: 0 4px 20px rgba(15, 118, 110, 0.08);
 }
 
 :root[data-theme="dark"] {
@@ -67,10 +67,10 @@
   --border-secondary: #4B5563;
   --border-tertiary: #6B7280;
   
-  /* Accent Colors */
-  --accent-primary: #818CF8;
-  --accent-secondary: #A78BFA;
-  --accent-gradient: linear-gradient(135deg, #818CF8, #A78BFA);
+  /* Accent Colors — teal / slate */
+  --accent-primary: #2DD4BF;
+  --accent-secondary: #5EEAD4;
+  --accent-gradient: linear-gradient(135deg, #14B8A6, #0F766E);
   
   /* Shadow Colors */
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -79,8 +79,8 @@
   --shadow-xl: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
   
   /* Feature Colors */
-  --feature-bg: #374151;
-  --feature-icon-color: #818CF8;
+  --feature-bg: #134E4A;
+  --feature-icon-color: #2DD4BF;
   
   /* Error Colors */
   --error-bg: #7F1D1D;
@@ -90,12 +90,12 @@
   /* Input Colors */
   --input-bg: #374151;
   --input-border: #4B5563;
-  --input-focus: #818CF8;
-  --input-focus-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
+  --input-focus: #2DD4BF;
+  --input-focus-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2);
 
   /* App header (floating bar) */
-  --header-bg: rgba(23, 37, 64, 0.97);
-  --header-border: rgba(96, 165, 250, 0.18);
+  --header-bg: rgba(15, 23, 42, 0.97);
+  --header-border: rgba(45, 212, 191, 0.16);
   --header-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
 }
 

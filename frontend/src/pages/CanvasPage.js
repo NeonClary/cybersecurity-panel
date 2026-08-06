@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { HelpCircle } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAppConfig } from '../contexts/AppConfigContext';
@@ -30,6 +30,11 @@ import {
 import CanvasWelcomeTour from '../components/canvas/CanvasWelcomeTour';
 import DeliverablesView, { TEMPLATES as DELIVERABLE_TEMPLATES } from '../components/canvas/CanvasDeliverables';
 import { MOD } from '../components/canvas/platform';
+import AboutYouModal from '../components/AboutYouModal';
+import AccountModal from '../components/AccountModal';
+import ClearDataModal from '../components/ClearDataModal';
+import SettingsModal from '../components/SettingsModal';
+import { fetchCanvas, saveWorkspace, debounce } from '../utils/canvasApi';
 import '../styles/CanvasPage.css';
 
 const LAYOUT_KEY = 'canvas-layout-v2';
@@ -822,6 +827,13 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [tourForceShow, setTourForceShow] = useState(0);
+  const [showAboutYou, setShowAboutYou] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [showClearData, setShowClearData] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState('account');
+  const hydratedRef = useRef(false);
+  const [serverHydrated, setServerHydrated] = useState(false);
 
   const [layout, setLayout] = useState(() => {
     try {
@@ -839,6 +851,85 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
   useEffect(() => { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); }, [layout]);
   useEffect(() => { localStorage.setItem(STATES_KEY, JSON.stringify(widgetStates)); }, [widgetStates]);
   useEffect(() => { localStorage.setItem(VIEW_KEY, view); }, [view]);
+
+  // Load workspace from server (server wins when it has data); keep localStorage as cache/fallback.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!authToken) {
+        hydratedRef.current = true;
+        setServerHydrated(true);
+        return;
+      }
+      const remote = await fetchCanvas(authToken);
+      if (cancelled) return;
+      const ws = remote?.workspace;
+      if (ws && (Array.isArray(ws.layout) || (ws.states && Object.keys(ws.states).length))) {
+        if (Array.isArray(ws.layout)) {
+          setLayout(ws.layout);
+          localStorage.setItem(LAYOUT_KEY, JSON.stringify(ws.layout));
+        }
+        if (ws.states && typeof ws.states === 'object') {
+          setWidgetStates(ws.states);
+          localStorage.setItem(STATES_KEY, JSON.stringify(ws.states));
+        }
+        if (ws.view && typeof ws.view === 'string') {
+          setView(ws.view);
+          localStorage.setItem(VIEW_KEY, ws.view);
+        }
+        if (ws.task_statuses && typeof ws.task_statuses === 'object') {
+          localStorage.setItem(TASK_STATUS_KEY, JSON.stringify(ws.task_statuses));
+        }
+      } else {
+        // First-time / empty server: push local cache up so other devices can load it later.
+        let taskStatuses = {};
+        try { taskStatuses = JSON.parse(localStorage.getItem(TASK_STATUS_KEY) || '{}'); } catch { /* ignore */ }
+        await saveWorkspace(authToken, {
+          layout,
+          states: widgetStates,
+          view,
+          task_statuses: taskStatuses,
+        });
+      }
+      // Seed deliverables localStorage from server if empty locally
+      if (remote?.deliverables?.projects && Object.keys(remote.deliverables.projects).length) {
+        try {
+          const local = JSON.parse(localStorage.getItem('canvas-deliverables-v2') || '{}');
+          if (!local.projects || !Object.keys(local.projects).length) {
+            localStorage.setItem('canvas-deliverables-v2', JSON.stringify(remote.deliverables));
+            window.dispatchEvent(new Event('storage'));
+          }
+        } catch { /* ignore */ }
+      }
+      hydratedRef.current = true;
+      setServerHydrated(true);
+    })();
+    return () => { cancelled = true; };
+    // Intentionally once per authToken mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authToken]);
+
+  // Debounced server persist for workspace
+  useEffect(() => {
+    if (!serverHydrated || !authToken || !hydratedRef.current) return undefined;
+    const persist = debounce(async () => {
+      let taskStatuses = {};
+      try { taskStatuses = JSON.parse(localStorage.getItem(TASK_STATUS_KEY) || '{}'); } catch { /* ignore */ }
+      const ok = await saveWorkspace(authToken, {
+        layout,
+        states: widgetStates,
+        view,
+        task_statuses: taskStatuses,
+      });
+      if (!ok) {
+        window.dispatchEvent(new CustomEvent('canvas-toast', {
+          detail: { msg: 'Workspace saved locally (server sync failed)', kind: 'danger' },
+        }));
+      }
+    }, 900);
+    persist();
+    return () => persist.cancel();
+  }, [layout, widgetStates, view, authToken, serverHydrated]);
 
   // Apply canvas theme attribute on body for scoped styling
   useEffect(() => {
@@ -1021,6 +1112,13 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
         deliverableProjects={deliverableProjects}
         insightSections={insightSections}
         onNavigateToJourney={onNavigateToJourney}
+        onOpenProfile={() => setShowAboutYou(true)}
+        onOpenAccount={() => setShowAccount(true)}
+        onOpenClearData={() => setShowClearData(true)}
+        onOpenModelStatus={() => {
+          setSettingsInitialTab('model-status');
+          setShowSettings(true);
+        }}
       />
       <div className={`canvas-main-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="canvas-app-shell">
@@ -1052,7 +1150,7 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
           <div className="canvas-content">
             {view === 'insights' && <InsightsView widgetStates={widgetStates} setWidgetStates={setWidgetStates} onNavigateToChat={onNavigateToChat}/>}
             {view === 'workspace' && <WorkspaceView openModal={openModal} layout={layout} setLayout={setLayout} widgetStates={widgetStates} setWidgetStates={setWidgetStates}/>}
-            {view === 'deliverables' && <DeliverablesView allStates={widgetStates}/>}
+            {view === 'deliverables' && <DeliverablesView allStates={widgetStates} authToken={authToken}/>}
           </div>
         </div>
       </div>
@@ -1060,6 +1158,41 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
       <ToastStack/>
       <CanvasWelcomeTour key={tourForceShow} forceShow={tourForceShow > 0}/>
       <ShortcutHint/>
+      {showAboutYou && (
+        <AboutYouModal
+          authToken={authToken}
+          onClose={() => setShowAboutYou(false)}
+        />
+      )}
+      {showAccount && (
+        <AccountModal
+          user={user}
+          authToken={authToken}
+          onClose={() => setShowAccount(false)}
+          onAccountUpdated={(u) => {
+            localStorage.setItem('user', JSON.stringify(u));
+          }}
+          onAccountDeleted={onSignOut}
+        />
+      )}
+      {showSettings && (
+        <SettingsModal
+          user={user}
+          authToken={authToken}
+          initialTab={settingsInitialTab}
+          onClose={() => setShowSettings(false)}
+          onSignOut={onSignOut}
+          onUserUpdate={(u) => {
+            localStorage.setItem('user', JSON.stringify(u));
+          }}
+        />
+      )}
+      {showClearData && (
+        <ClearDataModal
+          authToken={authToken}
+          onClose={() => setShowClearData(false)}
+        />
+      )}
     </div>
   );
 };

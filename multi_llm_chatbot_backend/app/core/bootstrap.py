@@ -94,15 +94,20 @@ def _build_neon_vllm(neon_persona: str | None) -> ImprovedVllmClient:
     )
 
 
-def _build_openai(reasoning_effort: str) -> OpenAIFallbackClient:
+def _build_openai(reasoning_effort: str) -> OpenAIFallbackClient | None:
+    api_key = _openai_api_key()
+    if not api_key:
+        return None
     return OpenAIFallbackClient(
-        api_key=_openai_api_key(),
+        api_key=api_key,
         model=settings.llm.openai.model,
         reasoning_effort=reasoning_effort,
     )
 
 
-def _wrap_resilient(primary: ImprovedVllmClient, fallback: OpenAIFallbackClient, label: str):
+def _wrap_resilient(primary: ImprovedVllmClient, fallback: OpenAIFallbackClient | None, label: str):
+    if fallback is None:
+        return primary
     return ResilientLLMClient(
         primary=primary,
         fallback=fallback,

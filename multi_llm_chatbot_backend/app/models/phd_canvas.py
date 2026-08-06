@@ -32,6 +32,11 @@ class PhdCanvas(BaseModel):
     
     # Canvas sections organized by theme
     sections: Dict[str, CanvasSection] = Field(default_factory=dict)
+
+    # Workspace layout + widget state (server-persisted; frontend may also cache locally)
+    workspace: Dict[str, Any] = Field(default_factory=dict)
+    # Documents / deliverables project store (same shape as canvas-deliverables-v2)
+    deliverables: Dict[str, Any] = Field(default_factory=dict)
     
     # Metadata
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -136,6 +141,8 @@ class CanvasResponse(BaseModel):
     id: str
     user_id: str
     sections: Dict[str, CanvasSection]
+    workspace: Dict[str, Any] = Field(default_factory=dict)
+    deliverables: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     last_updated: datetime
     last_chat_processed: Optional[datetime]
@@ -148,3 +155,15 @@ class UpdateCanvasRequest(BaseModel):
     force_full_update: bool = Field(default=False)
     include_chat_sessions: Optional[List[str]] = None  # Specific sessions to include
     exclude_sections: Optional[List[str]] = None  # Sections to skip updating
+
+class SaveWorkspaceRequest(BaseModel):
+    """Persist workspace layout and widget states for the logged-in user."""
+    layout: List[Any] = Field(default_factory=list)
+    states: Dict[str, Any] = Field(default_factory=dict)
+    view: Optional[str] = None
+    task_statuses: Optional[Dict[str, Any]] = None
+
+class SaveDeliverablesRequest(BaseModel):
+    """Persist the Documents / deliverables project store."""
+    activeProjectId: Optional[str] = None
+    projects: Dict[str, Any] = Field(default_factory=dict)

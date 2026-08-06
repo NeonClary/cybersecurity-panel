@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Circle, Map, RefreshCw } from 'lucide-react';
 import AppHeader from '../components/AppHeader';
 import Sidebar from '../components/Sidebar';
+import AboutYouModal from '../components/AboutYouModal';
+import AccountModal from '../components/AccountModal';
+import ClearDataModal from '../components/ClearDataModal';
+import SettingsModal from '../components/SettingsModal';
 import '../styles/JourneyPage.css';
 
 const api = (path, token, options = {}) =>
@@ -30,6 +34,11 @@ const JourneyPage = ({
   const [error, setError] = useState(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showAboutYou, setShowAboutYou] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [showClearData, setShowClearData] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState('account');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -100,6 +109,13 @@ const JourneyPage = ({
         onNavigateToJourney={onNavigateToJourney}
         onSelectSession={() => onNavigateToChat()}
         pageContext="journey"
+        onOpenProfile={() => setShowAboutYou(true)}
+        onOpenAccount={() => setShowAccount(true)}
+        onOpenClearData={() => setShowClearData(true)}
+        onOpenModelStatus={() => {
+          setSettingsInitialTab('model-status');
+          setShowSettings(true);
+        }}
       />
       <div className={`journey-main ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <AppHeader
@@ -201,6 +217,41 @@ const JourneyPage = ({
           )}
         </div>
       </div>
+      {showAboutYou && (
+        <AboutYouModal
+          authToken={authToken}
+          onClose={() => setShowAboutYou(false)}
+        />
+      )}
+      {showAccount && (
+        <AccountModal
+          user={user}
+          authToken={authToken}
+          onClose={() => setShowAccount(false)}
+          onAccountUpdated={(u) => {
+            localStorage.setItem('user', JSON.stringify(u));
+          }}
+          onAccountDeleted={onSignOut}
+        />
+      )}
+      {showSettings && (
+        <SettingsModal
+          user={user}
+          authToken={authToken}
+          initialTab={settingsInitialTab}
+          onClose={() => setShowSettings(false)}
+          onSignOut={onSignOut}
+          onUserUpdate={(u) => {
+            localStorage.setItem('user', JSON.stringify(u));
+          }}
+        />
+      )}
+      {showClearData && (
+        <ClearDataModal
+          authToken={authToken}
+          onClose={() => setShowClearData(false)}
+        />
+      )}
     </div>
   );
 };

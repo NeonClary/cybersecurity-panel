@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 from bson import ObjectId
 import asyncio
@@ -396,6 +396,22 @@ class CanvasManager:
         except Exception as e:
             logger.error(f"Error toggling auto-update for user {user_id}: {e}")
             return False
+
+    async def save_workspace(self, user_id: str, workspace: Dict[str, Any]) -> PhdCanvas:
+        """Persist workspace layout / widget states for a user."""
+        canvas = await self.get_or_create_canvas(user_id)
+        canvas.workspace = workspace or {}
+        canvas.last_updated = datetime.utcnow()
+        await self._save_canvas(canvas)
+        return canvas
+
+    async def save_deliverables(self, user_id: str, deliverables: Dict[str, Any]) -> PhdCanvas:
+        """Persist Documents / deliverables project store for a user."""
+        canvas = await self.get_or_create_canvas(user_id)
+        canvas.deliverables = deliverables or {}
+        canvas.last_updated = datetime.utcnow()
+        await self._save_canvas(canvas)
+        return canvas
 
 # Singleton instance
 _canvas_manager_instance = None

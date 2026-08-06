@@ -42,9 +42,9 @@
   --canvas-text-2: #D1D5DB;
   --canvas-text-3: #9CA3AF;
   --canvas-text-4: #6B7280;
-  --canvas-accent: #818CF8;
-  --canvas-accent-dim: #4F46E5;
-  --canvas-accent-glow: rgba(129, 140, 248, 0.20);
+  --canvas-accent: #2DD4BF;
+  --canvas-accent-dim: #0F766E;
+  --canvas-accent-glow: rgba(45, 212, 191, 0.20);
   --canvas-critic: #A78BFA;
   --canvas-critic-dim: #7C3AED;
   --canvas-critic-glow: rgba(167, 139, 250, 0.20);
@@ -77,9 +77,9 @@
   --canvas-text-2: #374151;    /* gray-700 */
   --canvas-text-3: #6B7280;    /* gray-500 */
   --canvas-text-4: #9CA3AF;    /* gray-400 */
-  --canvas-accent: #6366F1;    /* indigo-500 (matches accent-primary) */
-  --canvas-accent-dim: #C7D2FE;
-  --canvas-accent-glow: rgba(99, 102, 241, 0.15);
+  --canvas-accent: #0F766E;    /* teal-700 (Jerry) */
+  --canvas-accent-dim: #99F6E4;
+  --canvas-accent-glow: rgba(15, 118, 110, 0.15);
   --canvas-critic: #8B5CF6;    /* violet-500 (matches accent-secondary) */
   --canvas-critic-glow: rgba(139, 92, 246, 0.12);
   --canvas-shadow: 0 4px 14px rgba(20, 30, 50, 0.08);
@@ -1234,9 +1234,9 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .select {
   --canvas-text-2: #D1D5DB;
   --canvas-text-3: #9CA3AF;
   --canvas-text-4: #6B7280;
-  --canvas-accent: #818CF8;
-  --canvas-accent-dim: #4F46E5;
-  --canvas-accent-glow: rgba(129, 140, 248, 0.20);
+  --canvas-accent: #2DD4BF;
+  --canvas-accent-dim: #0F766E;
+  --canvas-accent-glow: rgba(45, 212, 191, 0.20);
   --canvas-critic: #A78BFA;
   --canvas-critic-glow: rgba(167, 139, 250, 0.20);
   --canvas-warn: #F59E0B;
@@ -1259,9 +1259,9 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop {
   --canvas-text-2: #374151;
   --canvas-text-3: #6B7280;
   --canvas-text-4: #9CA3AF;
-  --canvas-accent: #6366F1;
-  --canvas-accent-dim: #C7D2FE;
-  --canvas-accent-glow: rgba(99, 102, 241, 0.15);
+  --canvas-accent: #0F766E;
+  --canvas-accent-dim: #99F6E4;
+  --canvas-accent-glow: rgba(15, 118, 110, 0.15);
   --canvas-critic: #8B5CF6;
   --canvas-critic-glow: rgba(139, 92, 246, 0.12);
   --canvas-shadow-lg: 0 18px 48px rgba(20, 30, 50, 0.16);
@@ -2165,7 +2165,7 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
 .canvas-sidebar-menu .csm-project-head:hover { background: var(--bg-secondary, #f3f4f6); }
 .dark .canvas-sidebar-menu .csm-project-head { color: var(--text-primary-dark, #f9fafb); }
 .dark .canvas-sidebar-menu .csm-project-head:hover { background: var(--bg-secondary-dark, #374151); }
-.canvas-sidebar-menu .csm-project.active .csm-project-name { color: var(--accent-primary, #6366F1); font-weight: 600; }
+.canvas-sidebar-menu .csm-project.active .csm-project-name { color: var(--accent-primary, #0F766E); font-weight: 600; }
 .canvas-sidebar-menu .csm-project-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-sidebar-menu .csm-versions {
   display: inline-flex;

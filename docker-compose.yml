@@ -16,11 +16,10 @@
 # ---------------------------------------------------------------------------
 
 x-shared-env: &shared-env
-  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-CHANGEME-by-overriding-in-dot-env-file}
-  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-  OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-  VLLM_API_KEY: ${VLLM_API_KEY:-}
-  VLLM_API_USERNAME: ${VLLM_API_USERNAME:-}
+  # Non-secret defaults only. API keys / JWT come from env_file
+  # (C:/Users/dream/.secrets/shared.env) — do NOT set OPENAI_API_KEY /
+  # VLLM_API_KEY here with ${VAR:-} or an empty host env will blank the
+  # values that env_file already injected.
   GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
   CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
 
@@ -40,6 +39,7 @@ services:
         required: false
     environment:
       <<: *shared-env
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-CHANGEME-by-overriding-in-dot-env-file}
       CONFIG_PATH: ${CONFIG_PATH:-/home/user/app/cybersecurity_config.yaml}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       DATA_DIR: /data
@@ -66,11 +66,17 @@ services:
       CONFIG_PATH: /app/cybersecurity_config.yaml
       DATA_DIR: /data
       PYTHONPATH: /app/multi_llm_chatbot_backend
+      # Keep a host-readable copy of shared.env for _load_shared_env_var fallback
+      SHARED_ENV: /run/secrets/shared.env
     volumes:
       - ./multi_llm_chatbot_backend:/app/multi_llm_chatbot_backend
       - ./cybersecurity_config.yaml:/app/cybersecurity_config.yaml:ro
       - ./personas:/app/personas:ro
       - cybersecurity_data:/data
+      - type: bind
+        source: ${SHARED_ENV_FILE:-C:/Users/dream/.secrets/shared.env}
+        target: /run/secrets/shared.env
+        read_only: true
     command:
       [
         "uvicorn",
