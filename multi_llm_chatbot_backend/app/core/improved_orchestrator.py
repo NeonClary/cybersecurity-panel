@@ -659,18 +659,38 @@ Use this context to inform your response, and cite specific documents when refer
                 if summary:
                     session.conversation_summary = summary
                     session.conversation_summary_message_count = msg_count
-                    system_message += f"\n\nSummary of earlier conversation:\n{summary}"
-                    enhanced_context[0]["content"] = system_message
-                else:
-                    logger.warning(
-                        "Summary generation failed; including full history (%d tokens)",
-                        history_tokens,
+
+            if summary:
+                system_message += f"\n\nSummary of earlier conversation:\n{summary}"
+                enhanced_context[0]["content"] = system_message
+                # Keep the most recent turns verbatim within a slice of the
+                # budget so the persona always sees the actual latest message,
+                # not just the summary.
+                recent_budget = max(512, threshold // 4)
+                tail = []
+                used = 0
+                for message in reversed(conversation_messages):
+                    tokens = self.context_manager._estimate_tokens_for_messages(
+                        [message]
                     )
-                    for message in conversation_messages:
-                        enhanced_context.append({
-                            "role": message["role"],
-                            "content": message["content"],
-                        })
+                    if tail and used + tokens > recent_budget:
+                        break
+                    tail.insert(0, {
+                        "role": message["role"],
+                        "content": message["content"],
+                    })
+                    used += tokens
+                enhanced_context.extend(tail)
+            else:
+                logger.warning(
+                    "Summary generation failed; including full history (%d tokens)",
+                    history_tokens,
+                )
+                for message in conversation_messages:
+                    enhanced_context.append({
+                        "role": message["role"],
+                        "content": message["content"],
+                    })
 
         return enhanced_context
     

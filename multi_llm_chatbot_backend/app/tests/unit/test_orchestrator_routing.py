@@ -7,6 +7,7 @@ These cover the deterministic post-processing applied to the LLM ranking:
 - the keyword urgency fallback fires on incident language.
 """
 
+import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -112,6 +113,45 @@ class TestHeuristicUrgency(unittest.TestCase):
             "",
         ):
             self.assertEqual(self.orch._heuristic_urgency(text), "advisory", text)
+
+
+class TestSummarizedContextIncludesLatestMessage(unittest.TestCase):
+    """Regression: over the history threshold, the persona context must
+    contain both the conversation summary and the latest raw messages
+    (previously a cached summary produced a context with neither)."""
+
+    def test_cached_summary_and_recent_tail_included(self):
+        orch = _make_orchestrator()
+        orch.context_manager._estimate_tokens_for_messages = (
+            lambda msgs: sum(len(m.get("content", "")) // 4 + 1 for m in msgs)
+        )
+
+        long_text = "x" * 8000  # ~2000 tokens per message -> over threshold
+        session = MagicMock()
+        session.messages = [
+            {"role": "user", "content": long_text},
+            {"role": "jerry_huaute", "content": long_text},
+            {"role": "user", "content": long_text},
+            {"role": "user", "content": "What should I do next about MFA?"},
+        ]
+        session.conversation_summary = "CACHED-SUMMARY-MARKER"
+        session.conversation_summary_message_count = 4
+        session.uploaded_files = []
+        session.user_profile_context = ""
+        session.urgency_context = ""
+
+        persona = MagicMock()
+        persona.system_prompt = "You are Jerry."
+
+        context = asyncio.run(
+            orch._build_enhanced_context_for_persona(session, persona, "", "")
+        )
+
+        self.assertIn("CACHED-SUMMARY-MARKER", context[0]["content"])
+        self.assertGreater(len(context), 1, "recent messages must be included")
+        self.assertEqual(
+            context[-1]["content"], "What should I do next about MFA?"
+        )
 
 
 if __name__ == "__main__":
