@@ -17,12 +17,23 @@ import {
   Activity,
   Map,
   Eraser,
+  Sun,
+  Moon,
+  Monitor,
+  Check,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
+import { useTheme } from '../contexts/ThemeContext';
 import UserAvatarPicker from './UserAvatarPicker';
 import CopyrightNotice from './CopyrightNotice';
 import '../styles/Sidebar.css';
+
+const APPEARANCE_OPTIONS = [
+  { value: 'system', label: 'System', Icon: Monitor },
+  { value: 'light', label: 'Light', Icon: Sun },
+  { value: 'dark', label: 'Dark', Icon: Moon },
+];
 
 const Sidebar = ({
   user,
@@ -52,6 +63,7 @@ const Sidebar = ({
   onRemoveSampleData,
 }) => {
   const { config } = useAppConfig();
+  const { preference, setThemePreference } = useTheme();
   const isOnCanvas = pageContext === 'canvas';
   const isOnJourney = pageContext === 'journey';
   const isGuest = Boolean(user?.is_guest);
@@ -73,6 +85,7 @@ const Sidebar = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showAppearanceMenu, setShowAppearanceMenu] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCreatingNewChat, setIsCreatingNewChat] = useState(false);
 
@@ -193,6 +206,7 @@ const Sidebar = ({
     // Close user menu when collapsing
     if (!isCollapsed) {
       setShowUserMenu(false);
+      setShowAppearanceMenu(false);
     }
   };
 
@@ -257,44 +271,78 @@ const Sidebar = ({
                   <div className="user-menu-container">
                     <button 
                       className="user-menu-button"
-                      onClick={() => setShowUserMenu(!showUserMenu)}
+                      onClick={() => {
+                        setShowUserMenu(!showUserMenu);
+                        setShowAppearanceMenu(false);
+                      }}
                     >
                       <MoreVertical size={16} />
                     </button>
                     
                     {showUserMenu && (
                       <div className="user-menu">
-                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAvatarPicker(true); }}>
+                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAppearanceMenu(false); setShowAvatarPicker(true); }}>
                           <User size={16} />
                           <span>Change Avatar</span>
                         </button>
-                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); if (onOpenProfile) onOpenProfile(); }}>
+                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAppearanceMenu(false); if (onOpenProfile) onOpenProfile(); }}>
                           <UserCircle size={16} />
                           <span>About you</span>
                         </button>
-                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); if (onOpenAccount) onOpenAccount(); }}>
+                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAppearanceMenu(false); if (onOpenAccount) onOpenAccount(); }}>
                           <KeyRound size={16} />
                           <span>Account</span>
                         </button>
-                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); if (onOpenClearData) onOpenClearData(); }}>
+                        <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAppearanceMenu(false); if (onOpenClearData) onOpenClearData(); }}>
                           <DatabaseZap size={16} />
                           <span>Clear User Data</span>
                         </button>
                         {isGuest && onRemoveSampleData && (
                           <button
                             className="user-menu-item"
-                            onClick={() => { setShowUserMenu(false); onRemoveSampleData(); }}
+                            onClick={() => { setShowUserMenu(false); setShowAppearanceMenu(false); onRemoveSampleData(); }}
                           >
                             <Eraser size={16} />
                             <span>Remove all sample data</span>
                           </button>
                         )}
                         {onOpenModelStatus && (
-                          <button className="user-menu-item" onClick={() => { setShowUserMenu(false); onOpenModelStatus(); }}>
+                          <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAppearanceMenu(false); onOpenModelStatus(); }}>
                             <Activity size={16} />
                             <span>Model Status</span>
                           </button>
                         )}
+                        <div className="user-menu-appearance">
+                          <button
+                            className="user-menu-item"
+                            onClick={() => setShowAppearanceMenu((open) => !open)}
+                            aria-expanded={showAppearanceMenu}
+                          >
+                            {preference === 'dark' ? <Moon size={16} /> : preference === 'light' ? <Sun size={16} /> : <Monitor size={16} />}
+                            <span>Appearance</span>
+                            <ChevronRight size={14} className={`appearance-chevron ${showAppearanceMenu ? 'open' : ''}`} />
+                          </button>
+                          {showAppearanceMenu && (
+                            <div className="appearance-options" role="group" aria-label="Appearance">
+                              {APPEARANCE_OPTIONS.map(({ value, label, Icon }) => (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  className={`user-menu-item appearance-option ${preference === value ? 'active' : ''}`}
+                                  onClick={() => {
+                                    setThemePreference(value);
+                                    setShowAppearanceMenu(false);
+                                    setShowUserMenu(false);
+                                  }}
+                                >
+                                  <Icon size={16} />
+                                  <span>{label}</span>
+                                  {preference === value && <Check size={14} className="appearance-check" />}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         <button className="user-menu-item sign-out" onClick={onSignOut}>
                           <LogOut size={16} />
                           <span>Sign Out</span>

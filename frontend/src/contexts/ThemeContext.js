@@ -1,6 +1,23 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const ThemeContext = createContext();
+const THEME_KEY = 'theme';
+
+const getSystemTheme = () =>
+  (typeof window !== 'undefined' &&
+    window.matchMedia('(prefers-color-scheme: dark)').matches)
+    ? 'dark'
+    : 'light';
+
+const readPreference = () => {
+  try {
+    const saved = localStorage.getItem(THEME_KEY);
+    if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+  } catch {
+    /* ignore */
+  }
+  return 'system';
+};
 
 export const useTheme = () => {
   const context = useContext(ThemeContext);
@@ -11,27 +28,51 @@ export const useTheme = () => {
 };
 
 export const ThemeProvider = ({ children }) => {
-  // Check for saved theme preference or default to 'light'
-  const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem('theme');
-    return savedTheme || 'light';
-  });
+  const [preference, setPreferenceState] = useState(readPreference);
+  const [systemTheme, setSystemTheme] = useState(getSystemTheme);
 
-  // Apply theme to document root and save to localStorage
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (e) => setSystemTheme(e.matches ? 'dark' : 'light');
+    mq.addEventListener('change', onChange);
+    setSystemTheme(mq.matches ? 'dark' : 'light');
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const theme = preference === 'system' ? systemTheme : preference;
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    localStorage.setItem('theme', theme);
   }, [theme]);
 
-  const toggleTheme = () => {
-    setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
-  };
+  useEffect(() => {
+    try {
+      localStorage.setItem(THEME_KEY, preference);
+    } catch {
+      /* ignore */
+    }
+  }, [preference]);
+
+  const setThemePreference = useCallback((next) => {
+    if (next === 'light' || next === 'dark' || next === 'system') {
+      setPreferenceState(next);
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setPreferenceState((prev) => {
+      const resolved = prev === 'system' ? getSystemTheme() : prev;
+      return resolved === 'light' ? 'dark' : 'light';
+    });
+  }, []);
 
   const value = {
     theme,
+    preference,
+    setThemePreference,
     toggleTheme,
     isLight: theme === 'light',
-    isDark: theme === 'dark'
+    isDark: theme === 'dark',
   };
 
   return (

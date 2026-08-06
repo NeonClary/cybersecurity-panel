@@ -1,6 +1,5 @@
 import React from 'react';
 import { Home, Menu, Users } from 'lucide-react';
-import ThemeToggle from './ThemeToggle';
 import { useAppConfig } from '../contexts/AppConfigContext';
 
 /**
@@ -12,7 +11,7 @@ import { useAppConfig } from '../contexts/AppConfigContext';
  *     (onNavigateToCanvas may receive 'workspace' | 'deliverables' to deep-link a view;
  *      'journey' is handled via onNavigateToJourney when provided)
  *   onMobileMenu?: () => void  — when present, shows the mobile menu button
- *   children?: ReactNode        — extra controls slotted between the tabs and the theme toggle
+ *   children?: ReactNode        — extra controls slotted in header-right
  */
 const AppHeader = ({
   currentPage = 'home',
@@ -103,7 +102,6 @@ const AppHeader = ({
 
       <div className="header-right">
         {children}
-        <ThemeToggle />
       </div>
     </header>
   );

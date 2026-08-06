@@ -223,7 +223,7 @@
   border-radius: 8px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
   padding: 8px;
-  min-width: 150px;
+  min-width: 180px;
   z-index: 200;
 }
 
@@ -246,6 +246,11 @@
   font-size: 14px;
   color: var(--text-primary, #111827);
   transition: background-color 0.2s ease;
+  text-align: left;
+}
+
+.user-menu-item > span {
+  flex: 1;
 }
 
 .dark .user-menu-item {
@@ -270,6 +275,43 @@
 
 .dark .user-menu-item.sign-out:hover {
   background: #7f1d1d;
+}
+
+.user-menu-appearance {
+  border-top: 1px solid var(--border-light, #e5e7eb);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.dark .user-menu-appearance {
+  border-top-color: var(--border-dark, #374151);
+}
+
+.appearance-chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary, #6b7280);
+  transition: transform 0.15s ease;
+}
+
+.appearance-chevron.open {
+  transform: rotate(90deg);
+}
+
+.appearance-options {
+  padding: 2px 0 4px 8px;
+}
+
+.appearance-option.active {
+  background: var(--bg-secondary, #f3f4f6);
+}
+
+.dark .appearance-option.active {
+  background: var(--bg-secondary-dark, #374151);
+}
+
+.appearance-check {
+  flex-shrink: 0;
+  color: var(--accent-primary, #3b82f6);
 }
 
 /* New Chat Button */
