@@ -3,7 +3,7 @@ import { Eye, EyeOff, Mail, Lock, User, ArrowRight, Shield, Phone, Globe } from 
 import { useAppConfig } from '../contexts/AppConfigContext';
 import '../styles/Signup.css';
 
-const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
+const Signup = ({ onNavigateToLogin, onNavigateToHome, onExploreAsGuest }) => {
   const { config } = useAppConfig();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -427,6 +427,14 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome }) => {
               Sign in here
             </button>
           </p>
+          {onExploreAsGuest && (
+            <p style={{ marginTop: 10 }}>
+              Or{' '}
+              <button type="button" className="link-btn" onClick={onExploreAsGuest}>
+                Explore as guest
+              </button>
+            </p>
+          )}
         </div>
       </div>
     </div>

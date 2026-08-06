@@ -116,6 +116,17 @@ const JourneyPage = ({
           setSettingsInitialTab('model-status');
           setShowSettings(true);
         }}
+        onRemoveSampleData={user?.is_guest ? async () => {
+          if (!window.confirm('Remove all sample demo data? You stay in guest mode with a clean slate.')) return;
+          try {
+            const { removeGuestSampleData } = await import('../utils/guestSample');
+            await removeGuestSampleData(authToken);
+            await load();
+            window.alert('Sample data removed.');
+          } catch (e) {
+            window.alert(e.message || 'Failed to remove sample data');
+          }
+        } : undefined}
       />
       <div className={`journey-main ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <AppHeader

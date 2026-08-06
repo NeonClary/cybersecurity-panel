@@ -4,7 +4,7 @@ import { useAppConfig } from '../contexts/AppConfigContext';
 import CopyrightNotice from './CopyrightNotice';
 import '../styles/Login.css';
 
-const Login = ({ onNavigateToSignup, onNavigateToHome }) => {
+const Login = ({ onNavigateToSignup, onNavigateToHome, onExploreAsGuest }) => {
   const { config } = useAppConfig();
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
@@ -249,6 +249,15 @@ const Login = ({ onNavigateToSignup, onNavigateToHome }) => {
               Sign up here
             </button>
           </p>
+          {onExploreAsGuest && (
+            <p style={{ marginTop: 10 }}>
+              Or{' '}
+              <button type="button" className="link-btn" onClick={onExploreAsGuest}>
+                Explore as guest
+              </button>
+              {' '}— no signup, sample demo data included
+            </p>
+          )}
           <div className="login-powered-by">
             <a href="https://neon.ai" target="_blank" rel="noopener noreferrer" className="footer-neon-link">
               <img src="/neon-logo.png" alt="" className="footer-neon-logo" />

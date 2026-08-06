@@ -16,6 +16,7 @@ import {
   Clock,
   Activity,
   Map,
+  Eraser,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
@@ -48,10 +49,12 @@ const Sidebar = ({
   onOpenClearData,
   onOpenModelStatus,
   onNavigateToJourney,
+  onRemoveSampleData,
 }) => {
   const { config } = useAppConfig();
   const isOnCanvas = pageContext === 'canvas';
   const isOnJourney = pageContext === 'journey';
+  const isGuest = Boolean(user?.is_guest);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const avatarOptions = config?.app?.user_avatars || [];
   const currentAvatar = avatarOptions.find(a => a.id === userAvatarId);
@@ -231,8 +234,13 @@ const Sidebar = ({
                     <AvatarIcon size={20} />
                   </div>
                   <div className="user-details">
-                    <span className="user-name">{user.firstName} {user.lastName}</span>
-                    <span className="user-email">{user.email}</span>
+                    <span className="user-name">
+                      {user.firstName} {user.lastName}
+                      {isGuest ? ' · Guest' : ''}
+                    </span>
+                    <span className="user-email">
+                      {isGuest ? 'Demo session — sample data loaded' : user.email}
+                    </span>
                   </div>
                 </div>
                 
@@ -272,6 +280,15 @@ const Sidebar = ({
                           <DatabaseZap size={16} />
                           <span>Clear User Data</span>
                         </button>
+                        {isGuest && onRemoveSampleData && (
+                          <button
+                            className="user-menu-item"
+                            onClick={() => { setShowUserMenu(false); onRemoveSampleData(); }}
+                          >
+                            <Eraser size={16} />
+                            <span>Remove all sample data</span>
+                          </button>
+                        )}
                         {onOpenModelStatus && (
                           <button className="user-menu-item" onClick={() => { setShowUserMenu(false); onOpenModelStatus(); }}>
                             <Activity size={16} />

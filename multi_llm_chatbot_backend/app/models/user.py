@@ -51,6 +51,9 @@ class User(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     last_login: Optional[datetime] = None
     is_active: bool = True
+    is_guest: bool = False
+    guest_persona: Optional[str] = None  # personal | business | other
+
 
 class UserUpdate(BaseModel):
     avatarId: Optional[str] = None
@@ -71,6 +74,8 @@ class UserResponse(BaseModel):
     avatarId: Optional[str] = None
     created_at: datetime
     last_login: Optional[datetime] = None
+    is_guest: bool = False
+    guest_persona: Optional[str] = None
 
 class ChatSession(BaseModel):
     model_config = ConfigDict(

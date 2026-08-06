@@ -933,6 +933,20 @@ const handleNewChat = async (sessionId = null) => {
           setShowSettings(true);
         }}
         onNavigateToJourney={onNavigateToJourney}
+        onRemoveSampleData={user?.is_guest ? async () => {
+          if (!window.confirm('Remove all sample demo data? You stay in guest mode with a clean slate.')) return;
+          try {
+            const { removeGuestSampleData } = await import('../utils/guestSample');
+            await removeGuestSampleData(authToken);
+            setMessages([]);
+            setCurrentSessionId(null);
+            setCurrentSessionTitle('');
+            setSidebarRefreshTrigger((n) => (n || 0) + 1);
+            window.alert('Sample data removed.');
+          } catch (e) {
+            window.alert(e.message || 'Failed to remove sample data');
+          }
+        } : undefined}
       />
       
       <div className={`main-chat-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>

@@ -1119,6 +1119,18 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
           setSettingsInitialTab('model-status');
           setShowSettings(true);
         }}
+        onRemoveSampleData={user?.is_guest ? async () => {
+          if (!window.confirm('Remove all sample demo data? You stay in guest mode with a clean slate.')) return;
+          try {
+            const { removeGuestSampleData } = await import('../utils/guestSample');
+            await removeGuestSampleData(authToken);
+            setLayout([]);
+            setWidgetStates({});
+            window.location.reload();
+          } catch (e) {
+            window.alert(e.message || 'Failed to remove sample data');
+          }
+        } : undefined}
       />
       <div className={`canvas-main-area ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
         <div className="canvas-app-shell">

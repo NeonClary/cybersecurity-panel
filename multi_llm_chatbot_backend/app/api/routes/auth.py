@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from datetime import datetime, timedelta
 from app.models.user import UserCreate, UserLogin, User, Token, UserResponse, UserUpdate
-from pydantic import BaseModel, model_validator
-from typing import Optional
+from pydantic import BaseModel, Field, model_validator
+from typing import Optional, List, Literal
+from uuid import uuid4
 from app.core.auth import (
     get_password_hash, 
     verify_password,
@@ -14,7 +15,9 @@ from app.core.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from app.core.database import get_database
+from app.core.guest_demo import resolve_persona, seed_guest_demo, clear_guest_sample_data
 import logging
+import secrets
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +53,18 @@ class UpdateProfileRequest(BaseModel):
 
 
 class DeleteAccountRequest(BaseModel):
-    password: str
+    password: str = ""
+
+
+class GuestExploreRequest(BaseModel):
+    """Intake for Explore as guest — two preset paths or free text."""
+    choice: Literal["personal", "business", "other"] = "personal"
+    free_text: Optional[str] = Field(default=None, max_length=800)
+
+
+class ClearSampleResponse(BaseModel):
+    message: str
+    cleared: List[str]
 
 
 router = APIRouter()
@@ -298,11 +312,13 @@ async def delete_account(
     @return: MessageResponse with a confirmation message
     """
     try:
-        if not verify_password(body.password, current_user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Incorrect password",
-            )
+        is_guest = bool(getattr(current_user, "is_guest", False))
+        if not is_guest:
+            if not body.password or not verify_password(body.password, current_user.hashed_password):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Incorrect password",
+                )
         db = get_database()
         uid = current_user.id
         await db.chat_sessions.delete_many({"user_id": uid})
@@ -323,4 +339,84 @@ async def delete_account(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Could not delete account"
+        )
+
+
+@router.post("/guest", response_model=Token)
+async def explore_as_guest(body: GuestExploreRequest):
+    """Create a temporary guest user, seed demo data from intake, return JWT."""
+    try:
+        if body.choice == "other" and not (body.free_text or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Please describe what you need help with",
+            )
+
+        persona = resolve_persona(body.choice, body.free_text)
+        db = get_database()
+        guest_id = uuid4().hex[:12]
+        email = f"guest.{guest_id}@guest.neonai.dev"
+        first = "Guest"
+        last = {
+            "personal": "Explorer",
+            "business": "Advisor Demo",
+            "other": "Explorer",
+        }.get(persona, "Explorer")
+
+        user = User(
+            firstName=first,
+            lastName=last,
+            email=email,
+            hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+            academicStage="Beginner" if persona == "personal" else "Intermediate",
+            researchArea="Guest demo",
+            created_at=datetime.utcnow(),
+            is_active=True,
+            is_guest=True,
+            guest_persona=persona,
+        )
+        result = await db.users.insert_one(user.dict(by_alias=True))
+        user.id = result.inserted_id
+
+        await seed_guest_demo(
+            user.id,
+            persona,
+            free_text=(body.free_text or "").strip() or None,
+        )
+
+        access_token = create_access_token(
+            data={"sub": str(user.id)},
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        )
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            user=create_user_response(user),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating guest session: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not start guest session",
+        )
+
+
+@router.post("/guest/clear-sample", response_model=ClearSampleResponse)
+async def clear_guest_sample(
+    current_user: User = Depends(get_current_active_user),
+):
+    """Remove all seeded demo data for the current guest (or any user requesting reset)."""
+    try:
+        cleared = await clear_guest_sample_data(current_user.id)
+        return ClearSampleResponse(
+            message="Sample data removed. You are still in guest mode with a clean slate.",
+            cleared=cleared,
+        )
+    except Exception as e:
+        logger.error(f"Error clearing guest sample data: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not clear sample data",
         )

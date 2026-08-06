@@ -114,5 +114,7 @@ def create_user_response(user: User) -> UserResponse:
         researchArea=user.researchArea,
         avatarId=user.avatarId,
         created_at=user.created_at,
-        last_login=user.last_login
+        last_login=user.last_login,
+        is_guest=bool(getattr(user, "is_guest", False)),
+        guest_persona=getattr(user, "guest_persona", None),
     )

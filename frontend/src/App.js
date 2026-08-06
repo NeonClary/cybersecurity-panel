@@ -15,11 +15,10 @@ function App() {
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(null);
 
-  // Check for existing authentication on app start
   useEffect(() => {
     const token = localStorage.getItem('authToken');
     const userData = localStorage.getItem('user');
-    
+
     if (token && userData) {
       try {
         const parsedUser = JSON.parse(userData);
@@ -28,7 +27,6 @@ function App() {
         setIsAuthenticated(true);
         setCurrentView('chat');
       } catch (error) {
-        // Clear invalid data
         localStorage.removeItem('authToken');
         localStorage.removeItem('user');
       }
@@ -58,8 +56,6 @@ function App() {
     setCurrentView('chat');
   };
 
-  
-
   const navigateToHome = () => {
     setCurrentView('home');
   };
@@ -74,6 +70,13 @@ function App() {
   const handleSignOut = () => {
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
+    try {
+      localStorage.removeItem('canvas-layout-v2');
+      localStorage.removeItem('canvas-states-v2');
+      localStorage.removeItem('canvas-deliverables-v2');
+      localStorage.removeItem('canvas-view-v2');
+      localStorage.removeItem('canvas-task-status-v1');
+    } catch { /* ignore */ }
     setUser(null);
     setAuthToken(null);
     setIsAuthenticated(false);
@@ -90,6 +93,7 @@ function App() {
               onNavigateToChat={isAuthenticated ? navigateToChat : navigateToAuth}
               onNavigateToCanvas={isAuthenticated ? navigateToCanvas : navigateToAuth}
               onNavigateToJourney={isAuthenticated ? navigateToJourney : navigateToAuth}
+              onExploreAsGuest={handleAuthSuccess}
               isAuthenticated={isAuthenticated}
             />
           )}
@@ -105,6 +109,7 @@ function App() {
               onNavigateToJourney={navigateToJourney}
               onNavigateToCanvas={navigateToCanvas}
               onSignOut={handleSignOut}
+              onUserUpdate={setUser}
             />
           )}
           {currentView === 'journey' && isAuthenticated && (
@@ -116,6 +121,7 @@ function App() {
               onNavigateToCanvas={navigateToCanvas}
               onNavigateToJourney={navigateToJourney}
               onSignOut={handleSignOut}
+              onUserUpdate={setUser}
             />
           )}
           {currentView === 'chat' && isAuthenticated && (
@@ -126,9 +132,9 @@ function App() {
               onNavigateToCanvas={navigateToCanvas}
               onNavigateToJourney={navigateToJourney}
               onSignOut={handleSignOut}
+              onUserUpdate={setUser}
             />
           )}
-          {/* Global help center — listens for the 'open-user-guide' event */}
           <UserGuide />
         </div>
       </ThemeProvider>

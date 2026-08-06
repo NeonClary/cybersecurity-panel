@@ -1,12 +1,20 @@
-import React from 'react';
-import { MessageCircle, ArrowRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { MessageCircle, ArrowRight, Sparkles } from 'lucide-react';
 import AdvisorCard from '../components/AdvisorCard';
 import AppHeader from '../components/AppHeader';
 import CopyrightNotice from '../components/CopyrightNotice';
+import GuestIntakeModal from '../components/GuestIntakeModal';
 import { useAppConfig } from '../contexts/AppConfigContext';
 
-const HomePage = ({ onNavigateToChat, isAuthenticated, onNavigateToHome, onNavigateToCanvas }) => {
+const HomePage = ({
+  onNavigateToChat,
+  isAuthenticated,
+  onNavigateToHome,
+  onNavigateToCanvas,
+  onExploreAsGuest,
+}) => {
   const { config, advisors, resolveIcon } = useAppConfig();
+  const [showGuestIntake, setShowGuestIntake] = useState(false);
 
   return (
     <div className="homepage">
@@ -27,14 +35,32 @@ const HomePage = ({ onNavigateToChat, isAuthenticated, onNavigateToHome, onNavig
           <p className="hero-subtitle">
             {config.homepage.description}
           </p>
-          <button
-            onClick={onNavigateToChat}
-            className="cta-button"
-          >
-            <MessageCircle className="cta-icon" />
-            <span>{isAuthenticated ? 'Continue Conversation' : 'Start Conversation'}</span>
-            <ArrowRight className="cta-arrow" />
-          </button>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', alignItems: 'center' }}>
+            <button
+              onClick={onNavigateToChat}
+              className="cta-button"
+            >
+              <MessageCircle className="cta-icon" />
+              <span>{isAuthenticated ? 'Continue Conversation' : 'Sign in / Start'}</span>
+              <ArrowRight className="cta-arrow" />
+            </button>
+            {!isAuthenticated && (
+              <button
+                type="button"
+                className="cta-button"
+                onClick={() => setShowGuestIntake(true)}
+                style={{
+                  background: 'transparent',
+                  color: 'var(--accent-primary, #0F766E)',
+                  border: '2px solid var(--accent-primary, #0F766E)',
+                  boxShadow: 'none',
+                }}
+              >
+                <Sparkles className="cta-icon" />
+                <span>Explore as guest</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Advisors Grid */}
@@ -71,6 +97,15 @@ const HomePage = ({ onNavigateToChat, isAuthenticated, onNavigateToHome, onNavig
           <CopyrightNotice />
         </div>
       </footer>
+      {showGuestIntake && (
+        <GuestIntakeModal
+          onClose={() => setShowGuestIntake(false)}
+          onSuccess={(user, token) => {
+            setShowGuestIntake(false);
+            onExploreAsGuest?.(user, token);
+          }}
+        />
+      )}
     </div>
   );
 };
