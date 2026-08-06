@@ -592,9 +592,11 @@ Use this context to inform your response, and cite specific documents when refer
             uploaded_docs = session.uploaded_files if hasattr(session, 'uploaded_files') else []
             doc_list = ", ".join(uploaded_docs) if uploaded_docs else "uploaded documents"
             
-            system_message = f"""{persona.system_prompt}
-
-    CURRENT SESSION CONTEXT:
+            # NOTE: persona.system_prompt is intentionally NOT included here —
+            # Persona.respond() already sends it as the LLM system prompt.
+            # Including it again doubled the prompt and wasted context budget
+            # on small models.
+            system_message = f"""CURRENT SESSION CONTEXT:
     The user has uploaded the following documents: {doc_list}
 
     DOCUMENT CONTENT:
@@ -606,9 +608,7 @@ Use this context to inform your response, and cite specific documents when refer
     """
         else:
             # NO DOCUMENTS - Explicitly tell persona not to reference documents
-            system_message = f"""{persona.system_prompt}
-
-    IMPORTANT: The user has NOT uploaded any documents yet. Do not reference specific documents, files, or assume you have access to their materials.
+            system_message = """IMPORTANT: The user has NOT uploaded any documents yet. Do not reference specific documents, files, or assume you have access to their materials.
 
     If they mention "my document," "my policy," "my architecture," etc., you should:
     1. Acknowledge that you don't have access to those files yet
