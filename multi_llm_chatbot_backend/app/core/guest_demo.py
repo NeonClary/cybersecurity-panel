@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
+import re
 
 from bson import ObjectId
 
@@ -31,6 +32,36 @@ def resolve_persona(choice: str, free_text: Optional[str] = None) -> Persona:
     if any(k in text for k in biz_keywords):
         return "business"
     return "other" if c in ("other", "custom", "something_else", "free") or free_text else "personal"
+
+
+_STOPWORDS = frozenset({
+    "a", "an", "the", "and", "or", "for", "to", "of", "my", "our", "i", "im", "i'm",
+    "we", "with", "on", "in", "at", "about", "help", "need", "want", "looking",
+    "something", "else", "please", "just", "this", "that", "from", "into", "am",
+    "is", "are", "be", "as", "it", "me", "us", "you", "your", "how", "what", "when",
+})
+
+
+def derive_guest_label(persona: Persona, free_text: Optional[str] = None) -> str:
+    """One-word sidebar label after 'Guest Explorer · '."""
+    if persona == "personal":
+        return "Personal"
+    if persona == "business":
+        return "Business"
+    text = (free_text or "").strip()
+    if not text:
+        return "Custom"
+    # Prefer a meaningful token: skip stopwords, keep alnum words 3+ chars
+    tokens = re.findall(r"[A-Za-z][A-Za-z0-9+\-]{2,}", text)
+    for tok in tokens:
+        if tok.lower() not in _STOPWORDS:
+            label = tok[:16]
+            return label[:1].upper() + label[1:].lower()
+    # Fallback: first non-trivial chunk
+    compact = re.sub(r"[^A-Za-z0-9]+", "", text)[:12]
+    if compact:
+        return compact[:1].upper() + compact[1:].lower()
+    return "Custom"
 
 
 def _now() -> datetime:
@@ -72,6 +103,7 @@ async def seed_guest_demo(
         facts = [
             ("person", "role", "Individual securing personal devices and accounts"),
             ("person", "knowledge_level", "Beginner — comfortable with apps, newer to MFA depth"),
+            ("environment", "primary_os", "Windows PC"),
             ("preferences", "communication", "Plain language, step-by-step checklists"),
             ("needs", "priority", "Password manager + MFA, then reliable backups"),
             ("needs", "urgency", "Advisory — prevent problems, not mid-incident"),
@@ -333,7 +365,7 @@ async def seed_guest_demo(
             "**You've contacted me today — thank you for describing what matters.**\n\n"
             f"I heard: *{goal[:280]}*\n\n"
             "I've set your Journey to a **custom goal** track so we can break this into "
-            "milestones together. Use About you to edit anything we got wrong, and ask "
+            "milestones together. Use About You to edit anything we got wrong, and ask "
             "the panel for a next concrete step — triage, tools, or a longer-term program."
         )
         layout = [

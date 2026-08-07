@@ -117,4 +117,5 @@ def create_user_response(user: User) -> UserResponse:
         last_login=user.last_login,
         is_guest=bool(getattr(user, "is_guest", False)),
         guest_persona=getattr(user, "guest_persona", None),
+        guest_label=getattr(user, "guest_label", None),
     )

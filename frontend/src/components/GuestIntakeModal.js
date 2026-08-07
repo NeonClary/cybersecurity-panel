@@ -93,7 +93,7 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
           <div>
             <h2 id="guest-intake-title" style={{ margin: 0, fontSize: '1.25rem' }}>Explore as guest</h2>
             <p style={{ margin: '6px 0 0', color: isDark ? '#94a3b8' : '#64748b', fontSize: 14, lineHeight: 1.45 }}>
-              No account needed. We&apos;ll load a realistic demo so Chat, Journey, Workspace, and About you feel useful right away.
+              No account needed. We&apos;ll load a realistic demo so Chat, Journey, Workspace, and About You feel useful right away.
             </p>
           </div>
           <button

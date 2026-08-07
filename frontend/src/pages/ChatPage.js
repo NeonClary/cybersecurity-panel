@@ -20,6 +20,19 @@ import IntakePanel from '../components/IntakePanel';
 
 const ACTIVE_ADVISORS_STORAGE_KEY = 'cybersecurityActiveAdvisorIds';
 
+/** Persona-matched starter prompts used when a guest lands on a seeded demo chat. */
+function guestStarterPrompts(config, guestPersona) {
+  const intake = config?.chat_page?.intake || {};
+  const byPersona = intake.by_persona || {};
+  const key = (guestPersona || '').toLowerCase();
+  const chips = (key && Array.isArray(byPersona[key]) ? byPersona[key] : null)
+    || (Array.isArray(intake.chips) ? intake.chips : []);
+  return chips
+    .filter((c) => c && c.prompt && !c.free_text)
+    .map((c) => c.prompt)
+    .slice(0, 4);
+}
+
 const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNavigateToJourney, onSignOut }) => {
   const { config, advisors, getAdvisorColors } = useAppConfig();
   const [messages, setMessages] = useState([]);
@@ -31,7 +44,9 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   const [replyingTo, setReplyingTo] = useState(null);
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const messagesEndRef = useRef(null);
+  const rankedAdvisorIdsRef = useRef([]);
   const { isDark } = useTheme();
+  const guestPersona = user?.is_guest ? (user?.guest_persona || null) : null;
 
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [currentSessionTitle, setCurrentSessionTitle] = useState('');
@@ -219,6 +234,12 @@ const loadChatSession = async (sessionId) => {
         setMessages(formattedMessages);
         setReplyingTo(null);
         setThinkingAdvisors([]);
+
+        // Guest demo: seed persona-aligned starter prompts so suggestions match intake type
+        if (user?.is_guest && formattedMessages.length > 0) {
+          const starters = guestStarterPrompts(config, user.guest_persona);
+          if (starters.length > 0) setFollowupChips(starters);
+        }
         
         // Also get the session title from MongoDB
         const sessionResponse = await fetch(`${process.env.REACT_APP_API_URL}/api/chat-sessions/${sessionId}`, {
@@ -448,11 +469,12 @@ const handleNewChat = async (sessionId = null) => {
       : Object.keys(advisors || {});
     // Start with just the orchestrator's thinking bubble. The backend will
     // emit a `progress { phase: 'selected', selected_advisors: [...] }` event
-    // naming the 3 advisors it picked, and that handler will add their
+    // naming the advisors it picked (ranked), and that handler will add their
     // ThinkingIndicators. This prevents the brief flash of thinking indicators
     // for every advisor in the active pool before ranking has run.
     setThinkingAdvisors(['system']);
     setFollowupChips([]);
+    rankedAdvisorIdsRef.current = [];
     setJourneySuggestions([]);
 
     try {
@@ -522,8 +544,24 @@ const handleNewChat = async (sessionId = null) => {
                 advisorName: d.persona_name || d.persona_id,
                 used_documents: d.used_documents || false,
                 document_chunks_used: d.document_chunks_used || 0,
+                rank_index: Array.isArray(rankedAdvisorIdsRef.current)
+                  ? rankedAdvisorIdsRef.current.indexOf(d.persona_id)
+                  : -1,
               };
-              setMessages(prev => [...prev, msg]);
+              setMessages(prev => {
+                const rank = rankedAdvisorIdsRef.current || [];
+                if (!rank.length) return [...prev, msg];
+                let i = prev.length;
+                while (i > 0 && prev[i - 1].type === 'advisor') i -= 1;
+                const before = prev.slice(0, i);
+                const group = [...prev.slice(i), msg];
+                group.sort((a, b) => {
+                  const ia = rank.indexOf(a.persona_id);
+                  const ib = rank.indexOf(b.persona_id);
+                  return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+                });
+                return [...before, ...group];
+              });
               setThinkingAdvisors(prev => prev.filter(a => a !== d.persona_id));
               await saveMessageToSession(msg, sessionId);
               break;
@@ -549,6 +587,7 @@ const handleNewChat = async (sessionId = null) => {
               break;
             case 'progress':
               if (d.phase === 'selected' && Array.isArray(d.selected_advisors)) {
+                rankedAdvisorIdsRef.current = d.selected_advisors;
                 setThinkingAdvisors(prev => {
                   const next = new Set(prev);
                   next.add('system');
@@ -903,11 +942,6 @@ const handleNewChat = async (sessionId = null) => {
               getAdvisorColors={getAdvisorColors}
               isDark={isDark}
             />
-            <ExportButton
-              hasMessages={hasConversationMessages}
-              currentSessionId={currentSessionId}
-              authToken={authToken}
-            />
             {/* User guide button (from main) — slotted into AppHeader's children */}
             <button
               className="icon-btn header-help-btn"
@@ -922,8 +956,8 @@ const handleNewChat = async (sessionId = null) => {
           <div className="chat-content">
             {!hasMessages ? (
               <div className="welcome-state">
-                <IntakePanel onSubmit={handleSendMessage} />
-                <SuggestionsPanel onSuggestionClick={handleSendMessage} />
+                <IntakePanel onSubmit={handleSendMessage} guestPersona={guestPersona} />
+                <SuggestionsPanel onSuggestionClick={handleSendMessage} guestPersona={guestPersona} />
               </div>
             ) : (
               <div className="messages-container">
@@ -1135,6 +1169,14 @@ const handleNewChat = async (sessionId = null) => {
                 setShowAboutYou(true);
               }}
             />
+            <div className="chat-input-footer-actions">
+              <ExportButton
+                hasMessages={hasConversationMessages}
+                currentSessionId={currentSessionId}
+                authToken={authToken}
+                dropdownPlacement="above"
+              />
+            </div>
           </div>
         </div>
       </div>

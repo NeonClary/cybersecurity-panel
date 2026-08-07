@@ -15,7 +15,7 @@ from app.core.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from app.core.database import get_database
-from app.core.guest_demo import resolve_persona, seed_guest_demo, clear_guest_sample_data
+from app.core.guest_demo import resolve_persona, derive_guest_label, seed_guest_demo, clear_guest_sample_data
 from app.core import user_knowledge
 import logging
 import secrets
@@ -357,6 +357,7 @@ async def explore_as_guest(body: GuestExploreRequest):
             )
 
         persona = resolve_persona(body.choice, body.free_text)
+        label = derive_guest_label(persona, body.free_text)
         db = get_database()
         guest_id = uuid4().hex[:12]
         email = f"guest.{guest_id}@guest.neonai.dev"
@@ -378,6 +379,7 @@ async def explore_as_guest(body: GuestExploreRequest):
             is_active=True,
             is_guest=True,
             guest_persona=persona,
+            guest_label=label,
         )
         result = await db.users.insert_one(user.dict(by_alias=True))
         user.id = result.inserted_id

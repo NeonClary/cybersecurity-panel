@@ -83,8 +83,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 0;
   min-width: 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-muted, var(--border-light, #e5e7eb));
 }
 
 .sidebar-brand-mark {
@@ -124,9 +126,16 @@
   text-overflow: ellipsis;
 }
 
+[data-theme="dark"] .sidebar-brand,
+.dark .sidebar-brand {
+  border-bottom-color: var(--border-primary, #374151);
+}
+
 .sidebar.collapsed .sidebar-brand {
   justify-content: center;
   margin-bottom: 8px;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .sidebar.collapsed .sidebar-brand-text {
@@ -185,6 +194,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-top: 14px;
   margin-bottom: 16px;
 }
 

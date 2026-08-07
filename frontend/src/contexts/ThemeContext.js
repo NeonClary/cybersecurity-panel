@@ -13,6 +13,8 @@ const readPreference = () => {
   try {
     const saved = localStorage.getItem(THEME_KEY);
     if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+    // Legacy values or empty → System (follow OS)
+    if (saved === 'auto' || saved === 'default' || saved === '') return 'system';
   } catch {
     /* ignore */
   }

@@ -237,6 +237,22 @@ class TestExtractFactsDedup(unittest.TestCase):
             self.assertEqual(facts[0]["value"], "250 employees")
 
 
+class TestSanitizeAndDevices(unittest.TestCase):
+    def test_sanitize_harsh_language(self):
+        self.assertIn("insufficient", uk.sanitize_fact_language("User is negligent about MFA"))
+        self.assertNotIn("negligent", uk.sanitize_fact_language("User is negligent about MFA").lower())
+        self.assertIn("novice", uk.sanitize_fact_language("incompetent with backups").lower())
+
+    def test_heuristic_windows_pc_stated(self):
+        facts = uk.heuristic_device_facts("I have a Windows PC at home")
+        self.assertTrue(any(f["key"] == "primary_os" and f["value"] == "Windows PC" for f in facts))
+        self.assertTrue(all(f["source"] == "stated" for f in facts))
+
+    def test_heuristic_requires_ownership_cue(self):
+        facts = uk.heuristic_device_facts("Windows is a popular OS")
+        self.assertEqual(facts, [])
+
+
 class TestSummarySelection(unittest.TestCase):
     def test_get_summary_short_vs_long(self):
         db, _facts, summaries = _mock_db_store()

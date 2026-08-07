@@ -9,6 +9,7 @@ import ProfileWalkthrough from './ProfileWalkthrough';
 const FACT_CATEGORIES = [
   { value: 'person', label: 'Person' },
   { value: 'organization', label: 'Organization' },
+  { value: 'environment', label: 'Devices & environment' },
   { value: 'needs', label: 'Needs' },
   { value: 'preferences', label: 'Preferences' },
 ];
@@ -580,7 +581,7 @@ const AboutYouModal = ({
         <div style={header}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <Sparkles size={20} style={{ color: 'var(--accent-primary)' }} />
-            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>About you</h3>
+            <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 18 }}>About You</h3>
           </div>
           <button
             type="button"
@@ -608,7 +609,7 @@ const AboutYouModal = ({
             style={tabBtn(activeTab === 'about')}
             onClick={() => { setActiveTab('about'); setMessage(null); }}
           >
-            <Sparkles size={15} /> About you
+            <Sparkles size={15} /> About You
           </button>
         </div>
 

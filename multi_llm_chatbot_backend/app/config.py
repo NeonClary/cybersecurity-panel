@@ -104,11 +104,15 @@ class IntakeConfig(BaseModel):
         "You've contacted me today — what is it that I can help you with in cybersecurity?"
     )
     chips: List[IntakeChipConfig] = []
+    # Optional persona-keyed chip lists for Explore-as-guest (personal|business|other)
+    by_persona: Dict[str, List[IntakeChipConfig]] = {}
 
 
 class ChatPageConfig(BaseModel):
     placeholder: str = "Ask your advisors anything..."
     examples: List[ExampleCategory] = []
+    # Optional persona-keyed example grids for Explore-as-guest
+    examples_by_persona: Dict[str, List[ExampleCategory]] = {}
     intake: IntakeConfig = IntakeConfig()
 
 

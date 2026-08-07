@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Download, FileText, FileType, File, Check, X, Loader2 } from 'lucide-react';
 import '../styles/ExportButton.css';
 
-const ExportButton = ({ hasMessages = false, currentSessionId = null, authToken = null }) => {
+const ExportButton = ({ hasMessages = false, currentSessionId = null, authToken = null, dropdownPlacement = 'below' }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState(null);
@@ -162,7 +162,7 @@ const ExportButton = ({ hasMessages = false, currentSessionId = null, authToken 
   };
 
   return (
-    <div className="export-button-container">
+    <div className={`export-button-container${dropdownPlacement === 'above' ? ' export-dropdown-above' : ''}`}>
       <button
         onClick={handleExportClick}
         className={getButtonClass()}

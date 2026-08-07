@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from app.models.user import PyObjectId
 
-FactCategory = Literal["person", "organization", "needs", "preferences"]
+FactCategory = Literal["person", "organization", "environment", "needs", "preferences"]
 FactSource = Literal["stated", "inferred"]
 
 

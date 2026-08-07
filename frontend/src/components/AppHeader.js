@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Menu, Users } from 'lucide-react';
+import { Home, Menu } from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
 
 /**
@@ -22,8 +22,7 @@ const AppHeader = ({
   onMobileMenu,
   children,
 }) => {
-  const { config, resolveIcon } = useAppConfig();
-  const BrandIcon = resolveIcon ? resolveIcon('Users') : Users;
+  const { config } = useAppConfig();
 
   const goToCanvas = (view) => {
     if (view === 'journey') {
@@ -61,9 +60,6 @@ const AppHeader = ({
           <Home size={20} />
         </button>
         <div className="header-brand">
-          <div className="brand-icon">
-            <BrandIcon size={24} />
-          </div>
           <div className="brand-text">
             <h1>{config?.app?.title || 'Advisory'}</h1>
             <p>{config?.app?.subtitle || 'AI-Powered Guidance'}</p>

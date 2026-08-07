@@ -53,6 +53,7 @@ class User(BaseModel):
     is_active: bool = True
     is_guest: bool = False
     guest_persona: Optional[str] = None  # personal | business | other
+    guest_label: Optional[str] = None  # one-word sidebar label (Personal / Business / derived)
 
 
 class UserUpdate(BaseModel):
@@ -76,6 +77,7 @@ class UserResponse(BaseModel):
     last_login: Optional[datetime] = None
     is_guest: bool = False
     guest_persona: Optional[str] = None
+    guest_label: Optional[str] = None
 
 class ChatSession(BaseModel):
     model_config = ConfigDict(

@@ -80,6 +80,25 @@ chat_page:
       - { id: "business", label: "Secure my business", prompt: "I need practical help securing my small business — what should I prioritize?" }
       - { id: "career", label: "Grow my security career", prompt: "I want to grow my cybersecurity career. Help me pick a path and next steps." }
       - { id: "other", label: "Something else…", prompt: "", free_text: true }
+    by_persona:
+      personal:
+        - { id: "p-passwords", label: "Password manager & MFA", prompt: "Help me set up a password manager and turn on MFA for my important accounts." }
+        - { id: "p-phish", label: "Spot phishing emails", prompt: "How do I recognize phishing emails and what should I do if I clicked a shady link?" }
+        - { id: "p-backup", label: "Backups that work", prompt: "What is a simple, reliable backup plan for my home computer and photos?" }
+        - { id: "p-hacked", label: "I might be compromised", prompt: "I think my personal account or device may be compromised. What should I do first?" }
+        - { id: "other", label: "Something else…", prompt: "", free_text: true }
+      business:
+        - { id: "b-baseline", label: "SMB security baseline", prompt: "What practical cybersecurity baseline should a small business put in place first?" }
+        - { id: "b-mfa", label: "MFA & access hygiene", prompt: "How should we roll out MFA and tighten access for email and admin accounts?" }
+        - { id: "b-ir", label: "Incident playbook", prompt: "Help me draft a simple first-hour playbook for a phishing or ransomware incident." }
+        - { id: "b-audit", label: "Audit / review prep", prompt: "We have a cybersecurity review coming up — what evidence and gaps should we prepare?" }
+        - { id: "other", label: "Something else…", prompt: "", free_text: true }
+      other:
+        - { id: "o-clarify", label: "Clarify my goal", prompt: "Help me turn my custom security goal into clear next steps." }
+        - { id: "o-path", label: "Pick a learning path", prompt: "Based on my goal, what should I learn or practice first in cybersecurity?" }
+        - { id: "o-tools", label: "Tools that fit", prompt: "What tools or controls best match the situation I described?" }
+        - { id: "o-risks", label: "Top risks for me", prompt: "What are the top risks I should address given what I shared?" }
+        - { id: "other", label: "Something else…", prompt: "", free_text: true }
   examples:
     - title: "Threats & Defense"
       icon: "ShieldAlert"
@@ -113,6 +132,74 @@ chat_page:
         - "CISSP vs Security+ — which path fits my background?"
         - "How do I move from SOC tier 1 to detection engineering?"
         - "What should I build in a home lab to stand out in interviews?"
+  examples_by_persona:
+    personal:
+      - title: "Everyday digital safety"
+        icon: "Shield"
+        color: "#0F766E"
+        bg_color: "#ECFDF5"
+        suggestions:
+          - "How do I lock down my email and social accounts with MFA?"
+          - "What's the simplest password manager setup for a household?"
+          - "How should I back up my Windows PC so ransomware can't wipe me out?"
+      - title: "Scams & phishing"
+        icon: "MailWarning"
+        color: "#DC2626"
+        bg_color: "#FEF2F2"
+        suggestions:
+          - "I got a weird bank email — how do I check if it's phishing?"
+          - "What should I do if I typed my password on a fake site?"
+          - "How do I talk to family about scam texts without sounding preachy?"
+      - title: "Devices & home network"
+        icon: "Laptop"
+        color: "#2563EB"
+        bg_color: "#EFF6FF"
+        suggestions:
+          - "What Windows updates and settings matter most for security?"
+          - "How do I secure my home Wi-Fi and guest network?"
+          - "Should I use antivirus, Windows Defender, or both?"
+    business:
+      - title: "SMB baseline"
+        icon: "Building2"
+        color: "#2563EB"
+        bg_color: "#EFF6FF"
+        suggestions:
+          - "What CIS IG1 controls should a ~50-person company tackle first?"
+          - "How do I inventory devices and SaaS without a huge IT budget?"
+          - "What's a practical MFA rollout plan for email and admin access?"
+      - title: "Incidents & readiness"
+        icon: "Siren"
+        color: "#F59E0B"
+        bg_color: "#FFFBEB"
+        suggestions:
+          - "Draft a one-page phishing / ransomware first-hour playbook."
+          - "When should we loop in legal, leadership, or an IR firm?"
+          - "How do we preserve evidence on a suspected compromised laptop?"
+      - title: "Governance & questionnaires"
+        icon: "Scale"
+        color: "#7C3AED"
+        bg_color: "#F5F3FF"
+        suggestions:
+          - "Help me answer a vendor security questionnaire for our SMB."
+          - "What policies are table-stakes before an audit?"
+          - "How do access reviews work when we're mostly on Microsoft 365?"
+    other:
+      - title: "Shape your path"
+        icon: "Compass"
+        color: "#0F766E"
+        bg_color: "#ECFDF5"
+        suggestions:
+          - "Help me break my custom security goal into weekly milestones."
+          - "What should I learn first given the situation I described?"
+          - "Which advisor topics are most relevant to my goal?"
+      - title: "Practical next steps"
+        icon: "ListChecks"
+        color: "#2563EB"
+        bg_color: "#EFF6FF"
+        suggestions:
+          - "What tools or controls best fit what I shared?"
+          - "Where am I most exposed right now, and what reduces that risk fast?"
+          - "How do I know I've made real progress toward my goal?"
 
 personas:
   base_prompt: |
@@ -125,11 +212,12 @@ personas:
     **Formatting (Compact Markdown v1):**
     - Use GitHub-Flavored Markdown.
     - Output exactly three sections in this order:
-      - `### Thought` — one sentence.
-      - `### What to do` — exactly 3 bullets, one line each.
-      - `### Next step` — one imperative sentence.
+      - `### Thought` — complete reasoning or context in 1–2 sentences (never truncate mid-idea into the next section).
+      - `### What to do` — exactly 3 concrete action bullets; each must be a distinct actionable step (not leftover thought prose).
+      - `### Next step` — one imperative sentence that is NOT a copy of the first What-to-do bullet; it should name the single most important action to start with now.
     - Use `###` for headings, `-` for bullets (no unicode bullets), keep number text on the same line (e.g., `1. Do X`).
     - Insert one blank line between blocks.
+    - Never put actions under Thought, and never put reasoning bullets under What to do.
 
   personas_dir: "personas/cyber_advisors"
 

@@ -2,28 +2,17 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import MessageBubble from './MessageBubble';
 
-const CAROUSEL_BREAKPOINT = 700;
-
+/**
+ * Always show one advisor answer at a time with prev/next + dots.
+ * Messages should already be ordered most-relevant-first (orchestrator rank).
+ */
 const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchReferences, userAvatarId, userAvatarOptions }) => {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isCarouselMode, setIsCarouselMode] = useState(false);
   const containerRef = useRef(null);
 
   useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-
-    const observer = new ResizeObserver(entries => {
-      const width = entries[0].contentRect.width;
-      setIsCarouselMode(width < CAROUSEL_BREAKPOINT);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
     setActiveIndex(0);
-  }, [messages.length]);
+  }, [messages.map((m) => m.id).join('|')]);
 
   const goPrev = useCallback(() => {
     setActiveIndex(i => Math.max(0, i - 1));
@@ -51,28 +40,30 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
   }
 
   return (
-    <div
-      className={`advisor-carousel ${isCarouselMode ? 'carousel-mode' : 'grid-mode'}`}
-      ref={containerRef}
-    >
-      {isCarouselMode && (
-        <button
-          className="carousel-arrow carousel-prev"
-          onClick={goPrev}
-          disabled={activeIndex === 0}
-          aria-label="Previous advisor"
-        >
-          <ChevronLeft size={20} />
-        </button>
-      )}
+    <div className="advisor-carousel carousel-mode" ref={containerRef}>
+      <button
+        className="carousel-arrow carousel-prev"
+        onClick={goPrev}
+        disabled={activeIndex === 0}
+        aria-label="Previous advisor"
+      >
+        <ChevronLeft size={20} />
+      </button>
 
       <div className="carousel-viewport">
         <div
           className="carousel-track"
-          style={isCarouselMode ? { width: `${messages.length * 100}%`, transform: `translateX(-${activeIndex * (100 / messages.length)}%)` } : undefined}
+          style={{
+            width: `${messages.length * 100}%`,
+            transform: `translateX(-${activeIndex * (100 / messages.length)}%)`,
+          }}
         >
           {messages.map(message => (
-            <div key={message.id} className="carousel-slide" style={isCarouselMode ? { width: `${100 / messages.length}%` } : undefined}>
+            <div
+              key={message.id}
+              className="carousel-slide"
+              style={{ width: `${100 / messages.length}%` }}
+            >
               <MessageBubble
                 message={message}
                 onReply={onReply}
@@ -89,29 +80,28 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
         </div>
       </div>
 
-      {isCarouselMode && (
-        <>
-          <button
-            className="carousel-arrow carousel-next"
-            onClick={goNext}
-            disabled={activeIndex === messages.length - 1}
-            aria-label="Next advisor"
-          >
-            <ChevronRight size={20} />
-          </button>
+      <button
+        className="carousel-arrow carousel-next"
+        onClick={goNext}
+        disabled={activeIndex === messages.length - 1}
+        aria-label="Next advisor"
+      >
+        <ChevronRight size={20} />
+      </button>
 
-          <div className="carousel-dots">
-            {messages.map((m, i) => (
-              <button
-                key={m.id}
-                className={`carousel-dot ${i === activeIndex ? 'active' : ''}`}
-                onClick={() => setActiveIndex(i)}
-                aria-label={`Go to advisor ${i + 1}`}
-              />
-            ))}
-          </div>
-        </>
-      )}
+      <div className="carousel-dots" role="tablist" aria-label="Advisor answers">
+        {messages.map((m, i) => (
+          <button
+            key={m.id}
+            type="button"
+            className={`carousel-dot ${i === activeIndex ? 'active' : ''}`}
+            onClick={() => setActiveIndex(i)}
+            aria-label={m.advisorName ? `Show ${m.advisorName}` : `Go to advisor ${i + 1}`}
+            aria-selected={i === activeIndex}
+            role="tab"
+          />
+        ))}
+      </div>
     </div>
   );
 };

@@ -22,6 +22,7 @@ import {
   Monitor,
   Check,
   Shield,
+  BookOpen,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
@@ -68,6 +69,16 @@ const Sidebar = ({
   const isOnCanvas = pageContext === 'canvas';
   const isOnJourney = pageContext === 'journey';
   const isGuest = Boolean(user?.is_guest);
+  const guestStyleLabel = (() => {
+    if (!isGuest) return null;
+    const stored = (user?.guest_label || '').trim();
+    if (stored) return stored.charAt(0).toUpperCase() + stored.slice(1).toLowerCase();
+    const persona = (user?.guest_persona || '').toLowerCase();
+    if (persona === 'personal') return 'Personal';
+    if (persona === 'business') return 'Business';
+    if (persona === 'other') return 'Custom';
+    return 'Guest';
+  })();
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const avatarOptions = config?.app?.user_avatars || [];
   const currentAvatar = avatarOptions.find(a => a.id === userAvatarId);
@@ -263,8 +274,9 @@ const Sidebar = ({
                   </div>
                   <div className="user-details">
                     <span className="user-name">
-                      {user.firstName} {user.lastName}
-                      {isGuest ? ' · Guest' : ''}
+                      {isGuest
+                        ? `Guest Explorer · ${guestStyleLabel}`
+                        : `${user.firstName} ${user.lastName}`}
                     </span>
                     <span className="user-email">
                       {isGuest ? 'Demo session — sample data loaded' : user.email}
@@ -301,7 +313,18 @@ const Sidebar = ({
                         </button>
                         <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAppearanceMenu(false); if (onOpenProfile) onOpenProfile(); }}>
                           <UserCircle size={16} />
-                          <span>About you</span>
+                          <span>About You</span>
+                        </button>
+                        <button
+                          className="user-menu-item"
+                          onClick={() => {
+                            setShowUserMenu(false);
+                            setShowAppearanceMenu(false);
+                            window.dispatchEvent(new CustomEvent('open-user-guide'));
+                          }}
+                        >
+                          <BookOpen size={16} />
+                          <span>User Guide</span>
                         </button>
                         <button className="user-menu-item" onClick={() => { setShowUserMenu(false); setShowAppearanceMenu(false); if (onOpenAccount) onOpenAccount(); }}>
                           <KeyRound size={16} />
@@ -333,7 +356,7 @@ const Sidebar = ({
                             aria-expanded={showAppearanceMenu}
                           >
                             {preference === 'dark' ? <Moon size={16} /> : preference === 'light' ? <Sun size={16} /> : <Monitor size={16} />}
-                            <span>Appearance</span>
+                            <span>Appearance{preference === 'system' ? ' · System' : ''}</span>
                             <ChevronRight size={14} className={`appearance-chevron ${showAppearanceMenu ? 'open' : ''}`} />
                           </button>
                           {showAppearanceMenu && (

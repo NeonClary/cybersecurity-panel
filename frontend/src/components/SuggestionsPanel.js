@@ -1,11 +1,20 @@
 // src/components/SuggestionsPanel.js
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useAppConfig } from '../contexts/AppConfigContext';
 
-const SuggestionsPanel = ({ onSuggestionClick }) => {
+const SuggestionsPanel = ({ onSuggestionClick, guestPersona = null }) => {
   const { config, resolveIcon } = useAppConfig();
 
-  const examples = config?.chat_page?.examples || [];
+  const examples = useMemo(() => {
+    const chatPage = config?.chat_page || {};
+    const byPersona = chatPage.examples_by_persona || {};
+    const personaKey = (guestPersona || '').toLowerCase();
+    const personaExamples = personaKey && Array.isArray(byPersona[personaKey])
+      ? byPersona[personaKey]
+      : null;
+    if (personaExamples && personaExamples.length > 0) return personaExamples;
+    return chatPage.examples || [];
+  }, [config, guestPersona]);
 
   return (
     <div className="suggestions-panel">

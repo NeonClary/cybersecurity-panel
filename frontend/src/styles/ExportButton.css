@@ -4,6 +4,15 @@
   display: inline-block;
 }
 
+.export-button-container.export-dropdown-above .export-dropdown {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 8px;
+  right: 0;
+  left: auto;
+}
+
 /* Main Export Button */
 .export-button {
   display: flex;

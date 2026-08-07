@@ -1,19 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import '../styles/IntakePanel.css';
 
 /**
  * First-session intake: Jerry's greeting + chips + optional free-text.
- * Chips come from /api/config → chat_page.intake.
+ * Chips come from /api/config → chat_page.intake, filtered by guest persona when set.
  */
-const IntakePanel = ({ onSubmit }) => {
+const IntakePanel = ({ onSubmit, guestPersona = null }) => {
   const { config } = useAppConfig();
   const intake = config?.chat_page?.intake || {};
   const greeting =
     intake.greeting ||
     "You've contacted me today — what is it that I can help you with in cybersecurity?";
-  const chips = Array.isArray(intake.chips) ? intake.chips : [];
+
+  const chips = useMemo(() => {
+    const byPersona = intake.by_persona || {};
+    const personaKey = (guestPersona || '').toLowerCase();
+    const personaChips = personaKey && Array.isArray(byPersona[personaKey])
+      ? byPersona[personaKey]
+      : null;
+    if (personaChips && personaChips.length > 0) return personaChips;
+    return Array.isArray(intake.chips) ? intake.chips : [];
+  }, [intake, guestPersona]);
+
   const [freeText, setFreeText] = useState('');
   const [showFreeText, setShowFreeText] = useState(false);
 

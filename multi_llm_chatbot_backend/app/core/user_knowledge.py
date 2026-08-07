@@ -21,25 +21,67 @@ LOG = logging.getLogger(__name__)
 FACTS_COLLECTION = "user_facts"
 SUMMARIES_COLLECTION = "user_summaries"
 
-VALID_CATEGORIES = frozenset({"person", "organization", "needs", "preferences"})
+VALID_CATEGORIES = frozenset({"person", "organization", "environment", "needs", "preferences"})
 
 # Neon vLLM / Ollama are treated as small-context; others get the long summary.
 _DEFAULT_SMALL_CONTEXT_PROVIDERS = frozenset({"vllm", "ollama"})
 
+# Harsh / insulting descriptors to neutralize in stored fact values.
+_HARSH_TERMS = {
+    "negligent": "insufficient",
+    "negligence": "insufficient practices",
+    "careless": "inattentive",
+    "carelessly": "without adequate care",
+    "incompetent": "novice",
+    "incompetence": "limited proficiency",
+    "stupid": "inexperienced",
+    "dumb": "inexperienced",
+    "lazy": "inconsistent",
+    "idiot": "novice",
+    "idiotic": "substandard",
+    "clueless": "novice",
+    "hopeless": "below basic",
+    "pathetic": "substandard",
+    "reckless": "high-risk",
+    "recklessness": "high-risk behavior",
+    "sloppy": "inconsistent",
+    "useless": "ineffective",
+    "moron": "novice",
+    "foolish": "suboptimal",
+}
+
 EXTRACTION_SYSTEM = (
     "You extract durable facts about a cybersecurity advisory user from one message.\n"
     "Return ONLY valid JSON of the form:\n"
-    '{"facts":[{"category":"person|organization|needs|preferences",'
+    '{"facts":[{"category":"person|organization|environment|needs|preferences",'
     '"key":"snake_case","value":"short string","confidence":0.0,'
-    '"evidence":"brief quote"}]}\n'
-    "Categories: person (role, knowledge, certs), organization (size, industry, IT),\n"
-    "needs (immediate goal, urgency), preferences (communication, learning).\n"
+    '"source":"stated|inferred","evidence":"brief quote"}]}\n'
+    "Categories:\n"
+    "- person: role, knowledge level, certifications, name preference, learning goals\n"
+    "- organization: size, industry, IT maturity, regulations (HIPAA/SOC2/etc.)\n"
+    "- environment: devices, OS (Windows/macOS/Linux), browsers, email habits, MFA status,\n"
+    "  backups, home/office setup, timezone/region if offered\n"
+    "- needs: immediate goals, threats/incidents, urgency\n"
+    "- preferences: communication style, depth, pacing\n"
+    "Rules:\n"
+    "- If the user explicitly states a fact (e.g. 'I have a Windows PC'), use source='stated'.\n"
+    "- If you are inferring from context, use source='inferred'.\n"
+    "- Always capture OS/device/computer statements (Windows PC, MacBook, iPhone, Android, etc.).\n"
+    "- Capture useful cyber context with least user effort: devices/OS, role, org size, tools,\n"
+    "  threats/incidents, goals, regulations, email habits, backups, MFA.\n"
+    "- Friendly personalizing detail is OK (name preference, timezone/region, learning goals).\n"
+    "- Do NOT extract sensitive medical/financial minutiae, exact street addresses, SSNs, or passwords.\n"
+    "- Tone: professional and non-insulting. Prefer: insufficient, non-compliant, substandard,\n"
+    "  novice, below basic. NEVER use: negligent, careless, incompetent, stupid, lazy, or similar.\n"
     "If nothing useful, return {\"facts\":[]}. Do not invent unsupported facts."
 )
 
 SUMMARY_SYSTEM = (
     "You write concise user-context briefs for cybersecurity AI advisors.\n"
     "Use only the provided facts and profile. Write in third person.\n"
+    "Tone: professional and respectful — describe situations and gaps, never insult character.\n"
+    "Prefer language like insufficient / novice / non-compliant / below basic; "
+    "never negligent / careless / incompetent / stupid / lazy.\n"
     "Return ONLY valid JSON: {\"short\":\"...\",\"long\":\"...\"}."
 )
 
@@ -100,9 +142,65 @@ def _coerce_confidence(raw: Any) -> Optional[float]:
     return val
 
 
-async def _find_inferred_by_key(user_id: Any, key: str) -> Optional[Dict[str, Any]]:
+def sanitize_fact_language(value: str) -> str:
+    """Replace harsh/insulting adjectives with professional alternatives."""
+    if not value:
+        return value
+    out = value
+    # Longer phrases first
+    for harsh, soft in sorted(_HARSH_TERMS.items(), key=lambda kv: len(kv[0]), reverse=True):
+        out = re.sub(rf"\b{re.escape(harsh)}\b", soft, out, flags=re.IGNORECASE)
+    return out
+
+
+def _coerce_source(raw: Any, *, default: str = "inferred") -> str:
+    if isinstance(raw, str) and raw.strip().lower() in ("stated", "inferred"):
+        return raw.strip().lower()
+    return default
+
+
+_DEVICE_OS_PATTERNS: List[tuple[re.Pattern[str], str, str, str]] = [
+    # pattern, category, key, value
+    (re.compile(r"\bwindows\s*(?:10|11)?\s*(?:pc|computer|laptop|machine|desktop)?\b", re.I), "environment", "primary_os", "Windows PC"),
+    (re.compile(r"\b(?:pc|computer|laptop|desktop)\b.*\bwindows\b|\bwindows\b.*\b(?:pc|computer|laptop|desktop)\b", re.I), "environment", "primary_os", "Windows PC"),
+    (re.compile(r"\bmac(?:os|book)?\b|\bapple\s+(?:computer|laptop)\b", re.I), "environment", "primary_os", "macOS"),
+    (re.compile(r"\blinux\b|\bubuntu\b|\bfedora\b", re.I), "environment", "primary_os", "Linux"),
+    (re.compile(r"\biphone\b|\bios\b", re.I), "environment", "mobile_os", "iOS / iPhone"),
+    (re.compile(r"\bandroid\b", re.I), "environment", "mobile_os", "Android"),
+    (re.compile(r"\bchromebook\b|\bchrome\s*os\b", re.I), "environment", "primary_os", "ChromeOS"),
+]
+
+
+def heuristic_device_facts(message_text: str) -> List[Dict[str, Any]]:
+    """Deterministic OS/device facts from clear user statements."""
+    text = (message_text or "").strip()
+    if not text:
+        return []
+    # Prefer first-person / ownership cues so we don't grab advisor mentions
+    owned = bool(re.search(r"\b(i|i'?m|i'?ve|my|our|we|we'?re)\b", text, re.I))
+    if not owned:
+        return []
+    found: List[Dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for pattern, category, key, value in _DEVICE_OS_PATTERNS:
+        m = pattern.search(text)
+        if not m or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        found.append({
+            "category": category,
+            "key": key,
+            "value": value,
+            "confidence": 0.95,
+            "source": "stated",
+            "evidence": m.group(0)[:120],
+        })
+    return found
+
+
+async def _find_fact_by_key_source(user_id: Any, key: str, source: str) -> Optional[Dict[str, Any]]:
     db = get_database()
-    cursor = db[FACTS_COLLECTION].find({"user_id": user_id, "key": key, "source": "inferred"})
+    cursor = db[FACTS_COLLECTION].find({"user_id": user_id, "key": key, "source": source})
     docs = await cursor.to_list(length=1)
     return docs[0] if docs else None
 
@@ -123,7 +221,9 @@ async def upsert_inferred_fact(
     """
     db = get_database()
     now = datetime.utcnow()
-    existing = await _find_inferred_by_key(user_id, key)
+    key = _normalize_key(key)
+    value = sanitize_fact_language(value)
+    existing = await _find_fact_by_key_source(user_id, key, "inferred")
     if existing:
         update = {
             "category": category,
@@ -155,15 +255,64 @@ async def upsert_inferred_fact(
     return doc
 
 
+async def upsert_stated_fact(
+    user_id: Any,
+    *,
+    category: FactCategory,
+    key: str,
+    value: str,
+    evidence: Optional[str] = None,
+    confidence: Optional[float] = 1.0,
+) -> Dict[str, Any]:
+    """Insert or update a stated fact by key; demote conflicting inferred quietly."""
+    db = get_database()
+    now = datetime.utcnow()
+    key = _normalize_key(key)
+    value = sanitize_fact_language(value)
+    existing = await _find_fact_by_key_source(user_id, key, "stated")
+    if existing:
+        update = {
+            "category": category,
+            "value": value,
+            "confidence": confidence if confidence is not None else 1.0,
+            "evidence": evidence,
+            "updated_at": now,
+        }
+        await db[FACTS_COLLECTION].update_one({"_id": existing["_id"]}, {"$set": update})
+        existing.update(update)
+        return existing
+    doc = {
+        "_id": ObjectId(),
+        "user_id": user_id,
+        "category": category,
+        "key": key,
+        "value": value,
+        "source": "stated",
+        "confidence": confidence if confidence is not None else 1.0,
+        "evidence": evidence,
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db[FACTS_COLLECTION].insert_one(doc)
+    # Remove inferred duplicate so UI shows the stated fact cleanly
+    await db[FACTS_COLLECTION].delete_many(
+        {"user_id": user_id, "key": key, "source": "inferred"}
+    )
+    return doc
+
+
 async def extract_facts_from_message(
     user_id: Any,
     message_text: str,
     llm: LLMClient,
 ) -> List[Dict[str, Any]]:
-    """Extract inferred facts from a user message and upsert them."""
+    """Extract facts from a user message and upsert them (stated or inferred)."""
     text = (message_text or "").strip()
     if not text:
         return []
+
+    candidates: List[Dict[str, Any]] = []
+    candidates.extend(heuristic_device_facts(text))
 
     try:
         raw = await llm.generate(
@@ -175,32 +324,53 @@ async def extract_facts_from_message(
         )
     except Exception as exc:
         LOG.warning("Fact extraction LLM call failed: %s", exc)
-        return []
+        raw = ""
 
-    payload = _parse_json_object(raw)
-    facts_raw = payload.get("facts")
-    if not isinstance(facts_raw, list):
-        return []
+    payload = _parse_json_object(raw) if raw else {}
+    facts_raw = payload.get("facts") if isinstance(payload.get("facts"), list) else []
+    for item in facts_raw:
+        if not isinstance(item, dict):
+            continue
+        candidates.append(item)
 
     saved: List[Dict[str, Any]] = []
-    for item in facts_raw:
+    seen_keys: set[str] = set()
+    for item in candidates:
         if not isinstance(item, dict):
             continue
         category = _coerce_category(item.get("category"))
         key = _normalize_key(str(item.get("key") or ""))
-        value = str(item.get("value") or "").strip()
+        value = sanitize_fact_language(str(item.get("value") or "").strip())
         if not category or not key or not value:
             continue
+        # Prefer first (heuristic / stated) over later duplicates
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
         evidence = item.get("evidence")
         evidence_str = str(evidence).strip() if evidence else None
-        doc = await upsert_inferred_fact(
-            user_id,
-            category=category,
-            key=key,
-            value=value,
-            confidence=_coerce_confidence(item.get("confidence")),
-            evidence=evidence_str,
-        )
+        source = _coerce_source(item.get("source"), default="inferred")
+        # High-confidence explicit quotes about environment → stated
+        if source == "inferred" and category == "environment" and (item.get("confidence") or 0) >= 0.85:
+            source = "stated"
+        if source == "stated":
+            doc = await upsert_stated_fact(
+                user_id,
+                category=category,
+                key=key,
+                value=value,
+                evidence=evidence_str,
+                confidence=_coerce_confidence(item.get("confidence")) or 1.0,
+            )
+        else:
+            doc = await upsert_inferred_fact(
+                user_id,
+                category=category,
+                key=key,
+                value=value,
+                confidence=_coerce_confidence(item.get("confidence")),
+                evidence=evidence_str,
+            )
         saved.append(doc)
     return saved
 
@@ -272,8 +442,8 @@ async def regenerate_summaries(user_id: Any, llm: LLMClient) -> Dict[str, Any]:
             response_mime_type="application/json",
         )
         parsed = _parse_json_object(raw)
-        short = str(parsed.get("short") or "").strip()
-        long = str(parsed.get("long") or "").strip()
+        short = sanitize_fact_language(str(parsed.get("short") or "").strip())
+        long = sanitize_fact_language(str(parsed.get("long") or "").strip())
         if not short and not long and raw:
             # Fallback: treat entire response as long and truncate for short
             long = (raw or "").strip()
@@ -372,23 +542,14 @@ async def create_stated_fact(
     value: str,
     evidence: Optional[str] = None,
 ) -> Dict[str, Any]:
-    db = get_database()
-    now = datetime.utcnow()
-    key_n = _normalize_key(key)
-    doc = {
-        "_id": ObjectId(),
-        "user_id": user_id,
-        "category": category,
-        "key": key_n,
-        "value": value.strip(),
-        "source": "stated",
-        "confidence": 1.0,
-        "evidence": evidence,
-        "created_at": now,
-        "updated_at": now,
-    }
-    await db[FACTS_COLLECTION].insert_one(doc)
-    return doc
+    return await upsert_stated_fact(
+        user_id,
+        category=category,
+        key=key,
+        value=value,
+        evidence=evidence,
+        confidence=1.0,
+    )
 
 
 async def update_fact(
