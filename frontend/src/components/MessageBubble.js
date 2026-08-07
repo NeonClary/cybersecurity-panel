@@ -41,9 +41,11 @@ const MessageBubble = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchLoading, setSearchLoading] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
+  const [bodyExpanded, setBodyExpanded] = useState(false);
   const overlayRef = useRef(null);
   const tooltipTimer = useRef(null);
   const audioRef = useRef(null);
+  const SHOW_MORE_CHARS = 1100;
 
   const handleSpeak = useCallback(async (content) => {
     if (isSpeaking || isLoadingTTS) {
@@ -376,19 +378,40 @@ const MessageBubble = ({
             </span>
           </div>
           
-          {/* Enhanced markdown rendering with preprocessing */}
-          <div 
-            className="advisor-message-text"
-            style={{ color: colors.textColor || (isDark ? '#e5e7eb' : '#111827') }}
-          >
-            <ReactMarkdown 
-              components={markdownComponents}
-              remarkPlugins={[remarkGfm]}
-              rehypePlugins={[]}
-            >
-              {preprocessMarkdown(message?.compact_markdown || message?.content || message?.text)}
-            </ReactMarkdown>
-          </div>
+          {/* Enhanced markdown rendering with preprocessing — full body text, no ellipsis clip */}
+          {(() => {
+            const markdownBody = preprocessMarkdown(
+              message?.compact_markdown || message?.content || message?.text
+            );
+            const isLongBody = markdownBody.length > SHOW_MORE_CHARS;
+            const collapsed = isLongBody && !bodyExpanded;
+            return (
+              <>
+                <div
+                  className={`advisor-message-text${collapsed ? ' is-collapsed' : ''}`}
+                  style={{ color: colors.textColor || (isDark ? '#e5e7eb' : '#111827') }}
+                >
+                  <ReactMarkdown
+                    components={markdownComponents}
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[]}
+                  >
+                    {markdownBody}
+                  </ReactMarkdown>
+                </div>
+                {isLongBody && (
+                  <button
+                    type="button"
+                    className="message-show-more"
+                    onClick={() => setBodyExpanded((v) => !v)}
+                    style={{ color: colors.color || 'var(--accent-primary)' }}
+                  >
+                    {bodyExpanded ? 'Show less' : 'Show more'}
+                  </button>
+                )}
+              </>
+            );
+          })()}
           
           {showReplyButton && (
             <div className="message-actions">
@@ -554,6 +577,31 @@ const MessageBubble = ({
 
 export default MessageBubble;
 
+const RagChunkPreview = ({ text }) => {
+  const [expanded, setExpanded] = useState(false);
+  const full = (text || '').toString();
+  const isLong = full.length > 240;
+  const shown = !isLong || expanded ? full : full.slice(0, 240);
+  return (
+    <div className="rag-chunk-preview">
+      {shown}
+      {isLong && (
+        <>
+          {' '}
+          <button
+            type="button"
+            className="message-show-more"
+            onClick={() => setExpanded((v) => !v)}
+            style={{ fontSize: 11 }}
+          >
+            {expanded ? 'Show less' : 'Show more'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+};
+
 /** RAG Info overlay kept as-is from your original file */
 const RagInfoOverlay = ({ ragMetadata, colors }) => {
   const overlayRef = useRef(null);
@@ -612,10 +660,7 @@ const RagInfoOverlay = ({ ragMetadata, colors }) => {
                 </div>
                 
                 {chunk.text && (
-                  <div className="rag-chunk-preview">
-                    {chunk.text.substring(0, 120)}
-                    {chunk.text.length > 120 && '...'}
-                  </div>
+                  <RagChunkPreview text={chunk.text} />
                 )}
               </div>
             ))}

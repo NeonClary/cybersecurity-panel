@@ -636,6 +636,30 @@ body {
   line-height: 1.6;
 }
 
+.advisor-message-text.is-collapsed {
+  max-height: 18rem;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
+
+.message-show-more {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.message-show-more:hover {
+  opacity: 0.85;
+}
+
 /* Advisor icon in message header: circular badge, theme-aware fill */
 .advisor-message-avatar-ring {
   border-radius: 50%;

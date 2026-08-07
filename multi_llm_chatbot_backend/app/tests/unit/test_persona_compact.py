@@ -24,6 +24,8 @@ class TestEnsureCompactShape(unittest.TestCase):
         self.assertIn("### Thought", out)
         self.assertIn("### What to do", out)
         self.assertIn("### Next step", out)
+        self.assertNotIn("…", out)
+        self.assertNotIn("...", out)
         thought = out.split("### What to do")[0]
         self.assertIn("backup hygiene", thought.lower())
         next_section = out.split("### Next step")[1].strip()
@@ -43,7 +45,7 @@ class TestEnsureCompactShape(unittest.TestCase):
         out = _ensure_compact_shape(raw, "medium")
         next_section = out.split("### Next step")[1].strip().lower()
         self.assertNotEqual(next_section, "change the password on the affected account.")
-        self.assertTrue(next_section.startswith("begin with") or "start now" in next_section)
+        self.assertNotIn("change the password on the affected account", next_section)
 
     def test_moves_action_bullets_out_of_thought(self):
         raw = (
@@ -68,6 +70,51 @@ class TestEnsureCompactShape(unittest.TestCase):
         bullets = ["Enable MFA on email", "Update passwords", "Back up files"]
         result = _distinct_next_step("Enable MFA on email", bullets, "fallback", 40)
         self.assertNotEqual(result.lower(), "enable mfa on email")
+        self.assertNotIn("…", result)
+
+    def test_no_ellipsis_on_long_thought(self):
+        raw = (
+            "### Thought\n"
+            "Your PC may be compromised after that download, so isolate it from important "
+            "accounts before you hunt for malware thoroughly across disks and restore points "
+            "while preserving forensic evidence. This second sentence explains more context "
+            "about why backup first matters for ransomware risk scenarios that can escalate "
+            "quickly overnight.\n"
+            "\n"
+            "### What to do\n"
+            "- Disconnect from Wi-Fi and unplug ethernet immediately to limit spread of worm payloads.\n"
+            "- Change passwords for email banking and work accounts from a different clean device.\n"
+            "- Run a full Windows Defender offline scan and review startup items carefully afterward.\n"
+            "\n"
+            "### Next step\n"
+            "Disconnect from Wi-Fi and unplug ethernet immediately to limit spread of worm payloads.\n"
+            "</END>"
+        )
+        out = _ensure_compact_shape(raw, "medium")
+        self.assertNotIn("…", out)
+        self.assertNotIn("...", out)
+        thought = out.split("### What to do")[0]
+        self.assertTrue(thought.strip().endswith((".", "!", "?")) or "Thought" in thought)
+        next_section = out.split("### Next step")[1].strip().lower()
+        self.assertNotIn("disconnect from wi-fi and unplug ethernet", next_section)
+
+    def test_rejects_near_paraphrase_next_step(self):
+        raw = (
+            "### Thought\n"
+            "Act quickly but carefully after a suspicious download.\n"
+            "\n"
+            "### What to do\n"
+            "- Disconnect your PC from the internet and any network.\n"
+            "- Run a full antivirus scan with Windows Defender.\n"
+            "- Change email and banking passwords from another device.\n"
+            "\n"
+            "### Next step\n"
+            "Immediately disconnect your PC from the internet and any network connections.\n"
+        )
+        out = _ensure_compact_shape(raw, "medium")
+        next_section = out.split("### Next step")[1].strip().lower()
+        first = "disconnect your pc from the internet and any network"
+        self.assertFalse(first in next_section and next_section.startswith("immediately"))
 
 
 if __name__ == "__main__":

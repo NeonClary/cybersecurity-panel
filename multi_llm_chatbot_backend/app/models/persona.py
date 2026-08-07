@@ -9,9 +9,11 @@ COMPACT_MARKDOWN_V1 = (
     "You must format your answer using GitHub-Flavored Markdown and exactly these three sections in this order:\n"
     "### Thought\n"
     "- 1–2 complete sentences of reasoning/context only. Do not put actions here.\n"
+    "- Finish each sentence; never cut a sentence short mid-phrase.\n"
     "\n"
     "### What to do\n"
     "- Exactly 3 bullet points, one concrete action each. Use '-' as the bullet. Do not use unicode bullets.\n"
+    "- Write each bullet as a complete imperative sentence (plain text, no bold title prefixes).\n"
     "- Bullets must be actionable steps, not leftover reasoning from Thought.\n"
     "- If you would use an ordered list, keep text on the same line as the number (e.g., '1. Do X').\n"
     "\n"
@@ -23,21 +25,22 @@ COMPACT_MARKDOWN_V1 = (
     "Rules: Use '###' for headings (never bold-as-heading). Insert a blank line between blocks. "
     "Do not include tables or code blocks unless explicitly requested. "
     "Do not include preambles or conclusions outside the three sections. "
+    "Never truncate with ellipsis (... or …); always finish the sentence or bullet. "
     f"Finish your response with the sentinel token {SENTINEL}."
 )
 
 # Soft structure guidance per response_length
 STRUCTURE_HINTS = {
-    "short": "Keep it concise: Thought ≤ 2 short sentences; bullets ≤ 12 words; next step one short distinct sentence.",
-    "medium": "Be clear: Thought 1–2 sentences; bullets ≤ 18 words; next step one distinct sentence.",
-    "long": "Stay compact but complete: Thought up to 2 sentences; bullets ≤ 24 words; next step one distinct sentence.",
+    "short": "Keep it concise: Thought ≤ 2 short complete sentences; bullets complete and ≤ ~16 words; next step one short distinct sentence. No ellipsis.",
+    "medium": "Be clear: Thought 1–2 complete sentences; bullets complete and ≤ ~22 words; next step one distinct sentence. No ellipsis.",
+    "long": "Stay compact but complete: Thought up to 2 full sentences; bullets complete and ≤ ~30 words; next step one distinct sentence. No ellipsis.",
 }
 
-# Conservative token ceilings (kept close to prior behavior to avoid breaking changes)
+# Enough headroom so compact sections finish sentences (models were cutting mid-bullet at 600).
 MAX_TOKENS_MAP = {
-    "short": 350,
-    "medium": 600,
-    "long": 900,
+    "short": 500,
+    "medium": 850,
+    "long": 1200,
 }
 
 _HEADING_ALIASES = {
@@ -115,19 +118,74 @@ def _collapse_blank_runs(text: str) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def _truncate_words(s: str, limit: int) -> str:
-    words = s.strip().split()
+_DANGLING_TAIL = re.compile(
+    r"(?i)\b(a|an|the|and|or|of|to|for|with|from|into|onto|by|as|at|in|on|is|are|be|than|that|which|your|my|our|,|;|:|-|—)$"
+)
+
+
+def _strip_md_noise(s: str) -> str:
+    """Normalize for compare / cleanup: drop bold markers and excess spaces."""
+    t = re.sub(r"\*+", "", (s or "").strip())
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
+
+def _soft_limit_words(s: str, limit: int) -> str:
+    """Prefer complete text. Never append ellipsis; drop whole trailing clauses instead."""
+    text = _strip_md_noise(s)
+    if not text:
+        return ""
+    words = text.split()
     if len(words) <= limit:
-        return s.strip()
-    return " ".join(words[:limit]) + "…"
+        return text
+    # Prefer keeping a complete first sentence that fits (or the whole first sentence if longer)
+    parts = [p.strip() for p in re.split(r"(?<=[\.!?])\s+", text) if p.strip()]
+    if parts:
+        kept: List[str] = []
+        count = 0
+        for p in parts:
+            w = len(p.split())
+            if kept and count + w > limit:
+                break
+            if not kept and w > limit:
+                return p  # never mid-sentence cut; keep full first sentence
+            kept.append(p)
+            count += w
+            if count >= limit:
+                break
+        if kept:
+            return " ".join(kept)
+    # No sentence breaks — keep full text rather than clipping with "…"
+    return text
 
 
 def _first_n_sentences(text: str, n: int, max_words: int) -> str:
-    parts = [p.strip() for p in re.split(r"(?<=[\.!?])\s+", text.strip()) if p.strip()]
+    cleaned = _strip_md_noise(text)
+    parts = [p.strip() for p in re.split(r"(?<=[\.!?])\s+", cleaned) if p.strip()]
     if not parts:
-        return _truncate_words(text, max_words)
-    joined = " ".join(parts[: max(1, n)])
-    return _truncate_words(joined, max_words)
+        return _soft_limit_words(cleaned, max_words)
+    chosen: List[str] = []
+    word_count = 0
+    for p in parts[: max(1, n)]:
+        w = len(p.split())
+        if chosen and word_count + w > max_words:
+            break
+        if not chosen and w > max_words:
+            return p  # complete over-budget sentence beats an ellipsis clip
+        chosen.append(p)
+        word_count += w
+    return " ".join(chosen) if chosen else parts[0]
+
+
+def _looks_incomplete(s: str) -> bool:
+    t = (s or "").strip()
+    if not t:
+        return True
+    if _DANGLING_TAIL.search(t.rstrip(".!?")):
+        return True
+    if t[-1] in ",;:":
+        return True
+    return False
 
 
 def _normalize_heading_label(raw: str) -> str | None:
@@ -222,20 +280,20 @@ def _synthesize_bullets_from_text(text: str, max_items: int, per_bullet_words: i
     sentences = re.split(r"(?<=[\.!?])\s+", text.strip())
     items = []
     for s in sentences:
-        s_clean = s.strip("-•* ").strip()
+        s_clean = _strip_md_noise(s.strip("-•* ").strip())
         if not s_clean:
             continue
         if not _is_action_like(s_clean) and len(items) > 0:
             continue
-        items.append(_truncate_words(s_clean, per_bullet_words))
+        items.append(_soft_limit_words(s_clean, per_bullet_words))
         if len(items) >= max_items:
             break
     if len(items) < max_items:
         for s in sentences:
-            s_clean = s.strip("-•* ").strip()
+            s_clean = _strip_md_noise(s.strip("-•* ").strip())
             if not s_clean:
                 continue
-            cand = _truncate_words(s_clean, per_bullet_words)
+            cand = _soft_limit_words(s_clean, per_bullet_words)
             if cand not in items:
                 items.append(cand)
             if len(items) >= max_items:
@@ -244,35 +302,62 @@ def _synthesize_bullets_from_text(text: str, max_items: int, per_bullet_words: i
 
 
 def _norm_compare(s: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+    return re.sub(r"[^a-z0-9]+", "", _strip_md_noise(s).lower())
+
+
+def _is_near_duplicate(a: str, b: str) -> bool:
+    an, bn = _norm_compare(a), _norm_compare(b)
+    if not an or not bn:
+        return False
+    if an == bn:
+        return True
+    # Shared significant prefix (handles "Disconnect X" vs "Immediately disconnect X")
+    n = max(10, min(len(an), len(bn)) // 2)
+    if an.startswith(bn[:n]) or bn.startswith(an[:n]):
+        return True
+    # High token overlap
+    aw, bw = set(re.findall(r"[a-z0-9]{3,}", _strip_md_noise(a).lower())), set(
+        re.findall(r"[a-z0-9]{3,}", _strip_md_noise(b).lower())
+    )
+    if not aw or not bw:
+        return False
+    overlap = len(aw & bw) / max(1, min(len(aw), len(bw)))
+    return overlap >= 0.72
 
 
 def _distinct_next_step(candidate: str, bullets: List[str], fallback: str, max_words: int) -> str:
     """Ensure Next step is not a duplicate of a What-to-do bullet."""
-    cand = _truncate_words(_first_n_sentences(candidate or "", 1, max_words), max_words)
-    norms = {_norm_compare(b) for b in bullets if b}
-    if cand and _norm_compare(cand) not in norms:
-        # Also reject near-duplicates (prefix overlap)
-        cn = _norm_compare(cand)
-        if not any(cn and (cn.startswith(b[: max(8, len(b) // 2)]) or b.startswith(cn[: max(8, len(cn) // 2)])) for b in norms if b):
-            return cand
-    # Prefer a later bullet phrased as "Start with …" without copying verbatim
-    for b in bullets[1:]:
-        phrased = _truncate_words(f"Start now: {b}", max_words)
-        if _norm_compare(phrased) not in norms:
-            return phrased
-    if bullets:
-        first = bullets[0]
-        # Rephrase so it is clearly the priority call-to-action, not a bullet clone
-        phrased = _truncate_words(f"Begin with this first: {first}", max_words)
-        return phrased
-    return _truncate_words(fallback or "Proceed with the most actionable item.", max_words)
+    cand = _first_n_sentences(candidate or "", 1, max_words)
+    clean_bullets = [_strip_md_noise(b) for b in bullets if b]
+
+    def _ok(text: str) -> bool:
+        if not text or _looks_incomplete(text):
+            return False
+        return not any(_is_near_duplicate(text, b) for b in clean_bullets)
+
+    if _ok(cand):
+        return cand
+    # Prefer a later bullet framed as priority timing — still must not equal that bullet text alone
+    for b in clean_bullets[1:]:
+        phrased = _soft_limit_words(f"Start now by doing this next: {b}", max_words)
+        # Reject if it collapses to the same action fingerprint as bullet 1
+        if clean_bullets and _is_near_duplicate(phrased, clean_bullets[0]):
+            continue
+        if phrased and not _looks_incomplete(phrased):
+            # Distinct enough from bullet text alone (has priority framing)
+            if _norm_compare(phrased) != _norm_compare(b):
+                return phrased
+    # Never echo bullet 1 verbatim; give a priority CTA that points at the list
+    if clean_bullets:
+        return "Begin with the first What-to-do action, then continue down the list."
+    return _soft_limit_words(fallback or "Proceed with the most actionable item.", max_words)
 
 
 def _ensure_compact_shape(text: str, response_length: str) -> str:
     # Normalize and coerce into the 3-section compact shape.
-    per_bullet_words = 12 if response_length == "short" else 18 if response_length == "medium" else 24
-    sentence_words = 28 if response_length == "short" else 40 if response_length == "medium" else 52
+    # Soft budgets: keep full sentences/bullets (no ellipsis clipping).
+    per_bullet_words = 18 if response_length == "short" else 28 if response_length == "medium" else 36
+    sentence_words = 40 if response_length == "short" else 60 if response_length == "medium" else 80
 
     t = _cut_at_sentinel(_rstrip_lines(_normalize_eols(text)))
     lines = t.split("\n")
@@ -284,14 +369,23 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
 
     sections = _extract_heading_blocks(lines)
     thought_text, thought_actions = _split_thought_and_actions(sections["Thought"])
-    bullets = _extract_bullets(sections["What to do"])
-    bullets = thought_actions + bullets
-    next_body = " ".join([l.strip() for l in sections["Next step"] if l.strip()])
+    bullets = [_strip_md_noise(b) for b in _extract_bullets(sections["What to do"])]
+    bullets = [_strip_md_noise(b) for b in (thought_actions + bullets)]
+    next_body = " ".join([_strip_md_noise(l) for l in sections["Next step"] if l.strip()])
 
     have_thought = bool(thought_text.strip())
     have_actions = len(bullets) > 0
     have_next = bool(next_body.strip())
     have_all = have_thought and have_actions and have_next
+
+    def _finalize_bullets(src: List[str]) -> List[str]:
+        cleaned = []
+        for b in src:
+            b2 = _soft_limit_words(b, per_bullet_words)
+            # Drop mid-cut model fragments (e.g. ending in "of" / "to") instead of ellipsis
+            if b2 and not _looks_incomplete(b2):
+                cleaned.append(b2)
+        return cleaned
 
     if not have_all:
         # Build compact output from scratch using best-effort extraction
@@ -299,7 +393,7 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
         if not thought_text:
             thought_text = _first_n_sentences(raw_plain, 2, sentence_words) if raw_plain else ""
         if len(bullets) < 3:
-            extra = _extract_bullets(lines)
+            extra = [_strip_md_noise(b) for b in _extract_bullets(lines)]
             for b in extra:
                 if b not in bullets:
                     bullets.append(b)
@@ -308,7 +402,7 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
                 for b in filler:
                     if b not in bullets:
                         bullets.append(b)
-        bullets = [_truncate_words(b, per_bullet_words) for b in bullets[:3]]
+        bullets = _finalize_bullets(bullets)[:3]
         while len(bullets) < 3:
             bullets.append(
                 [
@@ -334,7 +428,7 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
     # Sections exist — normalize without dumping Thought remainder into actions
     tldr_final = _first_n_sentences(thought_text, 2, sentence_words) if thought_text else "Concise summary unavailable."
 
-    bullets = [_truncate_words(b, per_bullet_words) for b in bullets if b]
+    bullets = _finalize_bullets(bullets)
     # Prefer true action bullets; only pad from What-to-do prose if short
     if len(bullets) < 3:
         wtd_plain = " ".join([l.strip() for l in sections["What to do"] if l.strip() and not l.strip().startswith(("-", "*", "#"))])
@@ -342,6 +436,7 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
         for b in filler:
             if b not in bullets:
                 bullets.append(b)
+        bullets = _finalize_bullets(bullets)
     while len(bullets) < 3:
         bullets.append(
             [
@@ -359,10 +454,11 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
         tldr_final,
         "",
         "### What to do",
+        *[f"- {b}" for b in bullets[:3]],
+        "",
+        "### Next step",
+        next_final,
     ]
-    for b in bullets[:3]:
-        parts.append(f"- {b}")
-    parts.extend(["", "### Next step", next_final])
 
     return "\n".join(parts).strip()
 

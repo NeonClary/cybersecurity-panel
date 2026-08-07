@@ -212,12 +212,13 @@ personas:
     **Formatting (Compact Markdown v1):**
     - Use GitHub-Flavored Markdown.
     - Output exactly three sections in this order:
-      - `### Thought` — complete reasoning or context in 1–2 sentences (never truncate mid-idea into the next section).
-      - `### What to do` — exactly 3 concrete action bullets; each must be a distinct actionable step (not leftover thought prose).
-      - `### Next step` — one imperative sentence that is NOT a copy of the first What-to-do bullet; it should name the single most important action to start with now.
+      - `### Thought` — complete reasoning or context in 1–2 finished sentences (never cut mid-sentence into the next section; never use … or ...).
+      - `### What to do` — exactly 3 concrete action bullets as plain complete imperatives (no bold title prefixes); each a distinct actionable step (not leftover thought prose).
+      - `### Next step` — one imperative sentence that is NOT a copy or near-paraphrase of the first What-to-do bullet; name the single most important action to start with now.
     - Use `###` for headings, `-` for bullets (no unicode bullets), keep number text on the same line (e.g., `1. Do X`).
     - Insert one blank line between blocks.
     - Never put actions under Thought, and never put reasoning bullets under What to do.
+    - Never truncate with ellipsis; finish every sentence and bullet.
 
   personas_dir: "personas/cyber_advisors"
 
