@@ -7,7 +7,7 @@ locate and parse ``app/version.py``.
 import re
 import unittest
 
-from app.api.routes.root import root
+from app.api.routes.root import health
 from app.version import __version__
 
 
@@ -26,8 +26,8 @@ class TestVersion(unittest.TestCase):
         )
 
 
-class TestRootEndpointVersion(unittest.TestCase):
-    """The ``/`` handler should surface the same version we imported
+class TestHealthEndpointVersion(unittest.TestCase):
+    """The ``/health`` handler should surface the same version we imported
     from ``app.version``.
 
     ``app.api.routes.__init__`` eagerly imports every sibling route
@@ -36,6 +36,6 @@ class TestRootEndpointVersion(unittest.TestCase):
     normal import machinery.
     """
 
-    def test_root_endpoint_exposes_imported_version(self):
-        payload = root()
+    def test_health_endpoint_exposes_imported_version(self):
+        payload = health()
         self.assertEqual(payload["version"], __version__)

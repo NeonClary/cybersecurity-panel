@@ -16,7 +16,7 @@ Each file in this directory defines route groups (`APIRouter`) to modularize fun
 | `debug.py` | Developer tools: debug personas, RAG tests, ranking advisor responses |
 | `documents.py` | Upload, parse, index, and query documents via RAG |
 | `provider.py` | Switch between Gemini and Ollama providers |
-| `root.py` | Root `/` endpoint for heartbeat and versioning |
+| `root.py` | `/health` heartbeat and versioning (SPA owns `/`) |
 | `sessions.py` | Tracks and resets session-specific in-memory context |
 | `utils.py` | Helpers used by multiple routers (e.g. session ID management) |
 
@@ -140,9 +140,10 @@ These parse session cookies or generate new session IDs, crucial for maintaining
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | `GET` | Return version + feature list |
+| `/health` | `GET` | Return version + feature list |
 
 Simple heartbeat endpoint used for readiness probes and sanity checks.
+Kept off ``/`` so Hugging Face Spaces / single-container deploys can serve the React SPA at the root URL.
 
 ---
 

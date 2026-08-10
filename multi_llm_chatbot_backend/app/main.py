@@ -93,28 +93,19 @@ def get_public_config():
 # ---------------------------------------------------------------------------
 # When the Docker build copies the React production bundle into ``./static``
 # (sibling of this app/ directory), expose it at "/" so the API and the
-# SPA share the FastAPI origin. In local development the static dir is
-# absent and a JSON banner is returned at "/" instead.
+# SPA share the FastAPI origin.
+#
+# IMPORTANT: Starlette matches path routes *before* mounts. Any ``GET /``
+# API handler (see historical ``routes/root.py``) would shadow this SPA
+# and make HF Spaces look like a bare JSON backend. Health lives at
+# ``/health`` instead.
+#
+# In local API-only development the static dir is absent; ``/health`` and
+# ``/docs`` remain available.
 _static_dir = Path(__file__).resolve().parent.parent / "static"
-_should_mount_static = _static_dir.is_dir()
-
-if _should_mount_static:
+if _static_dir.is_dir():
     app.mount(
         "/",
         StaticFiles(directory=str(_static_dir), html=True),
         name="spa",
     )
-else:
-    @app.get("/")
-    def root():
-        return {
-            "message": f"{settings.app.title} Backend",
-            "version": "2.0.0",
-            "features": [
-                "User Authentication",
-                "Persistent Chat Sessions (SQLite via aiosqlite)",
-                "Ollama Support",
-                "Gemini API Support",
-                "Configurable Personas",
-            ],
-        }

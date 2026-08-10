@@ -8,8 +8,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-@router.get("/")
-def root():
+
+@router.get("/health")
+def health():
+    """Backend heartbeat — kept off ``/`` so the SPA can own the Space root."""
     title = get_settings().app.title
     return {
         "message": f"{title} Backend is up and running",
@@ -20,7 +22,7 @@ def root():
             "Unified Context Handling",
             "Ollama Support",
             "Gemini API Support",
-            "Provider Switching"
-        ]
+            "Provider Switching",
+        ],
     }
 
