@@ -2,7 +2,13 @@ import React, { useState } from 'react';
 import { Download, FileText, FileType, File, Check, X, Loader2 } from 'lucide-react';
 import '../styles/ExportButton.css';
 
-const ExportButton = ({ hasMessages = false, currentSessionId = null, authToken = null, dropdownPlacement = 'below' }) => {
+const ExportButton = ({
+  hasMessages = false,
+  currentSessionId = null,
+  authToken = null,
+  dropdownPlacement = 'below',
+  iconOnly = false,
+}) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportStatus, setExportStatus] = useState(null);
@@ -162,15 +168,22 @@ const ExportButton = ({ hasMessages = false, currentSessionId = null, authToken 
   };
 
   return (
-    <div className={`export-button-container${dropdownPlacement === 'above' ? ' export-dropdown-above' : ''}`}>
+    <div
+      className={[
+        'export-button-container',
+        dropdownPlacement === 'above' ? 'export-dropdown-above' : '',
+        iconOnly ? 'export-button-icon-only' : '',
+      ].filter(Boolean).join(' ')}
+    >
       <button
         onClick={handleExportClick}
         className={getButtonClass()}
         disabled={!hasMessages || isExporting}
         title={getButtonTitle()}
+        aria-label="Export"
       >
         {getButtonIcon()}
-        <span className="export-text">Export</span>
+        {!iconOnly && <span className="export-text">Export</span>}
       </button>
 
       {showDropdown && (

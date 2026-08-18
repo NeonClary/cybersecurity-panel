@@ -149,7 +149,7 @@ chat_page:
         suggestions:
           - "I got a weird bank email — how do I check if it's phishing?"
           - "What should I do if I typed my password on a fake site?"
-          - "How do I talk to family about scam texts without sounding preachy?"
+          - "How do I talk to family about scam texts without sounding like I'm lecturing?"
       - title: "Devices & home network"
         icon: "Laptop"
         color: "#2563EB"

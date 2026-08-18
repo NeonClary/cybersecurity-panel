@@ -5,7 +5,6 @@ import ThinkingIndicator from '../components/ThinkingIndicator';
 import SuggestionsPanel from '../components/SuggestionsPanel';
 import AppHeader from '../components/AppHeader';
 import AdvisorStatusDropdown from '../components/AdvisorStatusDropdown';
-import ExportButton from '../components/ExportButton';
 import Sidebar from '../components/Sidebar';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -17,6 +16,7 @@ import AboutYouModal from '../components/AboutYouModal';
 import ClearDataModal from '../components/ClearDataModal';
 import SettingsModal from '../components/SettingsModal';
 import IntakePanel from '../components/IntakePanel';
+import useChatInputFollowupsVisible from '../hooks/useChatInputFollowupsVisible';
 
 const ACTIVE_ADVISORS_STORAGE_KEY = 'cybersecurityActiveAdvisorIds';
 
@@ -39,13 +39,16 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   const [isLoading, setIsLoading] = useState(false);
   const [thinkingAdvisors, setThinkingAdvisors] = useState([]);
   const [followupChips, setFollowupChips] = useState([]);
-  const [journeySuggestions, setJourneySuggestions] = useState([]);
   const [activeAdvisorIds, setActiveAdvisorIds] = useState([]);
   const [replyingTo, setReplyingTo] = useState(null);
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const messagesEndRef = useRef(null);
   const rankedAdvisorIdsRef = useRef([]);
   const { isDark } = useTheme();
+  const {
+    followupsVisible,
+    setFollowupsVisible,
+  } = useChatInputFollowupsVisible();
   const guestPersona = user?.is_guest ? (user?.guest_persona || null) : null;
 
   const [currentSessionId, setCurrentSessionId] = useState(null);
@@ -475,7 +478,6 @@ const handleNewChat = async (sessionId = null) => {
     setThinkingAdvisors(['system']);
     setFollowupChips([]);
     rankedAdvisorIdsRef.current = [];
-    setJourneySuggestions([]);
 
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat-stream`, {
@@ -581,9 +583,7 @@ const handleNewChat = async (sessionId = null) => {
               }
               break;
             case 'journey_suggestions':
-              if (Array.isArray(d.items) && d.items.length > 0) {
-                setJourneySuggestions(d.items);
-              }
+              // Intentionally ignored: no "advisors think you've completed" banner.
               break;
             case 'progress':
               if (d.phase === 'selected' && Array.isArray(d.selected_advisors)) {
@@ -1081,63 +1081,6 @@ const handleNewChat = async (sessionId = null) => {
           </div>
 
           <div className="floating-input-area">
-            {journeySuggestions.length > 0 && !isLoading && (
-              <div className="journey-suggestions-banner" role="region" aria-label="Journey progress suggestions">
-                <span className="journey-suggestions-label">
-                  Your advisors think you've already completed:
-                </span>
-                {journeySuggestions.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="journey-suggestion-btn"
-                    onClick={async () => {
-                      try {
-                        const resp = await fetch(
-                          `${process.env.REACT_APP_API_URL}/api/journey/me/items/${encodeURIComponent(item.id)}/complete`,
-                          {
-                            method: 'POST',
-                            headers: { Authorization: `Bearer ${authToken}` },
-                          }
-                        );
-                        if (resp.ok) {
-                          setJourneySuggestions(prev => prev.filter(i => i.id !== item.id));
-                        }
-                      } catch (e) {
-                        console.error('Failed to check off journey item:', e);
-                      }
-                    }}
-                  >
-                    ✓ {item.title}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="journey-suggestion-dismiss"
-                  aria-label="Dismiss suggestions"
-                  onClick={() => setJourneySuggestions([])}
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            )}
-            {followupChips.length > 0 && !isLoading && (
-              <div className="followup-chips" role="group" aria-label="Suggested follow-ups">
-                {followupChips.map((chip, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    className="followup-chip"
-                    onClick={() => {
-                      setFollowupChips([]);
-                      handleInputSubmit(chip);
-                    }}
-                  >
-                    {chip}
-                  </button>
-                ))}
-              </div>
-            )}
             {replyingTo && (
               <div className="reply-banner">
                 <div className="reply-info">
@@ -1149,8 +1092,8 @@ const handleNewChat = async (sessionId = null) => {
                 </button>
               </div>
             )}
-            
-            <EnhancedChatInput 
+
+            <EnhancedChatInput
               onSendMessage={handleInputSubmit}
               onFileUploaded={handleFileUploaded}
               uploadedDocuments={uploadedDocuments}
@@ -1158,7 +1101,7 @@ const handleNewChat = async (sessionId = null) => {
               currentChatSessionId={currentSessionId}
               authToken={authToken}
               placeholder={
-                replyingTo 
+                replyingTo
                   ? `Reply to ${replyingTo.advisorName}...`
                   : chatPlaceholder
               }
@@ -1168,15 +1111,50 @@ const handleNewChat = async (sessionId = null) => {
                 setAboutYouInitialTab('profile');
                 setShowAboutYou(true);
               }}
+              showExport
+              exportHasMessages={hasConversationMessages}
+              exportSessionId={currentSessionId}
             />
-            <div className="chat-input-footer-actions">
-              <ExportButton
-                hasMessages={hasConversationMessages}
-                currentSessionId={currentSessionId}
-                authToken={authToken}
-                dropdownPlacement="above"
-              />
-            </div>
+            {followupsVisible && followupChips.length > 0 && !isLoading && (
+              <div className="followup-chips-row">
+                <div className="followup-chips" role="group" aria-label="Suggested follow-ups">
+                  {followupChips.map((chip, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      className="followup-chip"
+                      onClick={() => {
+                        setFollowupChips([]);
+                        handleInputSubmit(chip);
+                      }}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="followup-chips-hide"
+                  onClick={() => setFollowupsVisible(false)}
+                  aria-label="Hide suggested follow-ups"
+                  title="Hide suggested follow-ups"
+                >
+                  <X size={14} aria-hidden="true" />
+                  <span>Hide suggestions</span>
+                </button>
+              </div>
+            )}
+            {!followupsVisible && hasMessages && !isLoading && (
+              <div className="followup-chips-show-bar">
+                <button
+                  type="button"
+                  className="followup-chips-show"
+                  onClick={() => setFollowupsVisible(true)}
+                >
+                  Show suggestions
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

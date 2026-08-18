@@ -121,7 +121,6 @@ Choose (or change) an active track:
 ## Tracking progress
 - Headline progress shows your current level and overall %
 - Check items off as you complete them
-- Advisors may propose a check-off when a chat demonstrates readiness — you confirm
 
 Revisit Journey anytime to see how far you've come and what's next.`,
   },

@@ -65,6 +65,59 @@
   font-weight: 500;
 }
 
+/* Icon-only variant — matches mic/send weight inside chat input */
+.export-button-container.export-button-icon-only {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.export-button-container.export-button-icon-only .export-button {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border-primary);
+}
+
+.export-button-container.export-button-icon-only .export-button:hover:not(.disabled) {
+  transform: none;
+  box-shadow: none;
+  background: var(--bg-secondary);
+}
+
+.export-button-container.export-button-icon-only .export-button.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.export-button-container.export-button-icon-only .export-button.success,
+.export-button-container.export-button-icon-only .export-button.error {
+  border-radius: 50%;
+}
+
+.export-button-container.export-button-icon-only .export-dropdown {
+  right: 0;
+  left: auto;
+}
+
+.export-button-container.export-button-icon-only.export-dropdown-above .export-status {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 768px) {
+  .export-button-container.export-button-icon-only .export-button {
+    width: 32px;
+    height: 32px;
+  }
+}
+
 /* Spinning animation for loading state */
 .spinning {
   animation: spin 1s linear infinite;

@@ -83,73 +83,6 @@ def _schedule_fact_extraction(user_id, message_text: str) -> None:
     except RuntimeError as exc:
         logger.warning(f"Could not schedule fact extraction: {exc}")
 
-async def _propose_journey_checkoffs(user_id, session) -> List[Dict[str, str]]:
-    """Panel-proposed check-offs (plan §7): infer journey items the user has
-    evidently completed from the conversation. The user confirms in the UI —
-    nothing is checked off automatically."""
-    try:
-        from app.core.tracks_loader import get_track
-
-        db = get_database()
-        doc = await db.goal_tracks.find_one({"user_id": user_id})
-        if not doc or not doc.get("active_track_id"):
-            return []
-        track = get_track(doc["active_track_id"])
-        if not track:
-            return []
-        checked = set(doc.get("checked_item_ids") or [])
-        candidates = [
-            it for lvl in track.levels for it in lvl.items if it.id not in checked
-        ][:15]
-        if not candidates:
-            return []
-
-        llm = chat_orchestrator.llm_client
-        if llm is None:
-            return []
-
-        convo = "\n".join(
-            f"{m.get('role', 'user')}: {str(m.get('content', ''))[:400]}"
-            for m in session.get_recent_messages(6)
-        )
-        items_block = "\n".join(f"- {it.id}: {it.title}" for it in candidates)
-
-        raw = await llm.generate(
-            system_prompt=(
-                "You review a security-journey checklist against a "
-                "conversation. List ONLY the ids of items the user has "
-                "clearly stated they already did, or that the conversation "
-                "plainly shows are complete. Be conservative — when in "
-                "doubt, leave it out. Respond ONLY with JSON: "
-                '{"completed_item_ids": ["id", ...]}'
-            ),
-            context=[{
-                "role": "user",
-                "content": (
-                    f"--- Checklist ---\n{items_block}\n\n"
-                    f"--- Conversation ---\n{convo}"
-                ),
-            }],
-            temperature=0.1,
-            max_tokens=120,
-            response_mime_type="application/json",
-        )
-
-        match = re.search(r"\{.*\}", raw or "", re.DOTALL)
-        parsed = json.loads(match.group(0)) if match else {}
-        ids = parsed.get("completed_item_ids")
-        if not isinstance(ids, list):
-            return []
-        by_id = {it.id: it for it in candidates}
-        return [
-            {"id": str(iid), "title": by_id[str(iid)].title}
-            for iid in ids
-            if str(iid) in by_id
-        ][:3]
-    except Exception as exc:
-        logger.warning(f"Journey check-off proposal failed: {exc}")
-        return []
-
 
 # Enhanced data models
 class UserInput(BaseModel):
@@ -180,7 +113,6 @@ class NewChatRequest(BaseModel):
 
 ChatStreamEventType = Literal[
     "error", "progress", "clarification", "advisor", "followups",
-    "journey_suggestions",
 ]
 
 
@@ -366,17 +298,6 @@ async def chat_stream(
                 yield ChatStreamLine(
                     type="followups",
                     data={"suggestions": followups},
-                ).to_ndjson()
-
-            # Panel-proposed journey check-offs (plan §7); the user confirms
-            # each suggestion in the UI before anything is marked complete.
-            checkoff_items = await _propose_journey_checkoffs(
-                current_user.id, session
-            )
-            if checkoff_items:
-                yield ChatStreamLine(
-                    type="journey_suggestions",
-                    data={"items": checkoff_items},
                 ).to_ndjson()
 
             # Regenerate the dual user summaries after each completed chat

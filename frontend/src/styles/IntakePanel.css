@@ -1,7 +1,7 @@
 .intake-panel {
   max-width: 42rem;
-  margin: 2.5rem auto;
-  padding: 1.75rem 1.5rem;
+  margin: 0 auto;
+  padding: 0 16px 0;
   text-align: center;
 }
 
@@ -9,34 +9,34 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 2rem;
+  height: 2rem;
   border-radius: 999px;
   background: var(--accent-soft, #ccfbf1);
   color: var(--accent, #0f766e);
-  margin-bottom: 1rem;
+  margin-bottom: 8px;
 }
 
 .intake-greeting {
-  font-size: clamp(1.25rem, 2.5vw, 1.65rem);
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
   font-weight: 650;
-  line-height: 1.35;
+  line-height: 1.3;
   color: var(--text-primary, #0f172a);
-  margin: 0 0 0.5rem;
+  margin: 0 0 4px;
 }
 
 .intake-sub {
-  margin: 0 0 1.25rem;
+  margin: 0 0 12px;
   color: var(--text-secondary, #64748b);
-  font-size: 0.95rem;
+  font-size: 0.875rem;
 }
 
 .intake-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
+  gap: 8px;
   justify-content: center;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
 }
 
 .intake-chip {
@@ -45,10 +45,10 @@
   background: var(--surface, #fff);
   color: var(--text-primary, #0f172a);
   border-radius: 999px;
-  padding: 0.65rem 1rem;
-  font-size: 0.9rem;
+  padding: 6px 14px;
+  font-size: 0.85rem;
   cursor: pointer;
-  min-height: 44px;
+  min-height: 36px;
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.12s ease;
 }
 
@@ -113,10 +113,24 @@
   border: 0;
 }
 
+@media (max-height: 800px) {
+  .intake-avatar {
+    display: none;
+  }
+
+  .intake-greeting {
+    font-size: 1.1rem;
+  }
+
+  .intake-sub {
+    margin-bottom: 8px;
+  }
+}
+
 @media (max-width: 768px) {
   .intake-panel {
-    margin: 1.25rem auto;
-    padding: 1.25rem 1rem;
+    margin: 0 auto;
+    padding: 0 8px 8px;
   }
 
   .intake-chips {

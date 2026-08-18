@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, FileText, X, Trash2, Download, Mic, MicOff, MessageCircle, ClipboardList, Loader2, Columns3, FileOutput } from 'lucide-react';
+import { Send, Paperclip, FileText, X, Trash2, Mic, MicOff, MessageCircle, ClipboardList, Loader2, Columns3, FileOutput } from 'lucide-react';
 import FileUpload from './FileUpload';
+import ExportButton from './ExportButton';
 
 const EnhancedChatInput = ({ 
   onSendMessage, 
@@ -16,6 +17,9 @@ const EnhancedChatInput = ({
   synthesizedMode = false,
   onToggleSynthesized,
   ensureSessionId,
+  showExport = false,
+  exportHasMessages = false,
+  exportSessionId = null,
 }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [showUpload, setShowUpload] = useState(false);
@@ -381,6 +385,15 @@ const EnhancedChatInput = ({
             >
               {isTranscribing ? <Loader2 size={16} className="spinning" /> : isRecording ? <MicOff size={16} /> : <Mic size={16} />}
             </button>
+            {showExport && (
+              <ExportButton
+                hasMessages={exportHasMessages}
+                currentSessionId={exportSessionId}
+                authToken={authToken}
+                dropdownPlacement="above"
+                iconOnly
+              />
+            )}
             <button
               onClick={handleSend}
               disabled={!canSend}

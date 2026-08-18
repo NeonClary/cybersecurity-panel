@@ -20,9 +20,6 @@ const SuggestionsPanel = ({ onSuggestionClick, guestPersona = null }) => {
     <div className="suggestions-panel">
       <div className="suggestions-header">
         <h2 className="suggestions-title">Getting Started</h2>
-        <p className="suggestions-subtitle">
-          Choose a topic to get advice from your advisors
-        </p>
       </div>
       
       <div className="suggestions-grid">
@@ -38,7 +35,7 @@ const SuggestionsPanel = ({ onSuggestionClick, guestPersona = null }) => {
                     color: category.color || '#6B7280'
                   }}
                 >
-                  <Icon size={20} />
+                  <Icon size={16} />
                 </div>
                 <h3 
                   className="category-title"
