@@ -720,22 +720,21 @@ const DeliverablesView = ({ allStates, authToken }) => {
 
   const InsertPanel = (
     <div className="deliverable-insertables">
-      <ArxivSearch onPick={insertIntoActive}/>
-      <div style={{ fontSize: 11, color: 'var(--canvas-text-4)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginTop: 14, marginBottom: 6 }}>
-        From canvas · {localInsertables.length}
-      </div>
-      {localInsertables.length === 0 && (
-        <div style={{ padding: 12, fontSize: 11.5, color: 'var(--canvas-text-3)', background: 'var(--canvas-surface)', border: '1px dashed var(--canvas-border-2)', borderRadius: 7 }}>
-          Add a Bibliography, Highlights, Outline, or Writing widget to your canvas to surface its content here.
-        </div>
+      <SourceSearch onPick={insertIntoActive}/>
+      {localInsertables.length > 0 && (
+        <>
+          <div style={{ fontSize: 11, color: 'var(--canvas-text-4)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginTop: 14, marginBottom: 6 }}>
+            From workspace widgets · {localInsertables.length}
+          </div>
+          {localInsertables.map((it, i) => (
+            <button key={i} onClick={() => insertIntoActive(it.snippet)} className="canvas-insert-row">
+              <span className="tag-pill">{it.kind}</span>
+              <span style={{ flex: 1, fontSize: 11.5, color: 'var(--canvas-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
+              <Icon name="plus" size={12} style={{ color: 'var(--canvas-text-3)' }}/>
+            </button>
+          ))}
+        </>
       )}
-      {localInsertables.map((it, i) => (
-        <button key={i} onClick={() => insertIntoActive(it.snippet)} className="canvas-insert-row">
-          <span className="tag-pill">{it.kind}</span>
-          <span style={{ flex: 1, fontSize: 11.5, color: 'var(--canvas-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
-          <Icon name="plus" size={12} style={{ color: 'var(--canvas-text-3)' }}/>
-        </button>
-      ))}
     </div>
   );
 
@@ -1345,20 +1344,73 @@ function PosterPanel({ section, sections, updateSection }) {
 // ============================================================================
 // arXiv search — public ATOM API, CORS-enabled.
 // ============================================================================
-function ArxivSearch({ onPick }) {
+const SEARCH_SOURCES = [
+  { id: 'arxiv', label: 'arXiv' },
+  { id: 'cisa', label: 'CISA' },
+  { id: 'nvd', label: 'NVD' },
+  { id: 'nist', label: 'NIST' },
+];
+
+function dbgSearch(hypothesisId, message, data) {
+  // #region agent log
+  fetch('http://127.0.0.1:7245/ingest/938f7946-d174-4612-9741-b9453e863efb',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'246f91'},body:JSON.stringify({sessionId:'246f91',runId:'pre-fix',hypothesisId,location:'CanvasDeliverables.js:SourceSearch',message,data,timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+}
+
+function SourceSearch({ onPick }) {
   const [q, setQ] = useState('');
+  const [source, setSource] = useState('arxiv');
   const [busy, setBusy] = useState(false);
   const [results, setResults] = useState([]);
 
   const search = async () => {
     if (!q.trim()) return;
     setBusy(true);
+    setResults([]);
+    const query = q.trim();
+    dbgSearch('H-engine', 'search start', { source, queryLen: query.length });
     try {
-      const url = `https://export.arxiv.org/api/query?search_query=all:${encodeURIComponent(q)}&max_results=5`;
+      if (source === 'cisa') {
+        const url = `https://www.cisa.gov/news-events/cybersecurity-advisories?search=${encodeURIComponent(query)}`;
+        dbgSearch('H-tab', 'open tab', { source, url });
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (source === 'nvd') {
+        const url = `https://nvd.nist.gov/vuln/search/results?form_type=Basic&results_type=overview&query=${encodeURIComponent(query)}&search_type=all`;
+        dbgSearch('H-tab', 'open tab', { source, url });
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (source === 'nist') {
+        const url = `https://csrc.nist.gov/search?terms=${encodeURIComponent(query)}`;
+        dbgSearch('H-tab', 'open tab', { source, url });
+        window.open(url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent('all:' + query)}&max_results=5`;
+      dbgSearch('H1', 'arxiv fetch begin', { url: url.slice(0, 180) });
       const res = await fetch(url);
       const xml = await res.text();
+      dbgSearch('H2', 'arxiv fetch done', {
+        status: res.status,
+        ok: res.ok,
+        contentType: res.headers.get('content-type'),
+        xmlLen: xml.length,
+        xmlHead: xml.slice(0, 160),
+      });
+      if (!res.ok) {
+        dbgSearch('H3', 'arxiv http not ok', { status: res.status });
+        fireToast('arXiv search failed', 'danger');
+        return;
+      }
       const doc = new DOMParser().parseFromString(xml, 'text/xml');
-      const entries = Array.from(doc.getElementsByTagName('entry')).map(e => {
+      const parseErr = doc.querySelector('parsererror')?.textContent?.slice(0, 120) || null;
+      const tagged = doc.getElementsByTagName('entry');
+      const nsTagged = doc.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'entry');
+      dbgSearch('H4', 'arxiv parse', { tagged: tagged.length, nsTagged: nsTagged.length, parseErr });
+      const entryNodes = tagged.length ? tagged : nsTagged;
+      const entries = Array.from(entryNodes).map(e => {
         const id = e.getElementsByTagName('id')[0]?.textContent?.split('/').pop() || '';
         const title = e.getElementsByTagName('title')[0]?.textContent?.trim() || '';
         const authors = Array.from(e.getElementsByTagName('author')).map(a => a.getElementsByTagName('name')[0]?.textContent?.trim()).filter(Boolean);
@@ -1366,7 +1418,9 @@ function ArxivSearch({ onPick }) {
         return { id, title, authors, year };
       });
       setResults(entries);
+      if (!entries.length) fireToast('No arXiv results', 'danger');
     } catch (e) {
+      dbgSearch('H1', 'arxiv fetch throw', { name: e?.name, message: String(e?.message || e).slice(0, 180) });
       fireToast('arXiv search failed', 'danger');
     } finally {
       setBusy(false);
@@ -1376,14 +1430,17 @@ function ArxivSearch({ onPick }) {
   return (
     <div>
       <div style={{ fontSize: 11, color: 'var(--canvas-text-4)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: 6 }}>
-        Search arXiv
+        Reference search
       </div>
-      <div style={{ display: 'flex', gap: 4 }}>
-        <input className="input" placeholder="Predictive coding…" value={q}
+      <div className="arxiv-search-row">
+        <select value={source} onChange={e => { setSource(e.target.value); setResults([]); }} title="Search source" aria-label="Search source">
+          {SEARCH_SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+        </select>
+        <input className="input" placeholder={source === 'arxiv' ? 'Predictive coding…' : 'Search query…'} value={q}
           onChange={e => setQ(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') search(); }}
-          style={{ fontSize: 12, padding: '5px 8px' }}/>
-        <button className="icon-btn" onClick={search} disabled={!q.trim() || busy} title="Search arXiv">
+          style={{ fontSize: 12, padding: '5px 8px', flex: 1 }}/>
+        <button className="icon-btn" onClick={search} disabled={!q.trim() || busy} title="Search">
           {busy ? <div className="spinner"/> : <Icon name="search" size={13}/>}
         </button>
       </div>

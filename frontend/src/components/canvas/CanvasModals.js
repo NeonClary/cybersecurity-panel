@@ -815,6 +815,7 @@ export function MeetingModal({ data, onClose }) {
 export function PaletteModal({ data, onClose }) {
   const [q, setQ] = useState('');
   const [cat, setCat] = useState('all');
+  const [preview, setPreview] = useState(null);
   const present = new Set(data.layout.map(w => w.type));
 
   const filtered = useMemo(() => {
@@ -834,7 +835,7 @@ export function PaletteModal({ data, onClose }) {
   };
 
   return (
-    <div className="canvas-modal huge" onClick={(e) => e.stopPropagation()}>
+    <div className="canvas-modal huge palette-modal-wide" onClick={(e) => e.stopPropagation()}>
       <div className="modal-head">
         <div className="modal-icon"><Icon name="layout" size={18}/></div>
         <div style={{ flex: 1 }}>
@@ -843,7 +844,8 @@ export function PaletteModal({ data, onClose }) {
         </div>
         <button className="icon-btn" onClick={onClose}><Icon name="x" size={16}/></button>
       </div>
-      <div className="modal-body">
+      <div className="modal-body palette-modal-body">
+        <div className="palette-main">
         <div className="palette-search">
           <div style={{ position: 'relative' }}>
             <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: 'var(--canvas-text-3)' }}><Icon name="search" size={14}/></span>
@@ -865,6 +867,9 @@ export function PaletteModal({ data, onClose }) {
             return (
               <button key={w.type}
                 className={`palette-item ${w.critic ? 'critic' : ''} ${added ? 'added' : ''}`}
+                title={w.desc}
+                onMouseEnter={() => setPreview(w)}
+                onFocus={() => setPreview(w)}
                 onClick={() => add(w)} disabled={added}>
                 <div className="pi-icon"><Icon name={w.icon} size={16}/></div>
                 <div className="pi-content">
@@ -887,6 +892,30 @@ export function PaletteModal({ data, onClose }) {
             </div>
           )}
         </div>
+        </div>
+        <aside className="palette-preview-pane" aria-label="Widget preview">
+          {preview ? (
+            <>
+              <div className={`widget-preview-mini ${preview.critic ? 'critic' : ''}`}>
+                <div className="widget-preview-mini-head">
+                  <Icon name={preview.icon} size={14}/>
+                  <span>{preview.name}</span>
+                  <span className="size-pill">{preview.defaultSize}</span>
+                </div>
+                <div className="widget-preview-mini-body">
+                  <span className="widget-preview-skel"/>
+                  <span className="widget-preview-skel short"/>
+                  <span className="widget-preview-skel"/>
+                </div>
+              </div>
+              <div className="widget-preview-pane-name">{preview.name}</div>
+              <p className="widget-preview-desc">{preview.desc}</p>
+              {preview.critic && <div className="widget-preview-note">Challenge widget — use as a scratchpad; deeper critique lives in chat.</div>}
+            </>
+          ) : (
+            <div className="widget-preview-empty">Hover a widget to preview how it looks on the workspace.</div>
+          )}
+        </aside>
       </div>
     </div>
   );
