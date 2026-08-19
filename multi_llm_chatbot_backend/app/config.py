@@ -63,12 +63,18 @@ class AppConfig(BaseModel):
     user_avatars: List[UserAvatarOption] = []
 
 
+class GuestGoalChip(BaseModel):
+    title: str = ""
+    detail: str = ""
+
+
 class HomepageConfig(BaseModel):
     headline_prefix: str = "Get Guidance from"
     headline_highlight: str = "Advisor Personas"
     description: str = ""
     features_title: str = "Why Choose Our Advisory Panel?"
     features: List[FeatureConfig] = []
+    guest_goals: Dict[str, GuestGoalChip] = {}
 
 
 class AcademicStage(BaseModel):
@@ -100,8 +106,9 @@ class IntakeChipConfig(BaseModel):
 
 
 class IntakeConfig(BaseModel):
-    greeting: str = (
-        "You've contacted me today — what is it that I can help you with in cybersecurity?"
+    greeting: str = "What cybersecurity problem should we work on first?"
+    greeting_subheader: str = (
+        "I can help with threats, controls, incidents, compliance, or your security career."
     )
     chips: List[IntakeChipConfig] = []
     # Optional persona-keyed chip lists for Explore-as-guest (personal|business|other)
@@ -228,6 +235,8 @@ class OrchestratorConfig(BaseModel):
     triage_advisor: str = "incident_responder"
     # Number of generated follow-up chips after each panel response (0 = off).
     followup_count: int = 3
+    # Per-advisor generation cap so one hung model cannot stall the panel.
+    persona_response_timeout_seconds: float = 90.0
     clarification_questions: List[str] = [
             "Could you provide more details about what you need help with?"]
     clarification_suggestions: List[str] = [

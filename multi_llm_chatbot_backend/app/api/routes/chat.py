@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 import traceback
 from typing import Any, Dict, List, Literal, Optional
 
@@ -18,10 +19,17 @@ from app.core.database import get_database
 from app.core.session_manager import get_session_manager
 from app.models.user import User
 from app.api.routes.user_profile import PROFILE_FIELDS, enrich_profile_from_user
+from app.core.advisor_stream import iter_parallel_advisor_events
 from app.config import get_settings
 from app.core import user_knowledge as uk
+from app.core.user_context import extract_stated_goal
 from app.core import bootstrap
-from app.core.starter_suggestions import generate_starter_suggestions
+from app.core.starter_suggestions import (
+    fallback_starter_greeting,
+    generate_starter_greeting,
+    generate_starter_suggestions,
+    iter_starter_suggestion_events,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +109,18 @@ class ChatMessage(BaseModel):
     chat_session_id: Optional[str] = None  # MongoDB chat session ID
     response_length: str = "medium"
     active_advisors: Optional[List[str]] = None
+    prefetch: bool = False
+
+
+def prefetch_session_id(user_id: Any) -> str:
+    return f"prefetch_{user_id}"
+
+
+def _orchestrator_llm():
+    llm = chat_orchestrator.llm_client
+    if llm is None and chat_orchestrator.personas:
+        llm = next(iter(chat_orchestrator.personas.values())).llm
+    return llm
 
 class ReplyToAdvisor(BaseModel):
     user_input: str
@@ -119,15 +139,22 @@ class NewChatRequest(BaseModel):
     title: Optional[str] = "New Chat"
 
 class StarterSuggestionsRequest(BaseModel):
-    count: int = Field(2, ge=1, le=8)
+    count: int = Field(2, ge=1, le=12)
     exclude: List[str] = Field(default_factory=list)
     category_titles: List[str] = Field(default_factory=list)
 
 class StarterSuggestionsResponse(BaseModel):
     suggestions: List[str]
 
+
+class StarterGreetingResponse(BaseModel):
+    greeting: str
+    subheader: str
+    cached: bool = False
+
 ChatStreamEventType = Literal[
-    "error", "progress", "clarification", "advisor", "followups",
+    "error", "progress", "clarification", "advisor",
+    "advisor_start", "advisor_delta", "advisor_done", "followups",
 ]
 
 
@@ -157,37 +184,66 @@ async def chat_stream(
 
     async def _event_generator():
         try:
+            prefetch = bool(message.prefetch)
             # Load or create the in-memory session
-            if message.chat_session_id:
+            if prefetch:
+                sid = prefetch_session_id(current_user.id)
+                session = session_manager.get_session(sid)
+                session.clear_messages()
+            elif message.chat_session_id:
                 sid = f"chat_{message.chat_session_id}"
-                if sid not in session_manager.sessions:
+                existing = session_manager.sessions.get(sid)
+                needs_history = existing is None or not any(
+                    (m.get("role") == "user" and str(m.get("content") or "").strip())
+                    for m in (getattr(existing, "messages", None) or [])
+                )
+                if needs_history:
                     sid = await get_or_create_session_for_request_async(
                         request,
                         chat_session_id=message.chat_session_id,
                         user_id=str(current_user.id),
                     )
+                session = session_manager.get_session(sid)
             else:
                 sid = await get_or_create_session_for_request_async(request)
+                session = session_manager.get_session(sid)
 
-            session = session_manager.get_session(sid)
+            t0 = time.perf_counter()
+
+            def _elapsed() -> str:
+                return f"{time.perf_counter() - t0:.2f}s"
+
             await _attach_user_profile_context(session, current_user)
+            await chat_orchestrator.attach_datetime_context(session)
+            logger.info("chat-stream profile+datetime ready in %s", _elapsed())
 
             # Append user message to in-memory session and persist to MongoDB
             session.append_message("user", message.user_input)
-            _schedule_fact_extraction(current_user.id, message.user_input)
-            if message.chat_session_id:
-                await persist_message(message.chat_session_id, {
-                    "id": str(ObjectId()),
-                    "type": "user",
-                    "content": message.user_input,
-                })
+            if not prefetch:
+                _schedule_fact_extraction(current_user.id, message.user_input)
+            if message.chat_session_id and not prefetch:
+                async def _persist_user():
+                    try:
+                        await persist_message(message.chat_session_id, {
+                            "id": str(ObjectId()),
+                            "type": "user",
+                            "content": message.user_input,
+                        })
+                    except Exception as persist_err:
+                        logger.warning("Background user persist failed: %s", persist_err)
+
+                try:
+                    asyncio.create_task(_persist_user())
+                except RuntimeError as persist_err:
+                    logger.warning("Could not schedule user persist: %s", persist_err)
 
             user_ctx = getattr(session, "user_profile_context", "") or ""
             if await chat_orchestrator.needs_clarification_improved(
                 session, message.user_input, user_ctx
             ):
+                logger.info("chat-stream clarification needed after %s", _elapsed())
                 clar = await chat_orchestrator.generate_contextual_clarification(
-                    message.user_input, user_ctx
+                    message.user_input, user_ctx, session=session
                 )
                 yield ChatStreamLine(
                     type="clarification",
@@ -242,6 +298,10 @@ async def chat_stream(
             )
             top_personas = routing["advisors"]
             urgency = routing["urgency"]
+            logger.info(
+                "chat-stream routed urgency=%s advisors=%s in %s",
+                urgency, top_personas, _elapsed(),
+            )
 
             # Triage short-circuit (plan §5.5): personas lead with immediate
             # first steps instead of profiling questions.
@@ -267,71 +327,85 @@ async def chat_stream(
                 },
             ).to_ndjson()
 
-            done_queue: asyncio.Queue = asyncio.Queue()
+            persona_timeout = float(
+                get_settings().orchestrator.persona_response_timeout_seconds
+            )
 
-            async def _run(pid: str) -> None:
-                try:
-                    persona = chat_orchestrator.get_persona(pid)
-                    result = await chat_orchestrator.generate_single_persona_response(
-                        session, persona,
-                        message.response_length or "medium",
+            def _persona_meta(pid: str) -> Dict[str, str]:
+                persona = chat_orchestrator.get_persona(pid)
+                return {
+                    "persona_name": persona.name if persona else pid,
+                }
+
+            async def _stream_one(pid: str):
+                persona = chat_orchestrator.get_persona(pid)
+                if persona is None:
+                    yield {
+                        "event": "done",
+                        "result": {
+                            "persona_id": pid,
+                            "persona_name": pid,
+                            "response": "This advisor is unavailable.",
+                            "used_documents": False,
+                            "document_chunks_used": 0,
+                        },
+                    }
+                    return
+                async for item in chat_orchestrator.iter_persona_response_stream(
+                    session, persona, message.response_length or "medium",
+                ):
+                    yield item
+
+            async def _on_complete(_pid: str, result: Dict[str, Any]) -> None:
+                session.append_message(_pid, result.get("response", ""))
+
+            first_advisor = True
+            async for event in iter_parallel_advisor_events(
+                top_personas,
+                _stream_one,
+                persona_timeout,
+                _persona_meta,
+                on_complete=_on_complete,
+            ):
+                if first_advisor and event.get("type") == "advisor_start":
+                    logger.info(
+                        "chat-stream first advisor %s in %s",
+                        event.get("data", {}).get("persona_id"),
+                        _elapsed(),
                     )
-                    session.append_message(pid, result["response"])
-                    await done_queue.put(result)
-                except Exception as e:
-                    logger.exception(f"chat-stream _run failed for {pid}: {e}")
-                    failed_persona = chat_orchestrator.get_persona(pid)
-                    await done_queue.put({
-                        "persona_id": pid,
-                        "persona_name": failed_persona.name if failed_persona else pid,
-                        "response": f"I ran into a technical issue. Please try again. ({e!s})",
-                        "used_documents": False,
-                        "document_chunks_used": 0,
-                    })
-
-            tasks = [asyncio.create_task(_run(pid)) for pid in top_personas]
-
-            for _ in range(len(tasks)):
-                result = await done_queue.get()
-                line = ChatStreamLine(
-                    type="advisor",
-                    data={
-                        "persona_id": result["persona_id"],
-                        "persona_name": result["persona_name"],
-                        "content": result["response"],
-                        "used_documents": result.get("used_documents", False),
-                        "document_chunks_used": result.get("document_chunks_used", 0),
-                    },
-                )
-                yield line.to_ndjson()
-
-            await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Generated follow-up chips (plan §5.2): short next-message
-            # suggestions built from conversation + user summary.
-            try:
-                followups = await chat_orchestrator.generate_followups(sid)
-            except Exception as fu_err:
-                logger.warning(f"Follow-up generation errored: {fu_err}")
-                followups = []
-            if followups:
+                    first_advisor = False
                 yield ChatStreamLine(
-                    type="followups",
-                    data={"suggestions": followups},
+                    type=event["type"],
+                    data=event.get("data") or {},
                 ).to_ndjson()
 
-            # Regenerate the dual user summaries after each completed chat
-            # except the first one in this session (plan §4.2 trigger).
-            user_msg_count = len(
-                [m for m in session.messages if m.get("role") == "user"]
-            )
-            if uk.should_regenerate_after_chat(user_msg_count):
-                uk.schedule_summary_regeneration(current_user.id)
+            logger.info("chat-stream all advisors done in %s", _elapsed())
 
             yield ChatStreamLine(
                 type="progress",
                 data={"phase": "complete"},
             ).to_ndjson()
+
+            if not prefetch:
+                # Follow-up chips after complete so the UI can unlock input
+                # without waiting on this extra LLM call.
+                try:
+                    followups = await chat_orchestrator.generate_followups(sid)
+                except Exception as fu_err:
+                    logger.warning(f"Follow-up generation errored: {fu_err}")
+                    followups = []
+                if followups:
+                    yield ChatStreamLine(
+                        type="followups",
+                        data={"suggestions": followups},
+                    ).to_ndjson()
+
+                if uk.should_regenerate_after_chat(
+                    len([m for m in session.messages if m.get("role") == "user"])
+                ):
+                    uk.schedule_summary_regeneration(current_user.id)
+
+            logger.info("chat-stream finished in %s", _elapsed())
 
         except Exception as exc:
             logger.error(f"chat-stream error: {exc}")
@@ -469,12 +543,10 @@ async def starter_suggestions(
     """Generate one Getting Started chip per category, grounded in the user's goal."""
     try:
         user_context = await _load_user_profile_context(current_user)
-        llm = chat_orchestrator.llm_client
-        if llm is None and chat_orchestrator.personas:
-            llm = next(iter(chat_orchestrator.personas.values())).llm
+        llm = _orchestrator_llm()
         titles = [t.strip() for t in (body.category_titles or []) if isinstance(t, str) and t.strip()]
         n = len(titles) if titles else body.count
-        n = max(1, min(int(n), 8))
+        n = max(1, min(int(n), 12))
         suggestions = await generate_starter_suggestions(
             llm,
             user_context,
@@ -486,6 +558,73 @@ async def starter_suggestions(
     except Exception as exc:
         logger.warning("Starter suggestion endpoint failed: %s", exc)
         return StarterSuggestionsResponse(suggestions=[])
+
+
+@router.post("/chat/starter-greeting", response_model=StarterGreetingResponse)
+async def starter_greeting(
+    current_user: User = Depends(get_current_active_user),
+) -> StarterGreetingResponse:
+    """Goal-specific starter greeting + subheader (orchestrator model)."""
+    user_context = ""
+    try:
+        user_context = await _load_user_profile_context(current_user)
+    except Exception as exc:
+        logger.warning("Starter greeting context failed: %s", exc)
+    fallback = fallback_starter_greeting(extract_stated_goal(user_context))
+    try:
+        llm = _orchestrator_llm()
+        result = await asyncio.wait_for(
+            generate_starter_greeting(llm, user_context),
+            timeout=5.0,
+        )
+        return StarterGreetingResponse(
+            greeting=result.get("greeting") or fallback["greeting"],
+            subheader=result.get("subheader") or fallback["subheader"],
+        )
+    except Exception as exc:
+        logger.warning("Starter greeting endpoint failed: %s", exc)
+        return StarterGreetingResponse(
+            greeting=fallback["greeting"],
+            subheader=fallback["subheader"],
+        )
+
+
+@router.post("/chat/starter-suggestions-stream")
+async def starter_suggestions_stream(
+    body: StarterSuggestionsRequest,
+    current_user: User = Depends(get_current_active_user),
+) -> StreamingResponse:
+    """Stream Getting Started chips token-by-token into stable slots 0..n."""
+
+    async def _event_generator():
+        try:
+            user_context = await _load_user_profile_context(current_user)
+            llm = _orchestrator_llm()
+            titles = [
+                t.strip() for t in (body.category_titles or [])
+                if isinstance(t, str) and t.strip()
+            ]
+            if not titles:
+                titles = [f"Starter {i + 1}" for i in range(max(1, min(int(body.count or 1), 12)))]
+            async for event in iter_starter_suggestion_events(
+                llm,
+                user_context,
+                category_titles=titles[:12],
+                exclude=body.exclude or [],
+            ):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except Exception as exc:
+            logger.warning("Starter suggestion stream failed: %s", exc)
+            yield json.dumps({"type": "error", "detail": str(exc)}) + "\n"
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="application/x-ndjson",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/chat/{persona_id}")

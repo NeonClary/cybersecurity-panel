@@ -5,7 +5,12 @@ import json
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.core.starter_suggestions import generate_starter_suggestions
+from app.core.starter_suggestions import (
+    fallback_starter_greeting,
+    generate_starter_greeting,
+    generate_starter_suggestions,
+    iter_starter_suggestion_events,
+)
 
 
 class TestGenerateStarterSuggestions(unittest.TestCase):
@@ -93,3 +98,74 @@ class TestGenerateStarterSuggestions(unittest.TestCase):
             )
         )
         self.assertEqual(result, [])
+
+
+class TestStarterGreeting(unittest.TestCase):
+    def test_fallback_uses_goal_without_old_contacted_copy(self):
+        result = fallback_starter_greeting("Harden personal accounts and backups")
+        self.assertIn("harden personal accounts", result["greeting"].lower())
+        self.assertNotIn("contacted me today", result["greeting"].lower())
+        self.assertTrue(result["subheader"])
+
+    def test_fallback_without_goal(self):
+        result = fallback_starter_greeting("")
+        self.assertIn("cybersecurity", result["greeting"].lower())
+
+    def test_generate_greeting_parses_json(self):
+        llm = MagicMock()
+        llm.generate = AsyncMock(return_value=json.dumps({
+            "greeting": "You asked me to help with the cat-hacker novel. What should we address first?",
+            "subheader": "I will stay on that objective. Ask a specific research or control question.",
+        }))
+        result = asyncio.run(generate_starter_greeting(
+            llm,
+            "USER KNOWLEDGE SUMMARY: stated_goal: sci-fi novel about cats as hackers",
+        ))
+        self.assertIn("cat-hacker", result["greeting"])
+        self.assertIn("objective", result["subheader"])
+
+
+class TestStarterSuggestionStream(unittest.TestCase):
+    def test_emits_stable_slot_indexes_even_if_second_finishes_first(self):
+        async def stream_slow(*_args, **_kwargs):
+            yield "First "
+            yield "question about backups?"
+
+        async def stream_fast(*_args, **_kwargs):
+            yield "Second question about MFA?"
+
+        calls = {"n": 0}
+
+        async def generate_stream(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                async for chunk in stream_slow():
+                    yield chunk
+            else:
+                async for chunk in stream_fast():
+                    yield chunk
+
+        llm = MagicMock()
+        llm.generate_stream = generate_stream
+        ctx = "USER KNOWLEDGE SUMMARY: stated_goal: harden personal accounts"
+
+        async def collect():
+            events = []
+            async for event in iter_starter_suggestion_events(
+                llm,
+                ctx,
+                category_titles=["Everyday digital safety", "Scams & phishing"],
+                stagger_seconds=0,
+                concurrency=2,
+            ):
+                events.append(event)
+            return events
+
+        events = asyncio.run(collect())
+        dones = {e["slot"]: e["text"] for e in events if e["type"] == "done"}
+        self.assertEqual(set(dones), {0, 1})
+        self.assertIn("backups", dones[0].lower())
+        self.assertIn("mfa", dones[1].lower())
+        deltas = [e for e in events if e["type"] == "delta"]
+        self.assertTrue(any(e["slot"] == 0 for e in deltas))
+        self.assertTrue(any(e["slot"] == 1 for e in deltas))

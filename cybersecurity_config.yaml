@@ -31,11 +31,21 @@ homepage:
       description: "Receive layered perspectives on risk, controls, detection, and response"
       icon: "Shield"
     - title: "Neon Security Model"
-      description: "Powered by BrainForge Security on Neon 4090 x1-3 with GPT-5.4 fallback"
+      description: "Neon.ai private custom BrainForge LLM, run on-premises with Nvidia hardware"
       icon: "Brain"
     - title: "Available 24/7"
       description: "Get answers during incidents, audits, study sessions, or late-night architecture reviews"
       icon: "Clock"
+  guest_goals:
+    personal:
+      title: "I'm securing my personal digital life"
+      detail: "Passwords, MFA, backups, phishing — sample Journey & chat for individuals"
+    business:
+      title: "I am responsible for securing an organization"
+      detail: "SMB / IT baseline, CIS IG1 sample track, policies & Workspace demo"
+    other:
+      title: "Something else"
+      detail: "Describe your situation — we'll tailor the demo"
 
 login:
   subtitle: "Sign in to continue your security journey"
@@ -73,7 +83,9 @@ chat_page:
   placeholder: "Ask your advisors about threats, controls, incidents, compliance, or your security career..."
   intake:
     greeting: >-
-      You've contacted me today — what is it that I can help you with in cybersecurity?
+      What cybersecurity problem should we work on first?
+    greeting_subheader: >-
+      I can help with threats, controls, incidents, compliance, or your security career.
     chips:
       - { id: "hacked", label: "I think I've been hacked", prompt: "I think I may have been hacked or compromised. Help me figure out what to do first." }
       - { id: "audit", label: "Prepare for an audit or review", prompt: "I have a cybersecurity review or audit coming up and I need help preparing." }
@@ -229,6 +241,7 @@ orchestrator:
   required_advisor: "jerry_huaute"
   triage_advisor: "incident_responder"
   followup_count: 3
+  persona_response_timeout_seconds: 90
   specific_keywords:
     - "security"
     - "cyber"
