@@ -17,13 +17,23 @@ const findScrollParent = (node) => {
 
 /**
  * Show as many advisor answers as fit side-by-side; carousel when they don't.
- * Messages should already be ordered most-relevant-first (orchestrator rank).
+ * Messages should already be in start-of-stream order (first token first).
  *
  * Controls sit just to the right of the visible answer(s) when that fits.
  * If not, they overlay the last visible card (or sit below) so they stay on-screen.
  * They stay vertically centered in the visible chat pane.
  */
-const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchReferences, userAvatarId, userAvatarOptions }) => {
+const AdvisorCarousel = ({
+  messages = [],
+  onReply,
+  onExpand,
+  onClick,
+  onSearchReferences,
+  onReferenceSearchOpened,
+  userQuestion = '',
+  userAvatarId,
+  userAvatarOptions,
+}) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [layout, setLayout] = useState({
     visible: 1,
@@ -36,7 +46,7 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
   const controlsColRef = useRef(null);
   const controlsInnerRef = useRef(null);
 
-  const messageKey = messages.map((m) => m.id).join('|');
+  const firstMessageId = messages[0]?.id;
   const visibleCount = Math.min(layout.visible, messages.length || 1);
   const maxIndex = Math.max(0, messages.length - visibleCount);
   const showAll = visibleCount >= messages.length && messages.length > 1;
@@ -44,7 +54,7 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [messageKey]);
+  }, [firstMessageId]);
 
   useEffect(() => {
     setActiveIndex((i) => Math.min(i, maxIndex));
@@ -167,7 +177,7 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
       window.removeEventListener('resize', onScrollOrResize);
       ro?.disconnect();
     };
-  }, [showControls, messages.length, activeIndex, messageKey, visibleCount, updateControlPosition]);
+  }, [showControls, messages.length, activeIndex, firstMessageId, visibleCount, updateControlPosition]);
 
   if (messages.length === 1) {
     return (
@@ -178,6 +188,8 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
           onExpand={onExpand}
           onClick={onClick}
           onSearchReferences={onSearchReferences}
+          onReferenceSearchOpened={onReferenceSearchOpened}
+          userQuestion={userQuestion}
           showReplyButton={true}
           userAvatarId={userAvatarId}
           userAvatarOptions={userAvatarOptions}
@@ -222,6 +234,8 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
                   onExpand={onExpand}
                   onClick={onClick}
                   onSearchReferences={onSearchReferences}
+                  onReferenceSearchOpened={onReferenceSearchOpened}
+                  userQuestion={userQuestion}
                   showReplyButton={true}
                   inlineAvatar={true}
                   userAvatarId={userAvatarId}

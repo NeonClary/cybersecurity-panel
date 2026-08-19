@@ -62,6 +62,7 @@ const Sidebar = ({
   onOpenModelStatus,
   onNavigateToJourney,
   onRemoveSampleData,
+  statedGoal = '',
 }) => {
   const { config } = useAppConfig();
   const { preference, setThemePreference } = useTheme();
@@ -280,6 +281,11 @@ const Sidebar = ({
                     <span className="user-email">
                       {isGuest ? 'Demo session — sample data loaded' : user.email}
                     </span>
+                    {statedGoal ? (
+                      <span className="user-stated-goal" title={statedGoal}>
+                        {statedGoal}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 
@@ -629,6 +635,9 @@ const Sidebar = ({
         ) : (
         /* Chat Sessions */
         <div className="chat-sessions">
+          {!isCollapsed && (
+            <div className="chat-history-label">Chat history</div>
+          )}
           {isLoading ? (
             <div className="loading-sessions">
               <div className="loading-spinner"></div>

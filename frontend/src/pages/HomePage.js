@@ -90,6 +90,18 @@ const HomePage = ({
             })}
           </div>
         </div>
+
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center', alignItems: 'center', margin: '2.5rem 0 0.5rem' }}>
+          <button
+            type="button"
+            onClick={onNavigateToChat}
+            className="cta-button"
+          >
+            <MessageCircle className="cta-icon" />
+            <span>{isAuthenticated ? 'Continue Conversation' : 'Sign in / Start'}</span>
+            <ArrowRight className="cta-arrow" />
+          </button>
+        </div>
       </main>
       {/* Footer */}
       <footer className="footer">

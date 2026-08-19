@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AppConfigProvider } from './contexts/AppConfigContext';
 import HomePage from './pages/HomePage';
@@ -8,12 +8,56 @@ import CanvasPage from './pages/CanvasPage';
 import JourneyPage from './pages/JourneyPage';
 import UserGuide from './components/UserGuide';
 import './styles/components.css';
+import {
+  chatActiveState,
+  chatStarterState,
+  homeState,
+  mapPopState,
+  sameHistoryState,
+} from './utils/chatHistoryNav';
+
+let didSeedRestoredChatHistory = false;
 
 function App() {
   const [currentView, setCurrentView] = useState('home');
+  const [chatNavView, setChatNavView] = useState(null);
+  const [chatStarterNonce, setChatStarterNonce] = useState(0);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
   const [authToken, setAuthToken] = useState(null);
+  const historyStateRef = useRef(null);
+  const chatNavViewRef = useRef(null);
+  chatNavViewRef.current = chatNavView;
+
+  const applyHistoryState = useCallback((state, { fromPop = false, replace = false } = {}) => {
+    const mapped = mapPopState(state);
+    if (!fromPop) {
+      if (sameHistoryState(historyStateRef.current, state)) {
+        setCurrentView(mapped.currentView);
+        setChatNavView(mapped.chatNavView);
+        return;
+      }
+      if (replace) {
+        window.history.replaceState(state, '');
+      } else {
+        window.history.pushState(state, '');
+      }
+    }
+    historyStateRef.current = state || null;
+    setCurrentView(mapped.currentView);
+    if (mapped.chatNavView === 'starter' && chatNavViewRef.current === 'active') {
+      setChatStarterNonce((n) => n + 1);
+    }
+    setChatNavView(mapped.chatNavView);
+  }, []);
+
+  useEffect(() => {
+    const onPop = (event) => {
+      applyHistoryState(event.state, { fromPop: true });
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [applyHistoryState]);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +81,13 @@ function App() {
     setAuthToken(token);
     setUser(parsedUser);
     setIsAuthenticated(true);
-    setCurrentView('chat');
+    if (!didSeedRestoredChatHistory) {
+      didSeedRestoredChatHistory = true;
+      applyHistoryState(chatStarterState());
+    } else {
+      setCurrentView('chat');
+      setChatNavView('starter');
+    }
 
     (async () => {
       try {
@@ -52,7 +102,7 @@ function App() {
           setUser(null);
           setAuthToken(null);
           setIsAuthenticated(false);
-          setCurrentView('home');
+          applyHistoryState(homeState(), { replace: true });
           return;
         }
         const me = await resp.json();
@@ -67,40 +117,50 @@ function App() {
     })();
 
     return () => { cancelled = true; };
-  }, []);
+  }, [applyHistoryState]);
 
   const navigateToAuth = () => {
-    setCurrentView('auth');
+    applyHistoryState({ view: 'auth' });
   };
 
   const navigateToJourney = () => {
-    setCurrentView('journey');
+    applyHistoryState({ view: 'journey' });
   };
 
   const navigateToCanvas = (canvasView) => {
     if (canvasView === 'journey') {
-      setCurrentView('journey');
+      applyHistoryState({ view: 'journey' });
       return;
     }
     if (['insights', 'workspace', 'deliverables'].includes(canvasView)) {
       localStorage.setItem('canvas-view-v2', canvasView);
     }
-    setCurrentView('canvas');
+    applyHistoryState({ view: 'canvas' });
   };
 
   const navigateToChat = () => {
-    setCurrentView('chat');
+    applyHistoryState(chatStarterState());
   };
 
   const navigateToHome = () => {
-    setCurrentView('home');
+    applyHistoryState(homeState());
+  };
+
+  const handleChatBecameActive = (sessionId) => {
+    applyHistoryState(chatActiveState(sessionId));
+  };
+
+  const handleChatReturnedToStarter = () => {
+    applyHistoryState(chatStarterState(), { replace: true });
   };
 
   const handleAuthSuccess = (userData, token) => {
     setUser(userData);
     setAuthToken(token);
     setIsAuthenticated(true);
-    setCurrentView('chat');
+    applyHistoryState(chatStarterState(), {
+      replace: historyStateRef.current?.view === 'auth',
+    });
   };
 
   const handleSignOut = () => {
@@ -116,7 +176,7 @@ function App() {
     setUser(null);
     setAuthToken(null);
     setIsAuthenticated(false);
-    setCurrentView('home');
+    applyHistoryState(homeState(), { replace: true });
   };
 
   return (
@@ -169,6 +229,10 @@ function App() {
               onNavigateToJourney={navigateToJourney}
               onSignOut={handleSignOut}
               onUserUpdate={setUser}
+              chatNavView={chatNavView}
+              chatStarterNonce={chatStarterNonce}
+              onChatBecameActive={handleChatBecameActive}
+              onChatReturnedToStarter={handleChatReturnedToStarter}
             />
           )}
           <UserGuide />

@@ -258,6 +258,30 @@
   color: var(--text-secondary-dark, #9ca3af);
 }
 
+.user-stated-goal {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 4px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-secondary, #6b7280);
+}
+
+.dark .user-stated-goal {
+  color: var(--text-secondary-dark, #9ca3af);
+}
+
+.chat-history-label {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary, var(--text-secondary, #6b7280));
+  padding: 4px 2px 8px;
+}
+
 /* User Menu */
 .user-menu-container {
   position: relative;
@@ -569,7 +593,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 4px;
 }
 
 /* Session Item */
@@ -601,14 +625,30 @@
 }
 
 .session-item.active {
-  background: var(--accent-light, rgba(11, 122, 138, 0.12));
+  background: var(--sidebar-active-bg, #E4EEF0);
   border-color: var(--accent-primary, #0B7A8A);
+  color: var(--text-primary, #1A1714);
+}
+
+.session-item.active:hover {
+  background: var(--sidebar-active-hover, #D7E8EB);
+}
+
+.session-item:focus-visible {
+  outline: 2px solid var(--accent-primary, #0B7A8A);
+  outline-offset: 2px;
 }
 
 .dark .session-item.active,
 [data-theme="dark"] .session-item.active {
-  background: var(--accent-light, rgba(78, 202, 214, 0.16));
+  background: var(--sidebar-active-bg, #1E2C31);
   border-color: var(--accent-primary, #4ECAD6);
+  color: var(--text-primary, #F5F2EC);
+}
+
+.dark .session-item.active:hover,
+[data-theme="dark"] .session-item.active:hover {
+  background: var(--sidebar-active-hover, #25383E);
 }
 
 .session-content {
@@ -714,13 +754,6 @@
 
 .new-chat-button:disabled span {
   opacity: 0.7;
-}
-
-/* Ensure active session remains highlighted during creation */
-.session-item.active {
-  background-color: var(--primary-color);
-  color: white;
-  border-radius: 8px;
 }
 
 .session-menu-button {
