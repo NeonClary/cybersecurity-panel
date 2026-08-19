@@ -20,6 +20,8 @@ const EnhancedChatInput = ({
   showExport = false,
   exportHasMessages = false,
   exportSessionId = null,
+  composeDraft = '',
+  onComposeDraftApplied,
 }) => {
   const [inputMessage, setInputMessage] = useState('');
   const [showUpload, setShowUpload] = useState(false);
@@ -139,6 +141,12 @@ const EnhancedChatInput = ({
     setShowDocuments(!showDocuments);
     setShowUpload(false); // Close upload panel when opening documents
   };
+
+  useEffect(() => {
+    if (!composeDraft) return;
+    setInputMessage(composeDraft);
+    onComposeDraftApplied?.();
+  }, [composeDraft, onComposeDraftApplied]);
 
   // Auto-resize textarea
   useEffect(() => {

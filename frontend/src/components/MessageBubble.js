@@ -1,10 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Reply, Copy, Check, Maximize2, FileText, Hash, Target, Volume2, VolumeX, Search, X, Loader2 } from 'lucide-react';
+import { Reply, Copy, Check, Maximize2, FileText, Hash, Target, Volume2, VolumeX, Search, X, Loader2, Globe } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
+import {
+  buildReferenceSearchQuery,
+  buildPerplexityUrl,
+  buildWebSearchUrl,
+  getWebSearchEngine,
+  setWebSearchEngine,
+  WEB_SEARCH_ENGINES,
+} from '../utils/referenceSearch';
 const stripMarkdown = (md) => {
   if (!md) return '';
   return md
@@ -26,6 +34,8 @@ const MessageBubble = ({
   onCopy, 
   onExpand,
   onSearchReferences,
+  onReferenceSearchOpened,
+  userQuestion = '',
   showReplyButton = false,
   inlineAvatar = false,
   userAvatarId,
@@ -39,8 +49,8 @@ const MessageBubble = ({
   const [isLoadingTTS, setIsLoadingTTS] = useState(false);
   const [searchPopover, setSearchPopover] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchLoading, setSearchLoading] = useState(false);
   const [promptCopied, setPromptCopied] = useState(false);
+  const [webEngineId, setWebEngineId] = useState(() => getWebSearchEngine().id);
   const [bodyExpanded, setBodyExpanded] = useState(false);
   const overlayRef = useRef(null);
   const tooltipTimer = useRef(null);
@@ -102,28 +112,34 @@ const MessageBubble = ({
     if (onExpand) onExpand(messageId, persona_id);
   };
 
-  const handleSearch = async () => {
-    setSearchPopover(true);
-    setSearchLoading(true);
+  const handleSearch = () => {
     const content = message?.compact_markdown || message?.content || '';
-    try {
-      const token = localStorage.getItem('authToken');
-      const resp = await fetch(`${process.env.REACT_APP_API_URL}/api/search-references`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statement: content.substring(0, 500) }),
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        setSearchQuery(data.search_query || content.substring(0, 100));
-      } else {
-        setSearchQuery(content.substring(0, 100));
-      }
-    } catch {
-      setSearchQuery(content.substring(0, 100));
-    } finally {
-      setSearchLoading(false);
+    const advisor = advisors[
+      message?.persona_id || message?.personaId || message?.advisor_id || message?.advisorId
+    ] || {};
+    const query = buildReferenceSearchQuery({
+      advisorText: content,
+      userQuestion,
+      advisorName: advisor.name || message?.advisorName || '',
+    });
+    setSearchQuery(query);
+    setSearchPopover(true);
+    if (onSearchReferences) onSearchReferences(message, query);
+  };
+
+  const openExternalSearch = (kind) => {
+    const url = kind === 'perplexity'
+      ? buildPerplexityUrl(searchQuery)
+      : buildWebSearchUrl(searchQuery, webEngineId);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    if (onReferenceSearchOpened) {
+      onReferenceSearchOpened({ source: kind, query: searchQuery });
     }
+  };
+
+  const handleEngineChange = (id) => {
+    const engine = setWebSearchEngine(id);
+    setWebEngineId(engine.id);
   };
 
   const showTooltipWithDelay = (tooltipType) => {
@@ -383,7 +399,7 @@ const MessageBubble = ({
             const markdownBody = preprocessMarkdown(
               message?.compact_markdown || message?.content || message?.text
             );
-            const isLongBody = markdownBody.length > SHOW_MORE_CHARS;
+            const isLongBody = !message?.streaming && markdownBody.length > SHOW_MORE_CHARS;
             const collapsed = isLongBody && !bodyExpanded;
             return (
               <>
@@ -514,46 +530,61 @@ const MessageBubble = ({
           )}
 
           {searchPopover && (
-            <div style={{
-              marginTop: 8, background: 'var(--bg-primary)',
-              border: '1px solid var(--border-primary)', borderRadius: 12,
-              padding: 14, boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>Search for References</span>
-                <button onClick={() => setSearchPopover(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+            <div className="reference-search-popover">
+              <div className="reference-search-popover-header">
+                <span>Search for supporting references</span>
+                <button
+                  type="button"
+                  onClick={() => setSearchPopover(false)}
+                  aria-label="Close search"
+                >
                   <X size={14} />
                 </button>
               </div>
-              {searchLoading ? (
-                <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>Generating search query...</div>
-              ) : (
-                <>
-                  <div style={{
-                    background: 'var(--bg-secondary)', borderRadius: 8, padding: '8px 10px',
-                    fontSize: 12, color: 'var(--text-primary)', marginBottom: 8, lineHeight: 1.4,
-                  }}>{searchQuery}</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => window.open(`https://www.perplexity.ai/?q=${encodeURIComponent(searchQuery)}`, '_blank')} style={{
-                      padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      background: 'var(--accent-fill, var(--accent-primary))', color: 'var(--accent-on-accent, #fff)', border: 'none', cursor: 'pointer',
-                    }}>Open in Perplexity</button>
-                    <button onClick={() => {
-                      navigator.clipboard.writeText(searchQuery).then(() => {
-                        setPromptCopied(true);
-                        setTimeout(() => setPromptCopied(false), 2000);
-                      }).catch(() => {});
-                    }} style={{
-                      padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      background: promptCopied ? '#10B98120' : 'var(--bg-secondary)',
-                      color: promptCopied ? '#10B981' : 'var(--text-primary)',
-                      border: `1px solid ${promptCopied ? '#10B98140' : 'var(--border-primary)'}`,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                    }}>{promptCopied ? '✓ Copied!' : 'Copy Prompt'}</button>
-                  </div>
-                </>
-              )}
+              <div className="reference-search-query">{searchQuery}</div>
+              <div className="reference-search-actions">
+                <button
+                  type="button"
+                  className="reference-search-btn reference-search-btn-primary"
+                  onClick={() => openExternalSearch('perplexity')}
+                >
+                  Open in Perplexity
+                </button>
+                <button
+                  type="button"
+                  className="reference-search-btn reference-search-btn-primary"
+                  title="Opens in your browser"
+                  onClick={() => openExternalSearch('web')}
+                >
+                  <Globe size={12} />
+                  Web search
+                </button>
+                <button
+                  type="button"
+                  className={`reference-search-btn ${promptCopied ? 'is-copied' : ''}`}
+                  onClick={() => {
+                    navigator.clipboard.writeText(searchQuery).then(() => {
+                      setPromptCopied(true);
+                      setTimeout(() => setPromptCopied(false), 2000);
+                    }).catch(() => {});
+                  }}
+                >
+                  {promptCopied ? 'Copied!' : 'Copy prompt'}
+                </button>
+              </div>
+              <label className="reference-search-engine">
+                <span>Web engine</span>
+                <select
+                  value={webEngineId}
+                  onChange={(e) => handleEngineChange(e.target.value)}
+                  aria-label="Web search engine"
+                >
+                  {Object.values(WEB_SEARCH_ENGINES).map((engine) => (
+                    <option key={engine.id} value={engine.id}>{engine.label}</option>
+                  ))}
+                </select>
+                <em>Opens in your browser. Sites cannot detect the default search engine.</em>
+              </label>
             </div>
           )}
         </div>

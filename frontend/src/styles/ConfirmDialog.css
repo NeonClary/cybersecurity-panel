@@ -80,6 +80,10 @@
   cursor: pointer;
   transition: transform 0.12s ease, background 0.15s ease, box-shadow 0.15s ease;
   border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .confirm-btn:active {
@@ -134,4 +138,58 @@
 @keyframes confirm-scale-in {
   from { opacity: 0; transform: scale(0.96) translateY(4px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.clipboard-preview-dialog {
+  max-width: 560px;
+  text-align: left;
+}
+
+.clipboard-preview-dialog .confirm-icon {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.clipboard-preview-dialog .confirm-title,
+.clipboard-preview-dialog .confirm-message {
+  text-align: center;
+}
+
+.clipboard-preview-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 6px;
+}
+
+.clipboard-preview-textarea {
+  width: 100%;
+  min-height: 180px;
+  box-sizing: border-box;
+  margin-bottom: 18px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-primary, #e5e7eb);
+  background: var(--bg-secondary, #f8fafc);
+  color: var(--text-primary, #111827);
+  font-size: 13px;
+  line-height: 1.45;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.clipboard-preview-error {
+  font-size: 13px;
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 0 0 12px;
+}
+
+.confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
