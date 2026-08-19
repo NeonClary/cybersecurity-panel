@@ -1,22 +1,38 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MessageCircle, Reply, X, FileText, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
+import { MessageCircle, Reply, X, FileText, HelpCircle, BookmarkPlus, ClipboardPaste } from 'lucide-react';
 import EnhancedChatInput from '../components/EnhancedChatInput';
 import ThinkingIndicator from '../components/ThinkingIndicator';
 import SuggestionsPanel from '../components/SuggestionsPanel';
 import AppHeader from '../components/AppHeader';
 import AdvisorStatusDropdown from '../components/AdvisorStatusDropdown';
 import Sidebar from '../components/Sidebar';
+import AdvisorCarousel from '../components/AdvisorCarousel';
+import ClipboardPreviewModal from '../components/ClipboardPreviewModal';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { useTheme } from '../contexts/ThemeContext';
 import '../styles/ChatPage.css';
 import '../styles/EnhancedChatInput.css';
-import AdvisorCarousel from '../components/AdvisorCarousel';
+import { applyAdvisorStreamEvent } from '../utils/advisorStreamOrder';
+import { pinElementToScrollerTop, findLatestUserMessage } from '../utils/pinLatestQuestion';
+import {
+  formatReferenceSnippet,
+  wrapReferencesForAdvisorContext,
+  readClipboardText,
+} from '../utils/referenceSearch';
 import OnboardingChat from '../components/OnboardingChat';
 import AboutYouModal from '../components/AboutYouModal';
 import ClearDataModal from '../components/ClearDataModal';
 import SettingsModal from '../components/SettingsModal';
 import IntakePanel from '../components/IntakePanel';
 import useChatInputFollowupsVisible from '../hooks/useChatInputFollowupsVisible';
+import useStatedGoal from '../hooks/useStatedGoal';
+import {
+  dropPrefetchedStream,
+  getPrefetchedStream,
+  MAX_PREFETCH_PROMPTS,
+  putPrefetchedStream,
+  readNdjsonLines,
+} from '../utils/starterPrefetchCache';
 
 const ACTIVE_ADVISORS_STORAGE_KEY = 'cybersecurityActiveAdvisorIds';
 
@@ -33,7 +49,18 @@ function guestStarterPrompts(config, guestPersona) {
     .slice(0, 4);
 }
 
-const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNavigateToJourney, onSignOut }) => {
+const ChatPage = ({
+  user,
+  authToken,
+  onNavigateToHome,
+  onNavigateToCanvas,
+  onNavigateToJourney,
+  onSignOut,
+  chatNavView = null,
+  chatStarterNonce = 0,
+  onChatBecameActive,
+  onChatReturnedToStarter,
+}) => {
   const { config, advisors, getAdvisorColors } = useAppConfig();
   const [messages, setMessages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,6 +70,11 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   const [replyingTo, setReplyingTo] = useState(null);
   const [uploadedDocuments, setUploadedDocuments] = useState([]);
   const messagesEndRef = useRef(null);
+  const messagesScrollRef = useRef(null);
+  const latestQuestionRef = useRef(null);
+  const pinQuestionAfterRenderRef = useRef(false);
+  const scrollSessionToEndRef = useRef(false);
+  const pendingReferenceContextRef = useRef('');
   const rankedAdvisorIdsRef = useRef([]);
   const { isDark } = useTheme();
   const {
@@ -81,6 +113,15 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('profile');
   const [userProfile, setUserProfile] = useState(null);
+  const [searchIncorporate, setSearchIncorporate] = useState(null);
+  const [clipboardModal, setClipboardModal] = useState({ open: false, text: '', error: '' });
+  const [composeDraft, setComposeDraft] = useState('');
+  const statedGoal = useStatedGoal(authToken, user);
+  const parkedConversationRef = useRef(null);
+  const prefetchQueueRef = useRef([]);
+  const prefetchBusyRef = useRef(false);
+  const prefetchAbortRef = useRef(null);
+  const prefetchUserKey = user?.id || user?._id || user?.email || (user?.is_guest ? 'guest' : 'user');
 
   const loadProfile = async () => {
     try {
@@ -96,6 +137,85 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
   useEffect(() => {
     if (authToken) loadProfile();
   }, [authToken]);
+
+  useEffect(() => {
+    if (!chatStarterNonce) return;
+    if (!messages.length) return;
+    parkedConversationRef.current = {
+      messages,
+      currentSessionId,
+      currentSessionTitle,
+      followupChips,
+    };
+    setMessages([]);
+    setCurrentSessionId(null);
+    setCurrentSessionTitle('');
+    setFollowupChips([]);
+    setThinkingAdvisors([]);
+    setReplyingTo(null);
+    setIsLoading(false);
+    // Intentionally keyed on nonce only: Back from an active chat parks the thread.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatStarterNonce]);
+
+  useEffect(() => {
+    if (chatNavView !== 'active') return;
+    const parked = parkedConversationRef.current;
+    if (!parked?.messages?.length) return;
+    setMessages(parked.messages);
+    setCurrentSessionId(parked.currentSessionId);
+    setCurrentSessionTitle(parked.currentSessionTitle);
+    setFollowupChips(parked.followupChips || []);
+    parkedConversationRef.current = null;
+  }, [chatNavView]);
+
+  const runPrefetchQueue = useCallback(async () => {
+    if (prefetchBusyRef.current || !authToken) return;
+    prefetchBusyRef.current = true;
+    const advisorsForRequest = activeAdvisorIds.length > 0
+      ? activeAdvisorIds
+      : Object.keys(advisors || {});
+    while (prefetchQueueRef.current.length) {
+      const prompt = prefetchQueueRef.current.shift();
+      if (!prompt || getPrefetchedStream(prefetchUserKey, prompt)) continue;
+      const controller = new AbortController();
+      prefetchAbortRef.current = controller;
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL}/chat-stream`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            user_input: prompt,
+            response_length: 'medium',
+            prefetch: true,
+            active_advisors: advisorsForRequest,
+          }),
+          signal: controller.signal,
+        });
+        if (!response.ok) continue;
+        const lines = await readNdjsonLines(response);
+        if (lines.length) putPrefetchedStream(prefetchUserKey, prompt, lines);
+      } catch (err) {
+        if (err?.name === 'AbortError') break;
+      }
+    }
+    prefetchBusyRef.current = false;
+    prefetchAbortRef.current = null;
+  }, [authToken, activeAdvisorIds, advisors, prefetchUserKey]);
+
+  const handleSuggestionsReady = useCallback((prompts) => {
+    const next = (prompts || [])
+      .map((p) => String(p || '').trim())
+      .filter(Boolean)
+      .slice(0, MAX_PREFETCH_PROMPTS)
+      .filter((p) => !getPrefetchedStream(prefetchUserKey, p));
+    if (next.length === 0) return;
+    prefetchQueueRef.current = next;
+    runPrefetchQueue();
+  }, [prefetchUserKey, runPrefetchQueue]);
 
   useEffect(() => {
     const allIds = Object.keys(advisors || {});
@@ -149,17 +269,84 @@ const ChatPage = ({ user, authToken, onNavigateToHome, onNavigateToCanvas, onNav
     });
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   const handleMobileMenuToggle = () => {
     setIsMobileMenuOpen(!isMobileMenuOpen);
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, thinkingAdvisors]);
+  const consumePendingReferences = (inputMessage) => {
+    const pending = pendingReferenceContextRef.current;
+    if (!pending) return inputMessage;
+    pendingReferenceContextRef.current = '';
+    return `${pending}\n\n${inputMessage}`;
+  };
+
+  const handleComposeDraftApplied = useCallback(() => setComposeDraft(''), []);
+
+  const handleReferenceSearchOpened = useCallback(({ source } = {}) => {
+    const label = source === 'perplexity' ? 'Perplexity' : 'web search';
+    setSearchIncorporate({ source: label });
+  }, []);
+
+  const handlePasteFromClipboard = async () => {
+    try {
+      const { text } = await readClipboardText();
+      const trimmed = (text || '').trim();
+      setClipboardModal({
+        open: true,
+        text: trimmed ? formatReferenceSnippet(trimmed) : '',
+        error: trimmed ? '' : 'Clipboard was empty — paste the text you want to add.',
+      });
+    } catch (err) {
+      setClipboardModal({
+        open: true,
+        text: '',
+        error: err.code === 'denied'
+          ? 'Clipboard access was blocked. Paste the text into the box below.'
+          : 'Could not read the clipboard. Paste the text into the box below.',
+      });
+    }
+  };
+
+  const handleApproveClipboard = (draft) => {
+    const snippet = (draft || '').trim();
+    setClipboardModal({ open: false, text: '', error: '' });
+    setSearchIncorporate(null);
+    if (!snippet) return;
+    const stored = snippet.startsWith('Here are references I found:')
+      ? snippet
+      : formatReferenceSnippet(snippet);
+    pendingReferenceContextRef.current = wrapReferencesForAdvisorContext(stored);
+    const card = {
+      id: generateMessageId(),
+      type: 'user',
+      content: stored,
+      timestamp: new Date(),
+      isReferenceSnippet: true,
+    };
+    setMessages((prev) => [...prev, card]);
+    saveMessageToSession(card).catch((err) =>
+      console.error('Failed to persist reference snippet:', err)
+    );
+    setComposeDraft('Please use the references I just added when you answer.');
+  };
+
+  useLayoutEffect(() => {
+    if (pinQuestionAfterRenderRef.current) {
+      pinQuestionAfterRenderRef.current = false;
+      const pin = () => pinElementToScrollerTop(
+        messagesScrollRef.current,
+        latestQuestionRef.current,
+        { behavior: 'auto' }
+      );
+      pin();
+      requestAnimationFrame(pin);
+      return;
+    }
+    if (scrollSessionToEndRef.current) {
+      scrollSessionToEndRef.current = false;
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
+  }, [messages]);
 
   const generateMessageId = () => {
     return Date.now().toString() + Math.random().toString(36).substr(2, 9);
@@ -237,6 +424,8 @@ const loadChatSession = async (sessionId) => {
         setMessages(formattedMessages);
         setReplyingTo(null);
         setThinkingAdvisors([]);
+        pendingReferenceContextRef.current = '';
+        scrollSessionToEndRef.current = true;
 
         // Guest demo: seed persona-aligned starter prompts so suggestions match intake type
         if (user?.is_guest && formattedMessages.length > 0) {
@@ -311,7 +500,9 @@ const updateSessionTitle = async (sessionId, newTitle) => {
 // Handle selecting a session from sidebar
 const handleSelectSession = async (sessionId) => {
   if (sessionId === currentSessionId) return;
+  parkedConversationRef.current = null;
   await loadChatSession(sessionId);
+  onChatBecameActive?.(sessionId);
 };
 
 // Sidebar deleted the currently-active chat. Clear local state without
@@ -362,6 +553,9 @@ const handleNewChat = async (sessionId = null) => {
             setFollowupChips([]);
             setThinkingAdvisors([]);
             setUploadedDocuments([]);
+            pendingReferenceContextRef.current = '';
+            setSearchIncorporate(null);
+            onChatReturnedToStarter?.();
             
             console.log('New chat created with MongoDB session:', newSessionId);
             
@@ -387,6 +581,7 @@ const handleNewChat = async (sessionId = null) => {
       setReplyingTo(null);
       setThinkingAdvisors([]);
       setUploadedDocuments([]);
+      onChatReturnedToStarter?.();
       
       // Re-throw the error so the sidebar knows something went wrong
       throw error;
@@ -422,6 +617,107 @@ const handleNewChat = async (sessionId = null) => {
     }
   };
 
+  const applyStreamPayload = (payload, sessionId) => {
+    const d = payload.data || {};
+    switch (payload.type) {
+      case 'advisor_start':
+      case 'advisor_delta':
+      case 'advisor_done':
+      case 'advisor': {
+        setMessages(prev => applyAdvisorStreamEvent(prev, payload, {
+          generateId: generateMessageId,
+        }));
+        if (payload.type === 'advisor_start' || payload.type === 'advisor') {
+          setThinkingAdvisors(prev => prev.filter(a => a !== d.persona_id));
+        }
+        if (payload.type === 'advisor_done' || payload.type === 'advisor') {
+          saveMessageToSession({
+            id: generateMessageId(),
+            type: 'advisor',
+            persona_id: d.persona_id,
+            content: d.content,
+            timestamp: new Date(),
+            advisorName: d.persona_name || d.persona_id,
+            used_documents: d.used_documents || false,
+            document_chunks_used: d.document_chunks_used || 0,
+          }, sessionId).catch(err =>
+            console.error('Failed to persist advisor message:', err)
+          );
+        }
+        break;
+      }
+      case 'clarification':
+        setMessages(prev => [...prev, {
+          id: generateMessageId(),
+          type: 'clarification',
+          content: d.message,
+          suggestions: d.suggestions || [],
+          timestamp: new Date(),
+        }]);
+        break;
+      case 'followups':
+        if (Array.isArray(d.suggestions) && d.suggestions.length > 0) {
+          setFollowupChips(d.suggestions);
+        }
+        break;
+      case 'journey_suggestions':
+        break;
+      case 'progress':
+        if (d.phase === 'selected' && Array.isArray(d.selected_advisors)) {
+          rankedAdvisorIdsRef.current = d.selected_advisors;
+          setThinkingAdvisors(prev => {
+            const next = new Set(prev);
+            next.add('system');
+            d.selected_advisors.forEach(id => next.add(id));
+            return Array.from(next);
+          });
+          break;
+        }
+        if (d.phase === 'complete') {
+          setIsLoading(false);
+          setThinkingAdvisors([]);
+          break;
+        }
+        if (d.persona_id != null) {
+          setThinkingAdvisors(prev => prev.filter(a => a !== d.persona_id));
+        }
+        break;
+      case 'error':
+        setMessages(prev => [...prev, {
+          id: generateMessageId(),
+          type: 'error',
+          content: d.detail || 'An error occurred',
+          timestamp: new Date(),
+        }]);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const replayCachedLines = async (lines, sessionId) => {
+    for (const line of lines) {
+      if (!line || !String(line).trim()) continue;
+      try {
+        applyStreamPayload(JSON.parse(line), sessionId);
+      } catch {
+        /* skip */
+      }
+    }
+    try {
+      await fetch(`${process.env.REACT_APP_API_URL}/switch-chat`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ chat_session_id: sessionId }),
+      });
+    } catch (err) {
+      console.error('Failed to hydrate session from prefetch cache:', err);
+    }
+  };
+
 
   const handleSendMessage = async (inputMessage) => {
     if (!inputMessage.trim()) return;
@@ -436,6 +732,7 @@ const handleNewChat = async (sessionId = null) => {
 
     // Add to local state immediately
     setMessages(prev => [...prev, userMessage]);
+    pinQuestionAfterRenderRef.current = true;
 
     // Create new session if we don't have one
     let sessionId = currentSessionId;
@@ -457,12 +754,19 @@ const handleNewChat = async (sessionId = null) => {
       console.error('Failed to persist user message:', err)
     );
 
+    if (messages.length === 0) {
+      onChatBecameActive?.(sessionId);
+    }
+
     // Update session title if this is the first message and title is generic
     if (messages.length === 0 && currentSessionTitle.includes('Chat ')) {
       const newTitle = inputMessage.length > 30 
         ? `${inputMessage.substring(0, 30)}...` 
         : inputMessage;
-      await updateSessionTitle(sessionId, newTitle);
+      setCurrentSessionTitle(newTitle);
+      updateSessionTitle(sessionId, newTitle).catch(err =>
+        console.error('Failed to update session title:', err)
+      );
     }
 
     // Set loading state
@@ -478,6 +782,23 @@ const handleNewChat = async (sessionId = null) => {
     setThinkingAdvisors(['system']);
     setFollowupChips([]);
     rankedAdvisorIdsRef.current = [];
+    prefetchAbortRef.current?.abort();
+    prefetchQueueRef.current = [];
+
+    const cached = !pendingReferenceContextRef.current
+      && getPrefetchedStream(prefetchUserKey, inputMessage);
+    if (cached?.lines?.length) {
+      try {
+        await replayCachedLines(cached.lines, sessionId);
+        dropPrefetchedStream(prefetchUserKey, inputMessage);
+        setIsLoading(false);
+        setThinkingAdvisors([]);
+        setSidebarRefreshTrigger(prev => prev + 1);
+        return;
+      } catch (error) {
+        console.error('Prefetch replay failed, using live stream:', error);
+      }
+    }
 
     try {
       const response = await fetch(`${process.env.REACT_APP_API_URL}/chat-stream`, {
@@ -487,7 +808,7 @@ const handleNewChat = async (sessionId = null) => {
           'Authorization': `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          user_input: inputMessage,
+          user_input: consumePendingReferences(inputMessage),
           response_length: 'medium',
           chat_session_id: sessionId,
           active_advisors: advisorsForRequest,
@@ -532,88 +853,7 @@ const handleNewChat = async (sessionId = null) => {
             console.error('Failed to parse chat-stream line:', line, parseErr);
             continue;
           }
-
-          const d = payload.data || {};
-
-          switch (payload.type) {
-            case 'advisor': {
-              const msg = {
-                id: generateMessageId(),
-                type: 'advisor',
-                persona_id: d.persona_id,
-                content: d.content,
-                timestamp: new Date(),
-                advisorName: d.persona_name || d.persona_id,
-                used_documents: d.used_documents || false,
-                document_chunks_used: d.document_chunks_used || 0,
-                rank_index: Array.isArray(rankedAdvisorIdsRef.current)
-                  ? rankedAdvisorIdsRef.current.indexOf(d.persona_id)
-                  : -1,
-              };
-              setMessages(prev => {
-                const rank = rankedAdvisorIdsRef.current || [];
-                if (!rank.length) return [...prev, msg];
-                let i = prev.length;
-                while (i > 0 && prev[i - 1].type === 'advisor') i -= 1;
-                const before = prev.slice(0, i);
-                const group = [...prev.slice(i), msg];
-                group.sort((a, b) => {
-                  const ia = rank.indexOf(a.persona_id);
-                  const ib = rank.indexOf(b.persona_id);
-                  return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-                });
-                return [...before, ...group];
-              });
-              setThinkingAdvisors(prev => prev.filter(a => a !== d.persona_id));
-              await saveMessageToSession(msg, sessionId);
-              break;
-            }
-            case 'clarification':
-              setMessages(prev => [...prev, {
-                id: generateMessageId(),
-                type: 'clarification',
-                content: d.message,
-                suggestions: d.suggestions || [],
-                timestamp: new Date(),
-              }]);
-              break;
-            case 'followups':
-              if (Array.isArray(d.suggestions) && d.suggestions.length > 0) {
-                setFollowupChips(d.suggestions);
-              }
-              break;
-            case 'journey_suggestions':
-              // Intentionally ignored: no "advisors think you've completed" banner.
-              break;
-            case 'progress':
-              if (d.phase === 'selected' && Array.isArray(d.selected_advisors)) {
-                rankedAdvisorIdsRef.current = d.selected_advisors;
-                setThinkingAdvisors(prev => {
-                  const next = new Set(prev);
-                  next.add('system');
-                  d.selected_advisors.forEach(id => next.add(id));
-                  return Array.from(next);
-                });
-                break;
-              }
-              if (d.phase === 'complete') {
-                break;
-              }
-              if (d.persona_id != null) {
-                setThinkingAdvisors(prev => prev.filter(a => a !== d.persona_id));
-              }
-              break;
-            case 'error':
-              setMessages(prev => [...prev, {
-                id: generateMessageId(),
-                type: 'error',
-                content: d.detail || 'An error occurred',
-                timestamp: new Date(),
-              }]);
-              break;
-            default:
-              break;
-          }
+          applyStreamPayload(payload, sessionId);
         }
       }
 
@@ -656,6 +896,7 @@ const handleNewChat = async (sessionId = null) => {
   };
 
   setMessages(prev => [...prev, replyMessage]);
+  pinQuestionAfterRenderRef.current = true;
   
   // Save reply message to database with explicit session ID
   await saveMessageToSession(replyMessage, sessionId);
@@ -671,7 +912,7 @@ const handleNewChat = async (sessionId = null) => {
         'Authorization': `Bearer ${authToken}`,
       },
       body: JSON.stringify({
-        user_input: inputMessage,
+        user_input: consumePendingReferences(inputMessage),
         advisor_id: replyContext.advisorId,
         original_message_id: replyContext.messageId,
         chat_session_id: sessionId // Use confirmed session ID
@@ -736,6 +977,7 @@ const handleNewChat = async (sessionId = null) => {
       expandsMessageId: messageId
     };
     setMessages(prev => [...prev, expandMessage]);
+    pinQuestionAfterRenderRef.current = true;
     
     // Save expand request to database
     await saveMessageToSession(expandMessage);
@@ -834,6 +1076,7 @@ const handleNewChat = async (sessionId = null) => {
   const messageGroups = useMemo(() => {
     const groups = [];
     let i = 0;
+    let lastUserContent = '';
     while (i < messages.length) {
       if (messages[i].type === 'advisor') {
         const advisorGroup = [];
@@ -841,14 +1084,26 @@ const handleNewChat = async (sessionId = null) => {
           advisorGroup.push(messages[i]);
           i++;
         }
-        groups.push({ type: 'advisor_group', messages: advisorGroup });
+        groups.push({
+          type: 'advisor_group',
+          messages: advisorGroup,
+          userQuestion: lastUserContent,
+        });
       } else {
+        if (messages[i].type === 'user' && !messages[i].isReferenceSnippet) {
+          lastUserContent = messages[i].content;
+        }
         groups.push({ type: 'single', message: messages[i] });
         i++;
       }
     }
     return groups;
   }, [messages]);
+
+  const latestUserMessageId = useMemo(
+    () => findLatestUserMessage(messages)?.id || null,
+    [messages]
+  );
 
   const handleInputSubmit = async (inputMessage) => {
   if (replyingTo) {
@@ -907,6 +1162,7 @@ const handleNewChat = async (sessionId = null) => {
           setShowSettings(true);
         }}
         onNavigateToJourney={onNavigateToJourney}
+        statedGoal={statedGoal}
         onRemoveSampleData={user?.is_guest ? async () => {
           if (!window.confirm('Remove all sample demo data? You stay in guest mode with a clean slate.')) return;
           try {
@@ -956,8 +1212,21 @@ const handleNewChat = async (sessionId = null) => {
           <div className="chat-content">
             {!hasMessages ? (
               <div className="welcome-state">
-                <IntakePanel onSubmit={handleSendMessage} guestPersona={guestPersona} />
-                <SuggestionsPanel onSuggestionClick={handleSendMessage} guestPersona={guestPersona} authToken={authToken} />
+                <IntakePanel
+                  onSubmit={handleSendMessage}
+                  guestPersona={guestPersona}
+                  authToken={authToken}
+                  user={user}
+                  statedGoal={statedGoal}
+                />
+                <SuggestionsPanel
+                  onSuggestionClick={handleSendMessage}
+                  guestPersona={guestPersona}
+                  authToken={authToken}
+                  user={user}
+                  statedGoal={statedGoal}
+                  onSuggestionsReady={handleSuggestionsReady}
+                />
               </div>
             ) : (
               <div className="messages-container">
@@ -970,20 +1239,38 @@ const handleNewChat = async (sessionId = null) => {
                 )}
                 
                 <div className="messages-list">
-                  <div className="messages-scroll">
+                  <div className="messages-scroll" ref={messagesScrollRef}>
                     {messageGroups.map((group) => (
                       group.type === 'advisor_group' ? (
                         <AdvisorCarousel
-                          key={group.messages.map(m => m.id).join('-')}
+                          key={group.messages[0]?.id || 'advisor-group'}
                           messages={group.messages}
                           onReply={handleReplyToMessage}
                           onExpand={handleExpandMessage}
                           onClick={handleMessageClick}
+                          onReferenceSearchOpened={handleReferenceSearchOpened}
+                          userQuestion={group.userQuestion}
                         />
                       ) : (
                       <div key={group.message.id}>
-                        {group.message.type === 'user' && (
-                          <div className="user-message-container">
+                        {group.message.type === 'user' && group.message.isReferenceSnippet && (
+                          <div className="system-message-container">
+                            <div className="system-message reference-snippet-card">
+                              <BookmarkPlus size={16} />
+                              <div>
+                                <p className="reference-snippet-title">Added to context</p>
+                                <p className="reference-snippet-body">{group.message.content}</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {group.message.type === 'user' && !group.message.isReferenceSnippet && (
+                          <div
+                            className={`user-message-container${group.message.id === latestUserMessageId && isLoading ? ' is-pinned-question' : ''}`}
+                            ref={group.message.id === latestUserMessageId ? latestQuestionRef : null}
+                            data-latest-question={group.message.id === latestUserMessageId ? 'true' : undefined}
+                          >
                             <div className="user-message">
                               {group.message.replyTo && (
                                 <div className="reply-indicator">
@@ -1093,6 +1380,35 @@ const handleNewChat = async (sessionId = null) => {
               </div>
             )}
 
+            {searchIncorporate && (
+              <div className="search-incorporate-banner" role="status">
+                <div className="reply-info">
+                  <ClipboardPaste size={16} />
+                  <span>
+                    Copy what you want from <strong>{searchIncorporate.source}</strong>, then come back and paste it here.
+                  </span>
+                </div>
+                <div className="search-incorporate-actions">
+                  <button
+                    type="button"
+                    className="search-incorporate-btn"
+                    onClick={handlePasteFromClipboard}
+                    title="I copied something"
+                  >
+                    Paste from clipboard
+                  </button>
+                  <button
+                    type="button"
+                    className="cancel-reply"
+                    onClick={() => setSearchIncorporate(null)}
+                    aria-label="Dismiss"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
             <EnhancedChatInput
               onSendMessage={handleInputSubmit}
               onFileUploaded={handleFileUploaded}
@@ -1114,6 +1430,8 @@ const handleNewChat = async (sessionId = null) => {
               showExport
               exportHasMessages={hasConversationMessages}
               exportSessionId={currentSessionId}
+              composeDraft={composeDraft}
+              onComposeDraftApplied={handleComposeDraftApplied}
             />
             {followupsVisible && followupChips.length > 0 && !isLoading && (
               <div className="followup-chips-row">
@@ -1193,6 +1511,13 @@ const handleNewChat = async (sessionId = null) => {
           onDataCleared={() => { loadProfile(); setShowClearData(false); }}
         />
       )}
+      <ClipboardPreviewModal
+        isOpen={clipboardModal.open}
+        initialText={clipboardModal.text}
+        clipboardError={clipboardModal.error}
+        onCancel={() => setClipboardModal({ open: false, text: '', error: '' })}
+        onApprove={handleApproveClipboard}
+      />
     </div>
   );
 };
