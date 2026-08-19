@@ -8,6 +8,7 @@ import Sidebar from '../components/Sidebar';
 import AboutYouModal from '../components/AboutYouModal';
 import ClearDataModal from '../components/ClearDataModal';
 import SettingsModal from '../components/SettingsModal';
+import useStatedGoal from '../hooks/useStatedGoal';
 import '../styles/JourneyPage.css';
 
 const api = (path, token, options = {}) =>
@@ -40,6 +41,7 @@ const JourneyPage = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const statedGoal = useStatedGoal(authToken, user);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showAboutYou, setShowAboutYou] = useState(false);
   const [showClearData, setShowClearData] = useState(false);
@@ -152,6 +154,7 @@ const JourneyPage = ({
         onNavigateToJourney={onNavigateToJourney}
         onSelectSession={() => onNavigateToChat()}
         pageContext="journey"
+        statedGoal={statedGoal}
         onOpenProfile={() => setShowAboutYou(true)}
         onOpenAccount={() => {
           setSettingsInitialTab('profile');

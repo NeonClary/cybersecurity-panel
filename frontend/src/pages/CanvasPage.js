@@ -34,6 +34,7 @@ import AboutYouModal from '../components/AboutYouModal';
 import ClearDataModal from '../components/ClearDataModal';
 import SettingsModal from '../components/SettingsModal';
 import { fetchCanvas, saveWorkspace, debounce } from '../utils/canvasApi';
+import useStatedGoal from '../hooks/useStatedGoal';
 import '../styles/CanvasPage.css';
 
 const LAYOUT_KEY = 'canvas-layout-v2';
@@ -653,6 +654,7 @@ function PresetPicker({ onPick }) {
 function WorkspaceView({ openModal, layout, setLayout, widgetStates, setWidgetStates }) {
   const [dragId, setDragId] = useState(null);
   const [dragOverId, setDragOverId] = useState(null);
+  const [railPreview, setRailPreview] = useState(null);
 
   const onDragStart = (id) => setDragId(id);
   const onDragOver = (id) => { if (id !== dragId) setDragOverId(id); };
@@ -690,7 +692,7 @@ function WorkspaceView({ openModal, layout, setLayout, widgetStates, setWidgetSt
   // Each widget starts from scratch — fresh empty state, no demo content.
   const addWidget = (meta) => {
     const id = 'w-' + Date.now();
-    setLayout(l => [...l, { id, type: meta.type, size: meta.defaultSize, critic: meta.critic }]);
+    setLayout(l => [{ id, type: meta.type, size: meta.defaultSize, critic: meta.critic }, ...l]);
     if (EMPTY_STATE[meta.type]) {
       setWidgetStates(s => ({ ...s, [meta.type]: JSON.parse(JSON.stringify(EMPTY_STATE[meta.type])) }));
     }
@@ -734,34 +736,76 @@ function WorkspaceView({ openModal, layout, setLayout, widgetStates, setWidgetSt
       {layout.length === 0 && (
         <PresetPicker onPick={applyPreset}/>
       )}
-      <div className="workspace">
-        {layout.length === 0 && (
-          <div className="empty-cell">
-            <Icon name="layout" size={28} style={{ color: 'var(--canvas-text-4)' }}/>
-            <div style={{ fontSize: 14, color: 'var(--canvas-text-2)', fontWeight: 500 }}>Or build from scratch</div>
-            <button className="btn btn-primary" onClick={() => openModal('palette', { layout, onAdd: addWidget })} style={{ marginTop: 6 }}>
-              <Icon name="plus" size={13}/>Add your first widget
-            </button>
+      <div className="workspace-shell">
+        <div className="workspace">
+          {layout.length === 0 && (
+            <div className="empty-cell">
+              <Icon name="layout" size={28} style={{ color: 'var(--canvas-text-4)' }}/>
+              <div style={{ fontSize: 14, color: 'var(--canvas-text-2)', fontWeight: 500 }}>Or build from scratch</div>
+              <button className="btn btn-primary" onClick={() => openModal('palette', { layout, onAdd: addWidget })} style={{ marginTop: 6 }}>
+                <Icon name="plus" size={13}/>Add your first widget
+              </button>
+            </div>
+          )}
+          {layout.map((w) => (
+            <CanvasWidget
+              key={w.id}
+              widget={w}
+              isDragging={dragId === w.id}
+              isDragOver={dragOverId === w.id}
+              onDragStart={onDragStart}
+              onDragOver={onDragOver}
+              onDragEnd={onDragEnd}
+              onDrop={onDrop}
+              state={widgetStates[w.type] ?? (EMPTY_STATE[w.type] ?? {})}
+              setState={setWState(w.type)}
+              onRemove={removeWidget}
+              onResize={resizeWidget}
+              openModal={openModal}
+              allStates={widgetStates}
+            />
+          ))}
+        </div>
+        <aside className="widget-preview-rail" aria-label="Widget preview">
+          <div className="widget-preview-rail-title">Widgets</div>
+          <div className="widget-preview-rail-list">
+            {WIDGET_CATALOG.map(w => {
+              const added = layout.some(l => l.type === w.type);
+              return (
+                <button
+                  key={w.type}
+                  type="button"
+                  className={`widget-preview-rail-item ${w.critic ? 'critic' : ''} ${added ? 'added' : ''}`}
+                  title={w.desc}
+                  disabled={added}
+                  onMouseEnter={() => setRailPreview(w)}
+                  onFocus={() => setRailPreview(w)}
+                  onClick={() => { if (!added) addWidget(w); }}
+                >
+                  <Icon name={w.icon} size={13}/>
+                  <span>{w.name}</span>
+                </button>
+              );
+            })}
           </div>
-        )}
-        {layout.map((w) => (
-          <CanvasWidget
-            key={w.id}
-            widget={w}
-            isDragging={dragId === w.id}
-            isDragOver={dragOverId === w.id}
-            onDragStart={onDragStart}
-            onDragOver={onDragOver}
-            onDragEnd={onDragEnd}
-            onDrop={onDrop}
-            state={widgetStates[w.type] ?? (EMPTY_STATE[w.type] ?? {})}
-            setState={setWState(w.type)}
-            onRemove={removeWidget}
-            onResize={resizeWidget}
-            openModal={openModal}
-            allStates={widgetStates}
-          />
-        ))}
+          {railPreview && (
+            <div className="widget-preview-card">
+              <div className={`widget-preview-mini ${railPreview.critic ? 'critic' : ''}`}>
+                <div className="widget-preview-mini-head">
+                  <Icon name={railPreview.icon} size={14}/>
+                  <span>{railPreview.name}</span>
+                  <span className="size-pill">{railPreview.defaultSize}</span>
+                </div>
+                <div className="widget-preview-mini-body">
+                  <span className="widget-preview-skel"/>
+                  <span className="widget-preview-skel short"/>
+                  <span className="widget-preview-skel"/>
+                </div>
+              </div>
+              <p className="widget-preview-desc">{railPreview.desc}</p>
+            </div>
+          )}
+        </aside>
       </div>
     </>
   );
@@ -830,6 +874,7 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
   const [showClearData, setShowClearData] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState('profile');
+  const statedGoal = useStatedGoal(authToken, user);
   const hydratedRef = useRef(false);
   const [serverHydrated, setServerHydrated] = useState(false);
 
@@ -958,7 +1003,7 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
       onSetView: (v) => setView(v),
       onAddWidget: (meta) => {
         const id = 'w-' + Date.now();
-        setLayout(l => [...l, { id, type: meta.type, size: meta.defaultSize, critic: meta.critic }]);
+        setLayout(l => [{ id, type: meta.type, size: meta.defaultSize, critic: meta.critic }, ...l]);
         if (EMPTY_STATE[meta.type]) {
           setWidgetStates(s => ({ ...s, [meta.type]: JSON.parse(JSON.stringify(EMPTY_STATE[meta.type])) }));
         }
@@ -1109,6 +1154,7 @@ const CanvasPage = ({ user, authToken, onNavigateToHome, onNavigateToChat, onNav
         onSelectSession={(id) => onNavigateToChat && onNavigateToChat(id)}
         onNewChat={() => onNavigateToChat && onNavigateToChat()}
         pageContext="canvas"
+        statedGoal={statedGoal}
         canvasSubview={view}
         widgetGroups={widgetGroups}
         deliverableProjects={deliverableProjects}

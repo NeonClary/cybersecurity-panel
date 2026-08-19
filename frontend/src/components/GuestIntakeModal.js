@@ -1,12 +1,33 @@
 import React, { useState } from 'react';
 import { Shield, Building2, PenLine, X, Loader2, ArrowRight } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAppConfig } from '../contexts/AppConfigContext';
 
 /**
  * Explore-as-guest intake: two persona chips + free-text "something else".
  */
+const DEFAULT_GUEST_GOALS = {
+  personal: {
+    title: "I'm securing my personal digital life",
+    detail: 'Passwords, MFA, backups, phishing — sample Journey & chat for individuals',
+  },
+  business: {
+    title: 'I am responsible for securing an organization',
+    detail: 'SMB / IT baseline, CIS IG1 sample track, policies & Workspace demo',
+  },
+  other: {
+    title: 'Something else',
+    detail: "Describe your situation — we'll tailor the demo",
+  },
+};
+
 const GuestIntakeModal = ({ onClose, onSuccess }) => {
   const { isDark } = useTheme();
+  const { config } = useAppConfig();
+  const guestGoals = {
+    ...DEFAULT_GUEST_GOALS,
+    ...(config?.homepage?.guest_goals || {}),
+  };
   const [choice, setChoice] = useState(null); // personal | business | other
   const [freeText, setFreeText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -114,9 +135,11 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
           <button type="button" style={chip(choice === 'personal')} onClick={() => setChoice('personal')} disabled={loading}>
             <Shield size={22} style={{ color: 'var(--accent-primary, #0B7A8A)', flexShrink: 0, marginTop: 2 }} />
             <span>
-              <strong style={{ display: 'block', marginBottom: 2 }}>I&apos;m securing my personal digital life</strong>
+              <strong style={{ display: 'block', marginBottom: 2 }}>
+                {guestGoals.personal?.title || DEFAULT_GUEST_GOALS.personal.title}
+              </strong>
               <span style={{ fontSize: 13, color: isDark ? '#94a3b8' : '#64748b' }}>
-                Passwords, MFA, backups, phishing — sample Journey &amp; chat for individuals
+                {guestGoals.personal?.detail || DEFAULT_GUEST_GOALS.personal.detail}
               </span>
             </span>
           </button>
@@ -124,9 +147,11 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
           <button type="button" style={chip(choice === 'business')} onClick={() => setChoice('business')} disabled={loading}>
             <Building2 size={22} style={{ color: 'var(--accent-primary, #0B7A8A)', flexShrink: 0, marginTop: 2 }} />
             <span>
-              <strong style={{ display: 'block', marginBottom: 2 }}>I help protect a business or organization</strong>
+              <strong style={{ display: 'block', marginBottom: 2 }}>
+                {guestGoals.business?.title || DEFAULT_GUEST_GOALS.business.title}
+              </strong>
               <span style={{ fontSize: 13, color: isDark ? '#94a3b8' : '#64748b' }}>
-                SMB / IT baseline, CIS IG1 sample track, policies &amp; Workspace demo
+                {guestGoals.business?.detail || DEFAULT_GUEST_GOALS.business.detail}
               </span>
             </span>
           </button>
@@ -134,9 +159,11 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
           <button type="button" style={chip(choice === 'other')} onClick={() => setChoice('other')} disabled={loading}>
             <PenLine size={22} style={{ color: 'var(--accent-primary, #0B7A8A)', flexShrink: 0, marginTop: 2 }} />
             <span>
-              <strong style={{ display: 'block', marginBottom: 2 }}>Something else</strong>
+              <strong style={{ display: 'block', marginBottom: 2 }}>
+                {guestGoals.other?.title || DEFAULT_GUEST_GOALS.other.title}
+              </strong>
               <span style={{ fontSize: 13, color: isDark ? '#94a3b8' : '#64748b' }}>
-                Describe your situation — we&apos;ll tailor the demo
+                {guestGoals.other?.detail || DEFAULT_GUEST_GOALS.other.detail}
               </span>
             </span>
           </button>

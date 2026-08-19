@@ -13,7 +13,7 @@ export const userGuideTopics = [
 ## Opening a conversation
 When you start a new chat, Jerry greets you with something like:
 
-> **"You've contacted me today — what is it that I can help you with in cybersecurity?"**
+> A short greeting based on your stated goal, then Getting Started questions you can click.
 
 ## Intake chips
 Tap a starter chip to jump straight in, or choose **Something else…** to type free text:
