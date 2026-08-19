@@ -59,8 +59,8 @@ const input = {
 };
 
 const primaryBtn = {
-  padding: '10px 16px', minHeight: 44, background: 'var(--accent-primary)',
-  color: '#fff', border: 'none', borderRadius: 8,
+  padding: '10px 16px', minHeight: 44, background: 'var(--accent-fill, var(--accent-primary))',
+  color: 'var(--accent-on-accent, #fff)', border: 'none', borderRadius: 8,
   cursor: 'pointer', fontSize: 14, fontWeight: 500,
   display: 'inline-flex', alignItems: 'center', gap: 8,
 };

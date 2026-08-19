@@ -86,12 +86,12 @@
 
 .journey-progress-fill {
   height: 100%;
-  background: var(--accent-primary, #0f766e);
+  background: var(--accent-primary, #0B7A8A);
   transition: width 0.25s ease;
 }
 
 .journey-progress-fill--level {
-  background: var(--accent-secondary, #14b8a6);
+  background: var(--accent-secondary, #8B3DB8);
 }
 
 /* Self-assessments */
@@ -121,17 +121,17 @@
 .journey-assess-new {
   min-height: 40px;
   padding: 0.4rem 0.9rem;
-  border: 1px solid var(--accent-primary, #0f766e);
+  border: 1px solid var(--accent-primary, #0B7A8A);
   border-radius: 999px;
   background: transparent;
-  color: var(--accent-primary, #0f766e);
+  color: var(--accent-primary, #0B7A8A);
   cursor: pointer;
   font-size: 0.85rem;
 }
 
 .journey-assess-new:hover {
-  background: var(--accent-primary, #0f766e);
-  color: #fff;
+  background: var(--accent-fill, var(--accent-primary, #0B7A8A));
+  color: var(--accent-on-accent, #fff);
 }
 
 .journey-trend {
@@ -168,7 +168,7 @@
 
 .journey-assess-slider input[type='range'] {
   flex: 1;
-  accent-color: var(--accent-primary, #0f766e);
+  accent-color: var(--accent-primary, #0B7A8A);
   min-height: 24px;
 }
 
@@ -195,7 +195,7 @@
   padding: 0.5rem 1.1rem;
   border: none;
   border-radius: 10px;
-  background: var(--accent-primary, #0f766e);
+  background: var(--accent-primary, #0B7A8A);
   color: #fff;
   cursor: pointer;
 }
@@ -262,8 +262,8 @@
 }
 
 .journey-track-card.active {
-  border-color: var(--accent-primary, #5558E3);
-  box-shadow: inset 0 0 0 1px var(--accent-primary, #5558E3), var(--shadow-sm);
+  border-color: var(--accent-primary, #0B7A8A);
+  box-shadow: inset 0 0 0 1px var(--accent-primary, #0B7A8A), var(--shadow-sm);
 }
 
 .journey-track-card strong {

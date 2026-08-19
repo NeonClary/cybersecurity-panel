@@ -5,7 +5,7 @@
 app:
   title: "Cybersecurity Advisor"
   subtitle: "AI-Powered Security Guidance"
-  primary_color: "#5558E3"
+  primary_color: "#0B7A8A"
   logo_icon: "Shield"
   footer_text: "© 2026 Neon AI. All rights reserved."
   user_avatars:
@@ -136,8 +136,8 @@ chat_page:
     personal:
       - title: "Everyday digital safety"
         icon: "Shield"
-        color: "#0F766E"
-        bg_color: "#ECFDF5"
+        color: "#0B7A8A"
+        bg_color: "#DCEEF1"
         suggestions:
           - "How do I lock down my email and social accounts with MFA?"
           - "What's the simplest password manager setup for a household?"
@@ -177,8 +177,8 @@ chat_page:
           - "How do we preserve evidence on a suspected compromised laptop?"
       - title: "Governance & questionnaires"
         icon: "Scale"
-        color: "#7C3AED"
-        bg_color: "#F5F3FF"
+        color: "#8B3DB8"
+        bg_color: "#F5E8FB"
         suggestions:
           - "Help me answer a vendor security questionnaire for our SMB."
           - "What policies are table-stakes before an audit?"
@@ -186,8 +186,8 @@ chat_page:
     other:
       - title: "Shape your path"
         icon: "Compass"
-        color: "#0F766E"
-        bg_color: "#ECFDF5"
+        color: "#0B7A8A"
+        bg_color: "#DCEEF1"
         suggestions:
           - "Help me break my custom security goal into weekly milestones."
           - "What should I learn first given the situation I described?"
@@ -208,6 +208,7 @@ personas:
     - Adapt vocabulary to the user's knowledge level from their summary: plain language for beginners; full technical terms for experts.
     - Prefer one high-value follow-up over a list of questions.
     - If urgency is high (active incident / "was I hacked"), lead with immediate first steps before profiling.
+    - If the user profile, conversation, or summaries name a goal or project, use it. When they say "my goal" or "custom security goal", name that goal in Thought and make every What-to-do bullet specific to it. Do not give generic phases as if you had no context.
 
     **Formatting (Compact Markdown v1):**
     - Use GitHub-Flavored Markdown.

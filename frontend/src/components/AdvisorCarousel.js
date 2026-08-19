@@ -1,11 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import MessageBubble from './MessageBubble';
-
-const CONTROLS_W = 62;
-const GAP = 16;
-const PREFERRED_SLIDE = 400;
-const MIN_SLIDE = 280;
+import { computeLayout, GAP, PREFERRED_SLIDE } from '../utils/advisorCarouselLayout';
 
 const findScrollParent = (node) => {
   let el = node?.parentElement;
@@ -19,32 +15,22 @@ const findScrollParent = (node) => {
   return null;
 };
 
-function computeLayout(paneWidth, messageCount) {
-  const n = Math.max(1, messageCount);
-  const usable = Math.max(MIN_SLIDE, paneWidth - CONTROLS_W);
-  let visible = Math.floor((usable + GAP) / (PREFERRED_SLIDE + GAP));
-  visible = Math.max(1, Math.min(n, visible));
-  if (visible === 1 && n > 1 && 2 * MIN_SLIDE + GAP <= usable) {
-    visible = Math.min(n, Math.floor((usable + GAP) / (MIN_SLIDE + GAP)));
-  }
-  const slideW = Math.max(
-    MIN_SLIDE,
-    Math.min(PREFERRED_SLIDE, Math.floor((usable - GAP * (visible - 1)) / visible))
-  );
-  return { visible, slideW };
-}
-
 /**
  * Show as many advisor answers as fit side-by-side; carousel when they don't.
  * Messages should already be ordered most-relevant-first (orchestrator rank).
  *
- * Controls sit just to the right of the visible answer(s). They stay vertically
- * centered in the answer stack when it is shorter than the chat pane, and
- * centered in the visible pane when the stack fills (or exceeds) the viewport.
+ * Controls sit just to the right of the visible answer(s) when that fits.
+ * If not, they overlay the last visible card (or sit below) so they stay on-screen.
+ * They stay vertically centered in the visible chat pane.
  */
 const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchReferences, userAvatarId, userAvatarOptions }) => {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [layout, setLayout] = useState({ visible: 1, slideW: PREFERRED_SLIDE });
+  const [layout, setLayout] = useState({
+    visible: 1,
+    slideW: PREFERRED_SLIDE,
+    cardsWidth: PREFERRED_SLIDE,
+    controlsMode: 'none',
+  });
   const shellRef = useRef(null);
   const stageRef = useRef(null);
   const controlsColRef = useRef(null);
@@ -54,7 +40,7 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
   const visibleCount = Math.min(layout.visible, messages.length || 1);
   const maxIndex = Math.max(0, messages.length - visibleCount);
   const showAll = visibleCount >= messages.length && messages.length > 1;
-  const showControls = messages.length > visibleCount;
+  const showControls = layout.controlsMode !== 'none' && messages.length > visibleCount;
 
   useEffect(() => {
     setActiveIndex(0);
@@ -75,11 +61,15 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
   const measurePane = useCallback(() => {
     const shell = shellRef.current;
     if (!shell) return;
-    const pane = findScrollParent(shell) || shell;
-    const paneWidth = Math.round(pane.getBoundingClientRect().width);
-    const next = computeLayout(paneWidth, messages.length);
+    const available = Math.floor(shell.clientWidth);
+    if (available <= 0) return;
+    const next = computeLayout(available, messages.length);
     setLayout((prev) => (
-      prev.visible === next.visible && prev.slideW === next.slideW ? prev : next
+      prev.visible === next.visible
+      && prev.slideW === next.slideW
+      && prev.controlsMode === next.controlsMode
+        ? prev
+        : next
     ));
   }, [messages.length]);
 
@@ -87,7 +77,13 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
     const col = controlsColRef.current;
     const inner = controlsInnerRef.current;
     const stage = stageRef.current;
+    const shell = shellRef.current;
     if (!col || !inner || !stage) return;
+
+    if (layout.controlsMode === 'below') {
+      inner.style.top = '';
+      return;
+    }
 
     const scrollParent = findScrollParent(stage);
     const colRect = col.getBoundingClientRect();
@@ -108,10 +104,23 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
     if (overlapBottom > overlapTop && innerH > 0 && colH > 0) {
       const mid = (overlapTop + overlapBottom) / 2;
       const maxTop = Math.max(0, colH - innerH);
-      const top = Math.max(0, Math.min(maxTop, mid - colRect.top - innerH / 2));
+      let top = Math.max(0, Math.min(maxTop, mid - colRect.top - innerH / 2));
+
+      if (shell) {
+        const shellRect = shell.getBoundingClientRect();
+        const innerTopAbs = colRect.top + top;
+        if (innerTopAbs < shellRect.top) {
+          top = Math.max(0, shellRect.top - colRect.top);
+        }
+        const innerBottomAbs = colRect.top + top + innerH;
+        if (innerBottomAbs > shellRect.bottom) {
+          top = Math.max(0, Math.min(maxTop, shellRect.bottom - colRect.top - innerH));
+        }
+      }
+
       inner.style.top = `${Math.round(top)}px`;
     }
-  }, []);
+  }, [layout.controlsMode]);
 
   useLayoutEffect(() => {
     measurePane();
@@ -120,15 +129,21 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
     if (shell) ro?.observe(shell);
     const scrollParent = shell ? findScrollParent(shell) : null;
     if (scrollParent) ro?.observe(scrollParent);
+    const chatArea = shell?.closest('.main-chat-area, .messages-scroll');
+    if (chatArea && chatArea !== scrollParent && chatArea !== shell) {
+      ro?.observe(chatArea);
+    }
     window.addEventListener('resize', measurePane);
+    window.visualViewport?.addEventListener('resize', measurePane);
     return () => {
       window.removeEventListener('resize', measurePane);
+      window.visualViewport?.removeEventListener('resize', measurePane);
       ro?.disconnect();
     };
   }, [measurePane]);
 
   useLayoutEffect(() => {
-    if (messages.length <= 1) return undefined;
+    if (!showControls) return undefined;
 
     updateControlPosition();
     const raf = window.requestAnimationFrame(() => updateControlPosition());
@@ -152,7 +167,7 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
       window.removeEventListener('resize', onScrollOrResize);
       ro?.disconnect();
     };
-  }, [messages.length, activeIndex, messageKey, visibleCount, updateControlPosition]);
+  }, [showControls, messages.length, activeIndex, messageKey, visibleCount, updateControlPosition]);
 
   if (messages.length === 1) {
     return (
@@ -173,11 +188,15 @@ const AdvisorCarousel = ({ messages = [], onReply, onExpand, onClick, onSearchRe
 
   const viewportWidth = visibleCount * layout.slideW + GAP * (visibleCount - 1);
   const offset = showAll ? 0 : activeIndex * (layout.slideW + GAP);
+  const controlsMode = showControls ? layout.controlsMode : 'none';
 
   return (
     <div
-      className={`advisor-carousel carousel-mode${showAll ? ' is-showing-all' : ''}`}
+      className={`advisor-carousel carousel-mode controls-${controlsMode}${showAll ? ' showing-all' : ''}`}
       ref={shellRef}
+      data-visible={visibleCount}
+      data-controls={controlsMode}
+      data-slide-w={layout.slideW}
     >
       <div className="carousel-stage" ref={stageRef}>
         <div

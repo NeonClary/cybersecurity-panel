@@ -1,4 +1,6 @@
-/* CSS Custom Properties for Theming */
+/* CSS Custom Properties for Theming
+   Palette from the Cybersecurity Advisor mark: cyan/teal primary,
+   muted magenta secondary, cream (light) / charcoal (dark) surfaces. */
 :root[data-theme="light"] {
   /* Background / surfaces — warm cream */
   --bg-primary: #FAF7F1;
@@ -11,6 +13,8 @@
   --header-bg: #FBF9F5;
   --header-border: #DDD5C8;
   --header-shadow: var(--shadow-md);
+  --surface: #FFFFFF;
+  --brand-mark-ring: rgba(18, 20, 23, 0.12);
 
   /* Text */
   --text-primary: #1A1714;
@@ -24,14 +28,19 @@
   --border-secondary: #D1C9BB;
   --border-tertiary: #E8E1D6;
   --border-muted: #E8E1D6;
+  --border: #DDD5C8;
 
-  /* Accent — violet (primary CTA only) */
-  --accent-primary: #5558E3;
-  --accent-secondary: #7C4FE8;
-  --accent-gradient: linear-gradient(135deg, #5558E3, #7C4FE8);
-  --accent-light: #EDEBFA;
-  --primary-color: #5558E3;
-  --primary-color-hover: #4548D0;
+  /* Accent — cyan-teal primary; magenta used sparingly */
+  --accent-primary: #0B7A8A;
+  --accent-secondary: #8B3DB8;
+  --accent-gradient: linear-gradient(135deg, #0B7A8A, #6B3AA8);
+  --accent-light: #DCEEF1;
+  --accent-soft: #DCEEF1;
+  --accent-fill: #0B7A8A;
+  --accent-on-accent: #FFFFFF;
+  --accent: #0B7A8A;
+  --primary-color: #0B7A8A;
+  --primary-color-hover: #096875;
 
   /* Warm-tinted shadows */
   --shadow-sm: 0 1px 2px rgba(40, 30, 10, 0.06);
@@ -40,8 +49,8 @@
   --shadow-xl: 0 20px 40px -12px rgba(40, 30, 10, 0.16);
 
   /* Feature / muted accent fills */
-  --feature-bg: #EDEBFA;
-  --feature-icon-color: #5558E3;
+  --feature-bg: #DCEEF1;
+  --feature-icon-color: #0B7A8A;
 
   /* Error */
   --error-bg: #FEF2F2;
@@ -51,7 +60,7 @@
   /* Inputs */
   --input-bg: #FFFFFF;
   --input-border: #DDD5C8;
-  --input-focus: #5558E3;
+  --input-focus: #0B7A8A;
   --input-focus-shadow: 0 0 0 2px var(--card-bg), 0 0 0 4px var(--accent-primary);
 
   /* Type scale */
@@ -63,17 +72,19 @@
 }
 
 :root[data-theme="dark"] {
-  /* Deep neutrals with warm-ish violet accents */
-  --bg-primary: #16141A;
-  --bg-secondary: #1E1B24;
-  --bg-tertiary: #2A2633;
-  --bg-gradient: linear-gradient(165deg, #1A1720 0%, #14121A 55%, #1E1B24 100%);
-  --card-bg: #221F2A;
-  --card-hover: #2C2835;
-  --sidebar-bg: #1A1720;
-  --header-bg: #1C1922;
-  --header-border: rgba(125, 115, 145, 0.28);
+  /* Charcoal with cool steel — not pure black, not violet-tinted */
+  --bg-primary: #14181C;
+  --bg-secondary: #1B2128;
+  --bg-tertiary: #252C34;
+  --bg-gradient: linear-gradient(165deg, #181D22 0%, #12161A 55%, #1B2128 100%);
+  --card-bg: #222830;
+  --card-hover: #2A323C;
+  --sidebar-bg: #161B20;
+  --header-bg: #181D22;
+  --header-border: rgba(90, 170, 185, 0.22);
   --header-shadow: var(--shadow-md);
+  --surface: #222830;
+  --brand-mark-ring: rgba(78, 202, 214, 0.28);
 
   --text-primary: #F5F2EC;
   --text-secondary: #C9C2B6;
@@ -81,33 +92,39 @@
   --text-muted: #9A9288;
   --text-accent: #E8E1D6;
 
-  --border-primary: #3A3545;
-  --border-secondary: #4A4458;
-  --border-tertiary: #2E2A38;
-  --border-muted: #2E2A38;
+  --border-primary: #3A424C;
+  --border-secondary: #4A545E;
+  --border-tertiary: #2C333C;
+  --border-muted: #2C333C;
+  --border: #3A424C;
 
-  --accent-primary: #8B8EF0;
-  --accent-secondary: #A78BFA;
-  --accent-gradient: linear-gradient(135deg, #6B6EE8, #8B5CF6);
-  --accent-light: #2A2640;
-  --primary-color: #8B8EF0;
-  --primary-color-hover: #A0A3F5;
+  /* Bright cyan for text/icons; darker fill for white-on-accent CTAs */
+  --accent-primary: #4ECAD6;
+  --accent-secondary: #C084E0;
+  --accent-gradient: linear-gradient(135deg, #0D7A86, #6B3AA8);
+  --accent-light: #1A3036;
+  --accent-soft: #1A3036;
+  --accent-fill: #0D7A86;
+  --accent-on-accent: #FFFFFF;
+  --accent: #4ECAD6;
+  --primary-color: #0D7A86;
+  --primary-color-hover: #0F8F9C;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 4px 10px -2px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 12px 24px -6px rgba(0, 0, 0, 0.5), 0 4px 8px -4px rgba(0, 0, 0, 0.3);
   --shadow-xl: 0 20px 40px -12px rgba(0, 0, 0, 0.55);
 
-  --feature-bg: #2A2640;
-  --feature-icon-color: #8B8EF0;
+  --feature-bg: #1A3036;
+  --feature-icon-color: #4ECAD6;
 
   --error-bg: #3F1414;
   --error-border: #7F1D1D;
   --error-text: #FCA5A5;
 
-  --input-bg: #2A2633;
-  --input-border: #3A3545;
-  --input-focus: #8B8EF0;
+  --input-bg: #252C34;
+  --input-border: #3A424C;
+  --input-focus: #4ECAD6;
   --input-focus-shadow: 0 0 0 2px var(--card-bg), 0 0 0 4px var(--accent-primary);
 
   --font-body: 15px;
@@ -192,6 +209,9 @@ body {
 .homepage .header-left .header-brand {
   display: flex !important;
 }
+.homepage .header-left .modern-home-btn {
+  display: flex !important;
+}
 .homepage .app-header .brand-text {
   display: block !important;
 }
@@ -239,7 +259,7 @@ body {
 .logo-icon {
   width: 24px;
   height: 24px;
-  color: #FFFFFF;
+  color: var(--accent-on-accent, #FFFFFF);
 }
 
 .logo-title {
@@ -276,6 +296,13 @@ body {
 
 .hero-highlight {
   background: var(--accent-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="dark"] .hero-highlight {
+  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -537,6 +564,10 @@ body {
   transform: translateY(-1px);
 }
 
+.suggestion-button.suggestion-generated {
+  box-shadow: inset 2px 0 0 var(--generated-accent, var(--accent-primary));
+}
+
 /* Message Components */
 .user-message-container {
   display: flex;
@@ -620,8 +651,8 @@ body {
 
 .reply-badge {
   font-size: 10px;
-  background: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill);
+  color: var(--accent-on-accent, #FFFFFF);
   padding: 2px 6px;
   border-radius: 4px;
   margin-left: 4px;

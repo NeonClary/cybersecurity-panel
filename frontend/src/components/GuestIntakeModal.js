@@ -32,7 +32,7 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
     padding: '14px 14px',
     minHeight: 44,
     borderRadius: 12,
-    border: active ? '2px solid var(--accent-primary, #0F766E)' : `1px solid ${isDark ? '#475569' : '#cbd5e1'}`,
+    border: active ? '2px solid var(--accent-primary, #0B7A8A)' : `1px solid ${isDark ? '#475569' : '#cbd5e1'}`,
     background: active
       ? (isDark ? 'rgba(15,118,110,0.2)' : 'rgba(15,118,110,0.08)')
       : (isDark ? '#0f172a' : '#f8fafc'),
@@ -112,7 +112,7 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
 
         <div style={{ marginTop: 18 }}>
           <button type="button" style={chip(choice === 'personal')} onClick={() => setChoice('personal')} disabled={loading}>
-            <Shield size={22} style={{ color: 'var(--accent-primary, #0F766E)', flexShrink: 0, marginTop: 2 }} />
+            <Shield size={22} style={{ color: 'var(--accent-primary, #0B7A8A)', flexShrink: 0, marginTop: 2 }} />
             <span>
               <strong style={{ display: 'block', marginBottom: 2 }}>I&apos;m securing my personal digital life</strong>
               <span style={{ fontSize: 13, color: isDark ? '#94a3b8' : '#64748b' }}>
@@ -122,7 +122,7 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
           </button>
 
           <button type="button" style={chip(choice === 'business')} onClick={() => setChoice('business')} disabled={loading}>
-            <Building2 size={22} style={{ color: 'var(--accent-primary, #0F766E)', flexShrink: 0, marginTop: 2 }} />
+            <Building2 size={22} style={{ color: 'var(--accent-primary, #0B7A8A)', flexShrink: 0, marginTop: 2 }} />
             <span>
               <strong style={{ display: 'block', marginBottom: 2 }}>I help protect a business or organization</strong>
               <span style={{ fontSize: 13, color: isDark ? '#94a3b8' : '#64748b' }}>
@@ -132,7 +132,7 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
           </button>
 
           <button type="button" style={chip(choice === 'other')} onClick={() => setChoice('other')} disabled={loading}>
-            <PenLine size={22} style={{ color: 'var(--accent-primary, #0F766E)', flexShrink: 0, marginTop: 2 }} />
+            <PenLine size={22} style={{ color: 'var(--accent-primary, #0B7A8A)', flexShrink: 0, marginTop: 2 }} />
             <span>
               <strong style={{ display: 'block', marginBottom: 2 }}>Something else</strong>
               <span style={{ fontSize: 13, color: isDark ? '#94a3b8' : '#64748b' }}>
@@ -181,7 +181,7 @@ const GuestIntakeModal = ({ onClose, onSuccess }) => {
             disabled={loading || !choice}
             style={{
               padding: '10px 16px', minHeight: 44, borderRadius: 10, border: 'none',
-              background: 'var(--accent-primary, #0F766E)', color: '#fff',
+              background: 'var(--accent-fill, var(--accent-primary, #0B7A8A))', color: 'var(--accent-on-accent, #fff)',
               cursor: loading || !choice ? 'not-allowed' : 'pointer',
               display: 'inline-flex', alignItems: 'center', gap: 8, fontWeight: 600,
               opacity: loading || !choice ? 0.6 : 1,

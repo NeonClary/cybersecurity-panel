@@ -329,7 +329,7 @@ const EnhancedChatInput = ({
             {onToggleSynthesized && (
               <div style={{
                 display: 'flex', borderRadius: '18px', overflow: 'hidden',
-                border: '1px solid #3b82f6', flexShrink: 0,
+                border: '1px solid var(--accent-primary)', flexShrink: 0,
               }}>
                 <button
                   onClick={synthesizedMode ? onToggleSynthesized : undefined}
@@ -340,14 +340,14 @@ const EnhancedChatInput = ({
                     padding: '5px 10px', fontSize: '12px', fontWeight: 600,
                     cursor: synthesizedMode ? 'pointer' : 'default',
                     border: 'none', transition: 'all 0.2s', whiteSpace: 'nowrap',
-                    background: !synthesizedMode ? '#3b82f6' : 'transparent',
-                    color: !synthesizedMode ? '#fff' : '#3b82f6',
+                    background: !synthesizedMode ? 'var(--accent-fill, var(--accent-primary))' : 'transparent',
+                    color: !synthesizedMode ? 'var(--accent-on-accent, #fff)' : 'var(--accent-primary)',
                   }}
                 >
                   <Columns3 size={13} />
                   Panel
                 </button>
-                <div style={{ width: 1, background: '#3b82f6', alignSelf: 'stretch' }} />
+                <div style={{ width: 1, background: 'var(--accent-primary)', alignSelf: 'stretch' }} />
                 <button
                   onClick={!synthesizedMode ? onToggleSynthesized : undefined}
                   type="button"
@@ -357,8 +357,8 @@ const EnhancedChatInput = ({
                     padding: '5px 10px', fontSize: '12px', fontWeight: 600,
                     cursor: !synthesizedMode ? 'pointer' : 'default',
                     border: 'none', transition: 'all 0.2s', whiteSpace: 'nowrap',
-                    background: synthesizedMode ? '#3b82f6' : 'transparent',
-                    color: synthesizedMode ? '#fff' : '#3b82f6',
+                    background: synthesizedMode ? 'var(--accent-fill, var(--accent-primary))' : 'transparent',
+                    color: synthesizedMode ? 'var(--accent-on-accent, #fff)' : 'var(--accent-primary)',
                   }}
                 >
                   <FileOutput size={13} />

@@ -59,22 +59,25 @@
   border-bottom: 1px solid var(--border-primary);
 }
 
-.logo-container {
+.login-header .logo-container {
   width: 56px;
   height: 56px;
-  background: var(--accent-gradient);
+  background: transparent;
   border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 20px auto;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 0 0 1px var(--brand-mark-ring, rgba(18, 20, 23, 0.12)), var(--shadow-md);
+  overflow: hidden;
+  padding: 0;
 }
 
-.logo-icon {
-  width: 28px;
-  height: 28px;
-  color: #FFFFFF;
+.login-header .logo-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .login-title {
@@ -318,7 +321,8 @@
 }
 
 .google-btn,
-.phone-btn {
+.phone-btn,
+.guest-explore-btn {
   width: 100%;
   display: flex;
   align-items: center;
@@ -335,6 +339,12 @@
   transition: all 0.2s ease;
 }
 
+.guest-explore-btn {
+  border: 2px solid var(--accent-primary);
+  color: var(--accent-primary);
+  font-weight: 600;
+}
+
 .google-btn:hover:not(:disabled),
 .phone-btn:hover:not(:disabled) {
   border-color: var(--border-primary);
@@ -343,8 +353,16 @@
   box-shadow: var(--shadow-sm);
 }
 
+.guest-explore-btn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: var(--accent-light, var(--bg-secondary));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
 .google-btn:disabled,
-.phone-btn:disabled {
+.phone-btn:disabled,
+.guest-explore-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
@@ -364,10 +382,21 @@
   background: var(--bg-secondary);
 }
 
-.login-footer p {
+.login-footer p,
+.login-signup-prompt {
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
   margin: 0;
+  font-family: inherit;
+}
+
+.login-signup-prompt .link-btn {
+  font-size: 16px;
+  font-weight: 400;
+  font-family: inherit;
+  line-height: 1.5;
 }
 
 .login-powered-by {
@@ -449,7 +478,8 @@
   }
   
   .google-btn,
-  .phone-btn {
+  .phone-btn,
+  .guest-explore-btn {
     padding: 12px 16px;
     font-size: 14px;
   }
@@ -463,6 +493,7 @@
 .submit-btn:focus-visible,
 .google-btn:focus-visible,
 .phone-btn:focus-visible,
+.guest-explore-btn:focus-visible,
 .forgot-password:focus-visible,
 .link-btn:focus-visible,
 .password-toggle:focus-visible {
@@ -495,6 +526,7 @@
   .submit-btn,
   .google-btn,
   .phone-btn,
+  .guest-explore-btn,
   .form-input,
   .password-toggle,
   .forgot-password,

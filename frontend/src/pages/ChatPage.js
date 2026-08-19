@@ -957,7 +957,7 @@ const handleNewChat = async (sessionId = null) => {
             {!hasMessages ? (
               <div className="welcome-state">
                 <IntakePanel onSubmit={handleSendMessage} guestPersona={guestPersona} />
-                <SuggestionsPanel onSuggestionClick={handleSendMessage} guestPersona={guestPersona} />
+                <SuggestionsPanel onSuggestionClick={handleSendMessage} guestPersona={guestPersona} authToken={authToken} />
               </div>
             ) : (
               <div className="messages-container">

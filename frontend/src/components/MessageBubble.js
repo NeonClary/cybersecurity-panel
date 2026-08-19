@@ -175,7 +175,7 @@ const MessageBubble = ({
     em: ({ children }) => (
       <em style={{ 
         fontStyle: 'italic',
-        color: isDark ? '#93c5fd' : '#3b82f6',
+        color: 'var(--accent-primary)',
         fontWeight: '500'
       }}>
         {children}
@@ -536,7 +536,7 @@ const MessageBubble = ({
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => window.open(`https://www.perplexity.ai/?q=${encodeURIComponent(searchQuery)}`, '_blank')} style={{
                       padding: '6px 12px', borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      background: 'var(--accent-primary)', color: '#fff', border: 'none', cursor: 'pointer',
+                      background: 'var(--accent-fill, var(--accent-primary))', color: 'var(--accent-on-accent, #fff)', border: 'none', cursor: 'pointer',
                     }}>Open in Perplexity</button>
                     <button onClick={() => {
                       navigator.clipboard.writeText(searchQuery).then(() => {

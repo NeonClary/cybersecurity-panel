@@ -297,9 +297,9 @@
 }
 
 .add-docs-btn.active {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  border-color: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, white);
 }
 
 /* View Documents Button */
@@ -324,14 +324,14 @@
 }
 
 .view-docs-btn.active {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  border-color: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, white);
 }
 
 .docs-count {
-  background: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, white);
   border-radius: 10px;
   padding: 2px 6px;
   font-size: 10px;
@@ -579,7 +579,7 @@
   }
   
   .send-button.enabled {
-    border: 2px solid #3B82F6;
+    border: 2px solid var(--accent-primary);
   }
 }
 

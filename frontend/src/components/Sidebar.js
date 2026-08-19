@@ -21,7 +21,6 @@ import {
   Moon,
   Monitor,
   Check,
-  Shield,
   BookOpen,
 } from 'lucide-react';
 import * as LucideIcons from 'lucide-react';
@@ -247,7 +246,7 @@ const Sidebar = ({
             <>
               <div className="sidebar-brand" aria-label={config?.app?.title || 'Cybersecurity Advisor'}>
                 <div className="sidebar-brand-mark" aria-hidden="true">
-                  <Shield size={18} />
+                  <img src="/brand/cybersecurity-advisor-mark.png" alt="" />
                 </div>
                 <div className="sidebar-brand-text">
                   <span className="sidebar-brand-title">
@@ -400,7 +399,7 @@ const Sidebar = ({
                 title={config?.app?.title || 'Cybersecurity Advisor'}
                 aria-label={config?.app?.title || 'Cybersecurity Advisor'}
               >
-                <Shield size={18} />
+                <img src="/brand/cybersecurity-advisor-mark.png" alt="" />
               </div>
               {/* Toggle button replaces user avatar when collapsed */}
               <button 

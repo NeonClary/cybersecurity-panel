@@ -88,7 +88,7 @@ const ClearDataModal = ({ authToken, onClose, onDataCleared }) => {
               onClick={onClose}
               style={{
                 marginTop: 20, padding: '10px 32px', borderRadius: 10,
-                border: 'none', background: '#3b82f6', color: '#fff',
+                border: 'none', background: 'var(--accent-fill, var(--accent-primary))', color: 'var(--accent-on-accent, #fff)',
                 fontSize: 14, fontWeight: 600, cursor: 'pointer',
               }}
             >

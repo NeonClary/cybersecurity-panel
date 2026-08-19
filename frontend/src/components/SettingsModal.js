@@ -46,8 +46,8 @@ const input = {
 };
 
 const primaryBtn = {
-  padding: '10px 16px', background: 'var(--accent-primary)',
-  color: '#fff', border: 'none', borderRadius: 8,
+  padding: '10px 16px', background: 'var(--accent-fill, var(--accent-primary))',
+  color: 'var(--accent-on-accent, #fff)', border: 'none', borderRadius: 8,
   cursor: 'pointer', fontSize: 14, fontWeight: 500,
 };
 
@@ -522,8 +522,8 @@ const SettingsModal = ({
                               fontWeight: 600,
                               padding: '4px 10px',
                               borderRadius: 6,
-                              background: 'var(--accent-primary)',
-                              color: '#fff',
+                              background: 'var(--accent-fill, var(--accent-primary))',
+                              color: 'var(--accent-on-accent, #fff)',
                             }}>
                               Active
                             </span>

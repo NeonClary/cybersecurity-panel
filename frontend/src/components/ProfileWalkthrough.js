@@ -249,7 +249,7 @@ const ProfileWalkthrough = ({ authToken, onClose, existingProfile, embedded = fa
             style={{
               display: 'flex', alignItems: 'center', gap: 4, padding: '10px 16px',
               minHeight: 44, borderRadius: 8, border: 'none',
-              background: 'var(--accent-primary)', color: '#fff',
+              background: 'var(--accent-fill, var(--accent-primary))', color: 'var(--accent-on-accent, #fff)',
               cursor: 'pointer', fontSize: 13, fontWeight: 600,
             }}
           >
@@ -262,7 +262,7 @@ const ProfileWalkthrough = ({ authToken, onClose, existingProfile, embedded = fa
             style={{
               display: 'flex', alignItems: 'center', gap: 4, padding: '10px 16px',
               minHeight: 44, borderRadius: 8, border: 'none',
-              background: 'var(--accent-primary)', color: '#fff',
+              background: 'var(--accent-fill, var(--accent-primary))', color: 'var(--accent-on-accent, #fff)',
               cursor: 'pointer', fontSize: 13, fontWeight: 600,
             }}
           >

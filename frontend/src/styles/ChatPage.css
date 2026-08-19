@@ -46,8 +46,10 @@
   height: 44px;
   flex-shrink: 0; /* never squish into a sliver; collapse rules hide it instead */
   border-radius: 12px;
-  border: none;
-  background: var(--bg-secondary);
+  border: 1px solid var(--brand-mark-ring, rgba(18, 20, 23, 0.12));
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
   color: var(--text-secondary);
   display: flex;
   align-items: center;
@@ -56,9 +58,16 @@
   transition: all 0.2s ease;
 }
 
+.header-brand-mark {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+
 .modern-home-btn:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: transparent;
   transform: translateY(-1px);
   box-shadow: var(--shadow-sm);
 }
@@ -253,6 +262,10 @@
   border-radius: 8px;
 }
 
+.welcome-state .suggestion-button.suggestion-generated {
+  box-shadow: inset 2px 0 0 var(--generated-accent, var(--accent-primary));
+}
+
 @media (max-height: 800px) {
   .welcome-state {
     padding-top: 4px;
@@ -339,33 +352,42 @@
   height: 100%;
 }
 
-/* Advisor carousel: as many answers as fit; arrows just right of the visible set */
+/* Advisor carousel: as many full answers as fit; arrows stay inside the pane */
 .advisor-carousel {
+  --carousel-gap: 16px;
+  --carousel-controls-w: 52px;
+  --carousel-stage-gap: 10px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
   margin-bottom: 24px;
   min-height: 0;
+  min-width: 0;
   width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
+  overflow: visible;
 }
 
 .advisor-carousel .carousel-stage {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  gap: 10px;
+  gap: var(--carousel-stage-gap);
   width: fit-content;
   max-width: 100%;
   min-width: 0;
+  position: relative;
+  box-sizing: border-box;
 }
 
 .advisor-carousel .carousel-viewport {
-  flex: 0 1 auto;
-  max-width: calc(100% - 62px);
+  flex: 0 0 auto;
   min-width: 0;
   overflow: hidden;
+  contain: paint;
+  box-sizing: border-box;
 }
 
 .advisor-carousel .carousel-slide .advisor-message-container {
@@ -374,6 +396,7 @@
 }
 
 .advisor-carousel .carousel-slide .advisor-message-bubble {
+  width: 100%;
   max-width: 100%;
   box-sizing: border-box;
 }
@@ -397,15 +420,20 @@
 }
 
 .advisor-carousel.carousel-mode .carousel-slide {
+  flex: 0 0 auto;
   flex-shrink: 0;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .advisor-carousel .carousel-controls {
   position: relative;
-  flex: 0 0 52px;
-  width: 52px;
+  flex: 0 0 var(--carousel-controls-w);
+  width: var(--carousel-controls-w);
   align-self: stretch;
+  z-index: 3;
 }
 
 .advisor-carousel .carousel-controls-inner {
@@ -416,7 +444,46 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  z-index: 2;
+  z-index: 3;
+}
+
+/* Overlay: keep arrows inside the last visible card when side placement would clip */
+.advisor-carousel.controls-overlay .carousel-stage {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.advisor-carousel.controls-overlay .carousel-controls {
+  position: absolute;
+  right: 8px;
+  top: 0;
+  bottom: 0;
+  flex: none;
+  width: var(--carousel-controls-w);
+  pointer-events: none;
+}
+
+.advisor-carousel.controls-overlay .carousel-arrow {
+  box-shadow: var(--shadow-lg, 0 8px 18px -4px rgba(40, 30, 10, 0.22));
+}
+
+.advisor-carousel.controls-below .carousel-stage {
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  max-width: 100%;
+}
+
+.advisor-carousel.controls-below .carousel-controls {
+  position: relative;
+  flex: 0 0 auto;
+  width: auto;
+  align-self: flex-start;
+}
+
+.advisor-carousel.controls-below .carousel-controls-inner {
+  position: static;
+  flex-direction: row;
 }
 
 .advisor-carousel .carousel-arrow {
@@ -440,9 +507,9 @@
 }
 
 .advisor-carousel .carousel-arrow:hover:not(:disabled) {
-  background: var(--accent-primary);
-  color: white;
-  border-color: var(--accent-primary);
+  background: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, #FFFFFF);
+  border-color: var(--accent-fill, var(--accent-primary));
   box-shadow: var(--shadow-lg, 0 8px 18px -4px rgba(40, 30, 10, 0.16));
 }
 
@@ -609,13 +676,13 @@
 }
 
 .system-content {
-  background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-  color: white;
+  background: var(--accent-gradient);
+  color: var(--accent-on-accent, white);
   padding: 12px 20px;
   border-radius: 20px;
   font-size: 14px;
   font-weight: 500;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+  box-shadow: var(--shadow-md);
   text-align: center;
   max-width: 400px;
 }
@@ -846,7 +913,7 @@
 }
 
 .followup-chips-hide:focus-visible {
-  outline: 2px solid var(--accent-primary, #0f766e);
+  outline: 2px solid var(--accent-primary, #0B7A8A);
   outline-offset: 2px;
 }
 
@@ -879,7 +946,7 @@
 }
 
 .followup-chips-show:focus-visible {
-  outline: 2px solid var(--accent-primary, #0f766e);
+  outline: 2px solid var(--accent-primary, #0B7A8A);
   outline-offset: 2px;
 }
 
@@ -1069,14 +1136,14 @@
   width: 16px;
   height: 16px;
   border: 2px solid var(--border-light, #e5e7eb);
-  border-top: 2px solid var(--primary-color, #3b82f6);
+  border-top: 2px solid var(--accent-primary, #0B7A8A);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
 .dark .loading-session .loading-spinner {
   border-color: var(--border-dark, #374151);
-  border-top-color: var(--primary-color, #3b82f6);
+  border-top-color: var(--accent-primary, #0B7A8A);
 }
 
 /* Document Indicator Styles */
@@ -1096,13 +1163,13 @@
 }
 
 .document-indicator:hover {
-  background: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, #FFFFFF);
 }
 
 .doc-count {
-  background: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, #FFFFFF);
   border-radius: 10px;
   padding: 2px 6px;
   font-size: 11px;
@@ -1283,8 +1350,8 @@
 }
 
 .mobile-menu-button:hover {
-  background: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, #FFFFFF);
 }
 
 /* Responsive Design for Chat Page */

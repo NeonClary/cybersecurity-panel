@@ -334,3 +334,122 @@ class TestNeedsClarificationImproved(unittest.TestCase):
         self.assertEqual(len(context), 1)
         self.assertEqual(context[0]["role"], "user")
         self.assertIn("How do I structure my lit review?", context[0]["content"])
+
+    # ------------------------------------------------------------------
+    # Known goal / profile — skip clarification
+    # ------------------------------------------------------------------
+
+    def test_skips_when_user_context_has_goal_and_message_refers_to_my_goal(
+        self, mock_settings
+    ):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock()
+        orch = _make_orchestrator(persona_llm=llm)
+        session = _make_session(user_message_count=1)
+        user_context = (
+            "USER KNOWLEDGE SUMMARY: stated_goal: sci-fi novel about cats as hackers"
+        )
+
+        result = self._run(
+            orch.needs_clarification_improved(
+                session,
+                "Which advisor topics are most relevant to my goal?",
+                user_context,
+            )
+        )
+
+        self.assertFalse(result)
+        llm.generate.assert_not_called()
+
+    def test_skips_situation_i_described_when_goal_is_known(self, mock_settings):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock()
+        orch = _make_orchestrator(persona_llm=llm)
+        session = _make_session(user_message_count=1)
+
+        result = self._run(
+            orch.needs_clarification_improved(
+                session,
+                "What should I learn first given the situation I described?",
+                "USER SECURITY PROFILE: current_goals: write a novel about cat hackers",
+            )
+        )
+
+        self.assertFalse(result)
+        llm.generate.assert_not_called()
+
+    def test_still_calls_llm_for_help_even_with_goal(self, mock_settings):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock(return_value=json.dumps({
+            "needs_clarification": False,
+            "reason": "Goal is already known.",
+        }))
+        orch = _make_orchestrator(persona_llm=llm)
+        session = _make_session(user_message_count=1)
+        user_context = (
+            "USER KNOWLEDGE SUMMARY: stated_goal: sci-fi novel about cats as hackers"
+        )
+
+        self._run(orch.needs_clarification_improved(session, "help", user_context))
+
+        llm.generate.assert_called_once()
+        user_prompt = llm.generate.call_args.kwargs["context"][0]["content"]
+        self.assertIn("cats as hackers", user_prompt)
+        system_prompt = llm.generate.call_args.kwargs["system_prompt"]
+        self.assertIn("CLEAR ENOUGH", system_prompt)
+
+
+@patch("app.core.improved_orchestrator.get_settings")
+class TestGenerateContextualClarification(unittest.TestCase):
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def test_generation_prompt_includes_user_context(self, mock_settings):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock(return_value=json.dumps({
+            "question": "Which part of the cat-hacker novel should we harden first?",
+            "suggestions": [
+                "Help me threat-model talking-cat hackers in the novel.",
+                "What cyber concepts fit a heist told through cats?",
+                "How do I keep the hacker-cats technically plausible?",
+                "Which advisor should review the novel's attack scenes?",
+            ],
+        }))
+        orch = _make_orchestrator(persona_llm=llm)
+        user_context = (
+            "USER KNOWLEDGE SUMMARY: stated_goal: sci-fi novel about cats as hackers"
+        )
+
+        result = self._run(
+            orch.generate_contextual_clarification("I need a bit more direction", user_context)
+        )
+
+        self.assertIn("cat", result["question"].lower())
+        user_prompt = llm.generate.call_args.kwargs["context"][0]["content"]
+        self.assertIn("cats as hackers", user_prompt)
+        system_prompt = llm.generate.call_args.kwargs["system_prompt"]
+        self.assertIn("GDPR", system_prompt)
+        self.assertIn("specific to that goal", system_prompt.lower())
+
+    def test_fallback_stays_on_goal_when_llm_fails(self, mock_settings):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock(side_effect=RuntimeError("unavailable"))
+        orch = _make_orchestrator(persona_llm=llm)
+        user_context = (
+            "USER KNOWLEDGE SUMMARY: stated_goal: sci-fi novel about cats as hackers"
+        )
+
+        result = self._run(
+            orch.generate_contextual_clarification("help", user_context)
+        )
+
+        self.assertIn("cats as hackers", result["question"].lower())
+        joined = " ".join(result["suggestions"]).lower()
+        self.assertNotIn("gdpr", joined)
+        self.assertNotIn("hipaa", joined)

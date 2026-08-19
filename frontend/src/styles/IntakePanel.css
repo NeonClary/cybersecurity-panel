@@ -9,12 +9,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
-  height: 2rem;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 999px;
-  background: var(--accent-soft, #ccfbf1);
-  color: var(--accent, #0f766e);
+  background: var(--accent-soft, #DCEEF1);
+  color: var(--accent, #0B7A8A);
   margin-bottom: 8px;
+}
+
+.intake-avatar svg {
+  display: block;
 }
 
 .intake-greeting {
@@ -54,8 +58,8 @@
 
 .intake-chip:hover,
 .intake-chip:focus-visible {
-  border-color: var(--accent, #0f766e);
-  background: var(--accent-soft, #f0fdfa);
+  border-color: var(--accent, #0B7A8A);
+  background: var(--accent-soft, #DCEEF1);
   outline: none;
   transform: translateY(-1px);
 }
@@ -91,8 +95,8 @@
   padding: 0.55rem 1.1rem;
   border: none;
   border-radius: 0.65rem;
-  background: var(--accent, #0f766e);
-  color: #fff;
+  background: var(--accent-fill, var(--accent-primary, #0B7A8A));
+  color: var(--accent-on-accent, #fff);
   font-weight: 600;
   cursor: pointer;
 }

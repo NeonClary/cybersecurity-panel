@@ -155,7 +155,7 @@ const summary = {
   creamOk:
     theme.bgPrimary.toUpperCase() === '#FAF7F1' &&
     theme.sidebarBg.toUpperCase() === '#E8E0D4' &&
-    theme.accent.toUpperCase() === '#5558E3',
+    theme.accent.toUpperCase() === '#0B7A8A',
   brandOk: Boolean(brand && /cybersecurity advisor/i.test(brand)),
 };
 fs.writeFileSync(path.join(OUT, 'summary.json'), JSON.stringify(summary, null, 2));

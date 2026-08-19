@@ -34,22 +34,25 @@
   border-bottom: 1px solid var(--border-primary);
 }
 
-.logo-container {
+.signup-header .logo-container {
   width: 56px;
   height: 56px;
-  background: var(--accent-gradient);
+  background: transparent;
   border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 20px auto;
-  box-shadow: var(--shadow-md);
+  box-shadow: 0 0 0 1px var(--brand-mark-ring, rgba(18, 20, 23, 0.12)), var(--shadow-md);
+  overflow: hidden;
+  padding: 0;
 }
 
-.logo-icon {
-  width: 28px;
-  height: 28px;
-  color: #FFFFFF;
+.signup-header .logo-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .signup-title {

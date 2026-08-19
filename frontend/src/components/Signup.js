@@ -148,7 +148,11 @@ const Signup = ({ onNavigateToLogin, onNavigateToHome, onExploreAsGuest }) => {
         {/* Header */}
         <div className="signup-header">
           <div className="logo-container">
-            <Shield className="logo-icon" />
+            <img
+              src="/brand/cybersecurity-advisor-mark.png"
+              alt=""
+              className="logo-icon"
+            />
           </div>
           <h1 className="signup-title">Join Our Community</h1>
           <p className="signup-subtitle">

@@ -98,8 +98,8 @@ const OnboardingChat = ({ authToken, onClose, userName }) => {
             <div key={i} style={{
               alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
               maxWidth: '80%',
-              background: m.role === 'user' ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-              color: m.role === 'user' ? '#fff' : 'var(--text-primary)',
+              background: m.role === 'user' ? 'var(--accent-fill, var(--accent-primary))' : 'var(--bg-secondary)',
+              color: m.role === 'user' ? 'var(--accent-on-accent, #fff)' : 'var(--text-primary)',
               padding: '10px 14px', borderRadius: 12, fontSize: 13, lineHeight: 1.5,
             }}>
               {m.text}
@@ -136,8 +136,8 @@ const OnboardingChat = ({ authToken, onClose, userName }) => {
               disabled={!input.trim() || loading}
               style={{
                 padding: '8px 12px', borderRadius: 8, border: 'none',
-                background: input.trim() ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                color: input.trim() ? '#fff' : 'var(--text-secondary)',
+                background: input.trim() ? 'var(--accent-fill, var(--accent-primary))' : 'var(--bg-secondary)',
+                color: input.trim() ? 'var(--accent-on-accent, #fff)' : 'var(--text-secondary)',
                 cursor: input.trim() ? 'pointer' : 'default',
               }}
             >

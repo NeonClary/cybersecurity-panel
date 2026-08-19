@@ -51,8 +51,8 @@ const HomePage = ({
                 onClick={() => setShowGuestIntake(true)}
                 style={{
                   background: 'transparent',
-                  color: 'var(--accent-primary, #0F766E)',
-                  border: '2px solid var(--accent-primary, #0F766E)',
+                  color: 'var(--accent-primary, #0B7A8A)',
+                  border: '2px solid var(--accent-primary, #0B7A8A)',
                   boxShadow: 'none',
                 }}
               >

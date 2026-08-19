@@ -29,25 +29,25 @@
 }
 
 /* PhD Canvas — color palette matched to the rest of the app
-   (Tailwind gray + indigo accent + violet "wedge" accent) */
+   (cream/charcoal surfaces + cyan accent + magenta critic) */
 .canvas-page-with-sidebar {
-  --canvas-bg: #111827;
-  --canvas-bg-2: #0f172a;
-  --canvas-surface: #1F2937;
-  --canvas-surface-2: #374151;
-  --canvas-surface-3: #4B5563;
-  --canvas-border: #374151;
-  --canvas-border-2: #4B5563;
-  --canvas-text: #F9FAFB;
-  --canvas-text-2: #D1D5DB;
-  --canvas-text-3: #9CA3AF;
-  --canvas-text-4: #6B7280;
-  --canvas-accent: #2DD4BF;
-  --canvas-accent-dim: #0F766E;
-  --canvas-accent-glow: rgba(45, 212, 191, 0.20);
-  --canvas-critic: #A78BFA;
-  --canvas-critic-dim: #7C3AED;
-  --canvas-critic-glow: rgba(167, 139, 250, 0.20);
+  --canvas-bg: #14181C;
+  --canvas-bg-2: #12161A;
+  --canvas-surface: #1B2128;
+  --canvas-surface-2: #252C34;
+  --canvas-surface-3: #3A424C;
+  --canvas-border: #3A424C;
+  --canvas-border-2: #4A545E;
+  --canvas-text: #F5F2EC;
+  --canvas-text-2: #C9C2B6;
+  --canvas-text-3: #9A9288;
+  --canvas-text-4: #6A645C;
+  --canvas-accent: #4ECAD6;
+  --canvas-accent-dim: #0D7A86;
+  --canvas-accent-glow: rgba(78, 202, 214, 0.18);
+  --canvas-critic: #C084E0;
+  --canvas-critic-dim: #8B3DB8;
+  --canvas-critic-glow: rgba(192, 132, 224, 0.18);
   --canvas-warn: #F59E0B;
   --canvas-danger: #DC2626;
   --canvas-ok: #10B981;
@@ -64,24 +64,24 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* Light theme — matches the app's white + Tailwind-gray palette */
+/* Light theme — matches the app's cream + cyan palette */
 .canvas-page-with-sidebar[data-canvas-theme="light"] {
-  --canvas-bg: #F9FAFB;        /* gray-50 */
-  --canvas-bg-2: #FFFFFF;
+  --canvas-bg: #FAF7F1;
+  --canvas-bg-2: #FBF9F5;
   --canvas-surface: #FFFFFF;
-  --canvas-surface-2: #F3F4F6; /* gray-100 */
-  --canvas-surface-3: #E5E7EB; /* gray-200 */
-  --canvas-border: #E5E7EB;    /* gray-200 */
-  --canvas-border-2: #D1D5DB;  /* gray-300 */
-  --canvas-text: #111827;      /* gray-900 */
-  --canvas-text-2: #374151;    /* gray-700 */
-  --canvas-text-3: #6B7280;    /* gray-500 */
-  --canvas-text-4: #9CA3AF;    /* gray-400 */
-  --canvas-accent: #0F766E;    /* teal-700 (Jerry) */
-  --canvas-accent-dim: #99F6E4;
-  --canvas-accent-glow: rgba(15, 118, 110, 0.15);
-  --canvas-critic: #8B5CF6;    /* violet-500 (matches accent-secondary) */
-  --canvas-critic-glow: rgba(139, 92, 246, 0.12);
+  --canvas-surface-2: #F3EEE6;
+  --canvas-surface-3: #EBE4D8;
+  --canvas-border: #DDD5C8;
+  --canvas-border-2: #D1C9BB;
+  --canvas-text: #1A1714;
+  --canvas-text-2: #4A453E;
+  --canvas-text-3: #6A645C;
+  --canvas-text-4: #8A847C;
+  --canvas-accent: #0B7A8A;
+  --canvas-accent-dim: #7EC9D4;
+  --canvas-accent-glow: rgba(11, 122, 138, 0.15);
+  --canvas-critic: #8B3DB8;
+  --canvas-critic-glow: rgba(139, 61, 184, 0.12);
   --canvas-shadow: 0 4px 14px rgba(20, 30, 50, 0.08);
   --canvas-shadow-lg: 0 18px 48px rgba(20, 30, 50, 0.16);
 }
@@ -525,7 +525,7 @@
   padding: 10px 14px;
   margin-bottom: 14px;
   background: var(--canvas-accent-glow);
-  border: 1px solid rgba(99, 102, 241, 0.18);
+  border: 1px solid rgba(11, 122, 138, 0.18);
   border-radius: 8px;
   flex-wrap: wrap;
 }
@@ -923,7 +923,7 @@
   animation: canvas-view-in 180ms var(--canvas-ease);
 }
 .canvas-page-with-sidebar[data-canvas-theme="light"] .insight-detail {
-  background: rgba(99, 102, 241, 0.04);
+  background: rgba(11, 122, 138, 0.04);
 }
 .canvas-page-with-sidebar .insight-detail-head {
   font-size: 10.5px;
@@ -1070,8 +1070,8 @@
   background: rgba(0, 0, 0, 0.015);
   border-color: rgba(15, 15, 15, 0.08);
 }
-.canvas-page-with-sidebar .widget.critic { border-color: rgba(167, 139, 250, 0.18); }
-.canvas-page-with-sidebar[data-canvas-theme="light"] .widget.critic { border-color: rgba(139, 92, 246, 0.18); }
+.canvas-page-with-sidebar .widget.critic { border-color: rgba(192, 132, 224, 0.22); }
+.canvas-page-with-sidebar[data-canvas-theme="light"] .widget.critic { border-color: rgba(139, 61, 184, 0.18); }
 .canvas-page-with-sidebar .widget.critic:hover { border-color: var(--canvas-critic); }
 
 /* Preserve 3-S / 2-M / 1-L per row at every desktop width.
@@ -1287,22 +1287,22 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .select {
   animation: canvas-fade-in .15s ease;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  --canvas-bg: #111827;
-  --canvas-bg-2: #0f172a;
-  --canvas-surface: #1F2937;
-  --canvas-surface-2: #374151;
-  --canvas-surface-3: #4B5563;
-  --canvas-border: #374151;
-  --canvas-border-2: #4B5563;
-  --canvas-text: #F9FAFB;
-  --canvas-text-2: #D1D5DB;
-  --canvas-text-3: #9CA3AF;
-  --canvas-text-4: #6B7280;
-  --canvas-accent: #2DD4BF;
-  --canvas-accent-dim: #0F766E;
-  --canvas-accent-glow: rgba(45, 212, 191, 0.20);
-  --canvas-critic: #A78BFA;
-  --canvas-critic-glow: rgba(167, 139, 250, 0.20);
+  --canvas-bg: #14181C;
+  --canvas-bg-2: #12161A;
+  --canvas-surface: #1B2128;
+  --canvas-surface-2: #252C34;
+  --canvas-surface-3: #3A424C;
+  --canvas-border: #3A424C;
+  --canvas-border-2: #4A545E;
+  --canvas-text: #F5F2EC;
+  --canvas-text-2: #C9C2B6;
+  --canvas-text-3: #9A9288;
+  --canvas-text-4: #6A645C;
+  --canvas-accent: #4ECAD6;
+  --canvas-accent-dim: #0D7A86;
+  --canvas-accent-glow: rgba(78, 202, 214, 0.18);
+  --canvas-critic: #C084E0;
+  --canvas-critic-glow: rgba(192, 132, 224, 0.18);
   --canvas-warn: #F59E0B;
   --canvas-danger: #DC2626;
   --canvas-ok: #10B981;
@@ -1312,22 +1312,22 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .select {
 }
 body[data-canvas-theme="light"] .canvas-modal-backdrop {
   background: rgba(17, 24, 39, 0.35);
-  --canvas-bg: #F9FAFB;
-  --canvas-bg-2: #FFFFFF;
+  --canvas-bg: #FAF7F1;
+  --canvas-bg-2: #FBF9F5;
   --canvas-surface: #FFFFFF;
-  --canvas-surface-2: #F3F4F6;
-  --canvas-surface-3: #E5E7EB;
-  --canvas-border: #E5E7EB;
-  --canvas-border-2: #D1D5DB;
-  --canvas-text: #111827;
-  --canvas-text-2: #374151;
-  --canvas-text-3: #6B7280;
-  --canvas-text-4: #9CA3AF;
-  --canvas-accent: #0F766E;
-  --canvas-accent-dim: #99F6E4;
-  --canvas-accent-glow: rgba(15, 118, 110, 0.15);
-  --canvas-critic: #8B5CF6;
-  --canvas-critic-glow: rgba(139, 92, 246, 0.12);
+  --canvas-surface-2: #F3EEE6;
+  --canvas-surface-3: #EBE4D8;
+  --canvas-border: #DDD5C8;
+  --canvas-border-2: #D1C9BB;
+  --canvas-text: #1A1714;
+  --canvas-text-2: #4A453E;
+  --canvas-text-3: #6A645C;
+  --canvas-text-4: #8A847C;
+  --canvas-accent: #0B7A8A;
+  --canvas-accent-dim: #7EC9D4;
+  --canvas-accent-glow: rgba(11, 122, 138, 0.15);
+  --canvas-critic: #8B3DB8;
+  --canvas-critic-glow: rgba(139, 61, 184, 0.12);
   --canvas-shadow-lg: 0 18px 48px rgba(20, 30, 50, 0.16);
 }
 @keyframes canvas-fade-in { from { opacity: 0 } to { opacity: 1 } }
@@ -2226,7 +2226,7 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
   border-radius: 6px;
   margin-bottom: 4px;
 }
-.canvas-sidebar-menu .csm-project.active { background: rgba(99, 102, 241, 0.06); }
+.canvas-sidebar-menu .csm-project.active { background: var(--accent-light, rgba(11, 122, 138, 0.08)); }
 .dark .canvas-sidebar-menu .csm-project.active { background: rgba(129, 140, 248, 0.10); }
 .canvas-sidebar-menu .csm-project-head {
   display: flex;
@@ -2246,7 +2246,7 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
 .canvas-sidebar-menu .csm-project-head:hover { background: var(--bg-secondary, #f3f4f6); }
 .dark .canvas-sidebar-menu .csm-project-head { color: var(--text-primary-dark, #f9fafb); }
 .dark .canvas-sidebar-menu .csm-project-head:hover { background: var(--bg-secondary-dark, #374151); }
-.canvas-sidebar-menu .csm-project.active .csm-project-name { color: var(--accent-primary, #0F766E); font-weight: 600; }
+.canvas-sidebar-menu .csm-project.active .csm-project-name { color: var(--accent-primary, #0B7A8A); font-weight: 600; }
 .canvas-sidebar-menu .csm-project-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .canvas-sidebar-menu .csm-versions {
   display: inline-flex;
@@ -2288,8 +2288,8 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
 }
 .dark .canvas-sidebar-menu .csm-row { color: var(--text-secondary-dark, #9ca3af); }
 .dark .canvas-sidebar-menu .csm-row:hover { background: var(--bg-secondary-dark, #374151); color: var(--text-primary-dark, #f9fafb); }
-.canvas-sidebar-menu .csm-row.critic { color: #8B5CF6; }
-.dark .canvas-sidebar-menu .csm-row.critic { color: #A78BFA; }
+.canvas-sidebar-menu .csm-row.critic { color: #8B3DB8; }
+.dark .canvas-sidebar-menu .csm-row.critic { color: #C084E0; }
 .canvas-sidebar-menu .csm-row-bullet {
   width: 4px;
   height: 4px;
@@ -2681,7 +2681,7 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
   padding: 4px 14px;
   color: var(--canvas-text-2);
   margin-left: 0;
-  background: rgba(99, 102, 241, 0.04);
+  background: rgba(11, 122, 138, 0.04);
   border-radius: 0 4px 4px 0;
 }
 .canvas-page-with-sidebar .rich-rendered code {
@@ -3068,7 +3068,7 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
 /* Notion-style callout box for AI suggestions */
 .canvas-page-with-sidebar .notion-callout {
   margin-top: 12px;
-  background: rgba(99, 102, 241, 0.06);
+  background: rgba(11, 122, 138, 0.06);
   border-radius: 4px;
   padding: 14px 16px;
   display: flex;
@@ -3078,7 +3078,7 @@ body[data-canvas-theme="light"] .canvas-modal-backdrop .critic-meter .bar { back
   color: var(--canvas-text);
 }
 .canvas-page-with-sidebar[data-canvas-theme="light"] .notion-callout {
-  background: rgba(99, 102, 241, 0.07);
+  background: rgba(11, 122, 138, 0.07);
 }
 .canvas-page-with-sidebar .notion-callout > svg {
   color: var(--canvas-accent);
@@ -3523,7 +3523,7 @@ body[data-canvas-theme="light"] .toast-stack .toast {
   box-shadow: 0 18px 48px rgba(20, 30, 50, 0.16);
 }
 .toast-stack .toast.success { border-left: 3px solid #10B981; }
-.toast-stack .toast.critic { border-left: 3px solid #A78BFA; }
+.toast-stack .toast.critic { border-left: 3px solid #C084E0; }
 .toast-stack .toast.danger { border-left: 3px solid #DC2626; }
 @keyframes canvas-toast-in { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
 

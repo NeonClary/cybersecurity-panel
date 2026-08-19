@@ -39,9 +39,9 @@
 }
 
 .export-button.active {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  border-color: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, white);
 }
 
 .export-button.disabled {
@@ -89,9 +89,9 @@
 }
 
 .export-button-container.export-button-icon-only .export-button.active {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  border-color: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, white);
 }
 
 .export-button-container.export-button-icon-only .export-button.success,
@@ -266,8 +266,8 @@
 }
 
 .export-format-button:hover:not(:disabled) .format-extension {
-  background: var(--accent-primary);
-  color: white;
+  background: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, white);
 }
 
 /* Export Type Selection Section */
@@ -312,9 +312,9 @@
 }
 
 .export-type-button.active {
-  border-color: var(--accent-primary);
-  background: var(--accent-primary);
-  color: white !important; /* MAKE THIS IMPORTANT */
+  border-color: var(--accent-fill, var(--accent-primary));
+  background: var(--accent-fill, var(--accent-primary));
+  color: var(--accent-on-accent, white) !important;
 }
 
 .export-type-button:disabled {

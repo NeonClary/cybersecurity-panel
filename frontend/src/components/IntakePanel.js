@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { MessageCircle } from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
+import SecurityChatBotIcon from './icons/SecurityChatBotIcon';
 import '../styles/IntakePanel.css';
 
 /**
@@ -46,7 +46,7 @@ const IntakePanel = ({ onSubmit, guestPersona = null }) => {
   return (
     <div className="intake-panel" role="region" aria-label="Getting started">
       <div className="intake-avatar" aria-hidden="true">
-        <MessageCircle size={18} />
+        <SecurityChatBotIcon size={22} />
       </div>
       <h2 className="intake-greeting">{greeting}</h2>
       <p className="intake-sub">

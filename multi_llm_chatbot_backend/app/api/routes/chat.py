@@ -21,6 +21,7 @@ from app.api.routes.user_profile import PROFILE_FIELDS, enrich_profile_from_user
 from app.config import get_settings
 from app.core import user_knowledge as uk
 from app.core import bootstrap
+from app.core.starter_suggestions import generate_starter_suggestions
 
 logger = logging.getLogger(__name__)
 
@@ -28,33 +29,39 @@ router = APIRouter()
 session_manager = get_session_manager()
 
 
+async def _load_user_profile_context(user: User) -> str:
+    """Load Mongo profile + knowledge summary as a prompt block."""
+    db = get_database()
+    doc = await db.user_profiles.find_one({"user_id": user.id})
+    profile = enrich_profile_from_user(doc, user)
+    parts = []
+    for key in PROFILE_FIELDS:
+        val = profile.get(key)
+        if val:
+            if isinstance(val, list):
+                val = ", ".join(str(v) for v in val)
+            parts.append(f"{key}: {val}")
+    blocks = []
+    if parts:
+        blocks.append("USER SECURITY PROFILE: " + "; ".join(parts))
+    try:
+        summary = await uk.get_summary_for_provider(
+            user.id,
+            uk.is_small_context_provider(bootstrap.current_provider),
+        )
+        if summary:
+            blocks.append("USER KNOWLEDGE SUMMARY: " + summary)
+    except Exception as sum_err:
+        logger.warning(f"Could not load user knowledge summary: {sum_err}")
+    return "\n\n".join(blocks)
+
+
 async def _attach_user_profile_context(session, user: User) -> None:
     """Load Mongo profile + knowledge summary into session for persona prompts."""
     try:
-        db = get_database()
-        doc = await db.user_profiles.find_one({"user_id": user.id})
-        profile = enrich_profile_from_user(doc, user)
-        parts = []
-        for key in PROFILE_FIELDS:
-            val = profile.get(key)
-            if val:
-                if isinstance(val, list):
-                    val = ", ".join(str(v) for v in val)
-                parts.append(f"{key}: {val}")
-        blocks = []
-        if parts:
-            blocks.append("USER SECURITY PROFILE: " + "; ".join(parts))
-        try:
-            summary = await uk.get_summary_for_provider(
-                user.id,
-                uk.is_small_context_provider(bootstrap.current_provider),
-            )
-            if summary:
-                blocks.append("USER KNOWLEDGE SUMMARY: " + summary)
-        except Exception as sum_err:
-            logger.warning(f"Could not load user knowledge summary: {sum_err}")
-        if blocks:
-            session.user_profile_context = "\n\n".join(blocks)
+        context = await _load_user_profile_context(user)
+        if context:
+            session.user_profile_context = context
     except Exception as prof_err:
         logger.warning(f"Could not load user profile: {prof_err}")
 
@@ -110,6 +117,14 @@ class SwitchChatRequest(BaseModel):
 
 class NewChatRequest(BaseModel):
     title: Optional[str] = "New Chat"
+
+class StarterSuggestionsRequest(BaseModel):
+    count: int = Field(2, ge=1, le=8)
+    exclude: List[str] = Field(default_factory=list)
+    category_titles: List[str] = Field(default_factory=list)
+
+class StarterSuggestionsResponse(BaseModel):
+    suggestions: List[str]
 
 ChatStreamEventType = Literal[
     "error", "progress", "clarification", "advisor", "followups",
@@ -167,8 +182,13 @@ async def chat_stream(
                     "content": message.user_input,
                 })
 
-            if await chat_orchestrator.needs_clarification_improved(session, message.user_input):
-                clar = await chat_orchestrator.generate_contextual_clarification(message.user_input)
+            user_ctx = getattr(session, "user_profile_context", "") or ""
+            if await chat_orchestrator.needs_clarification_improved(
+                session, message.user_input, user_ctx
+            ):
+                clar = await chat_orchestrator.generate_contextual_clarification(
+                    message.user_input, user_ctx
+                )
                 yield ChatStreamLine(
                     type="clarification",
                     data={
@@ -440,6 +460,33 @@ async def create_new_chat(
     except Exception as e:
         logger.error(f"Error creating new chat: {e}")
         raise HTTPException(status_code=500, detail="Failed to create new chat")
+
+@router.post("/chat/starter-suggestions", response_model=StarterSuggestionsResponse)
+async def starter_suggestions(
+    body: StarterSuggestionsRequest,
+    current_user: User = Depends(get_current_active_user),
+) -> StarterSuggestionsResponse:
+    """Generate one Getting Started chip per category, grounded in the user's goal."""
+    try:
+        user_context = await _load_user_profile_context(current_user)
+        llm = chat_orchestrator.llm_client
+        if llm is None and chat_orchestrator.personas:
+            llm = next(iter(chat_orchestrator.personas.values())).llm
+        titles = [t.strip() for t in (body.category_titles or []) if isinstance(t, str) and t.strip()]
+        n = len(titles) if titles else body.count
+        n = max(1, min(int(n), 8))
+        suggestions = await generate_starter_suggestions(
+            llm,
+            user_context,
+            count=n,
+            exclude=body.exclude or [],
+            category_titles=titles,
+        )
+        return StarterSuggestionsResponse(suggestions=suggestions)
+    except Exception as exc:
+        logger.warning("Starter suggestion endpoint failed: %s", exc)
+        return StarterSuggestionsResponse(suggestions=[])
+
 
 @router.post("/chat/{persona_id}")
 async def chat_with_specific_advisor(persona_id: str, input: UserInput, request: Request):

@@ -4,6 +4,11 @@ from app.core.session_manager import ConversationContext, get_session_manager
 from app.core.context_manager import get_context_manager
 from app.core.rag_manager import get_rag_manager
 from app.config import get_settings
+from app.core.user_context import (
+    goal_aware_clarification_fallback,
+    has_stated_goal_or_summary,
+    refers_to_known_goal,
+)
 from app.llm.llm_client import LLMClient, ToolCallResult
 from app.tools import get_tool_definitions, get_tool_executor
 from app.utils.chat_summary import generate_conversation_context_summary
@@ -145,7 +150,12 @@ class ImprovedChatOrchestrator:
         logger.info("CLARIFICATION TRIGGERED: short input (%d words) without specific keywords", word_count)
         return True
 
-    async def needs_clarification_improved(self, session: ConversationContext, user_input: str) -> bool:
+    async def needs_clarification_improved(
+        self,
+        session: ConversationContext,
+        user_input: str,
+        user_context: str = "",
+    ) -> bool:
         """
         Use an LLM call to determine whether the user's input is too vague
         to route to the advisor panel.  Falls back to the legacy rule-based
@@ -156,12 +166,42 @@ class ImprovedChatOrchestrator:
             logger.info("Skipping clarification: session already has %d user message(s)", len(user_messages))
             return False
 
+        session_ctx = getattr(session, "user_profile_context", "")
+        if not isinstance(session_ctx, str):
+            session_ctx = ""
+        known_context = (user_context if isinstance(user_context, str) else "").strip() or session_ctx.strip()
+        if has_stated_goal_or_summary(known_context) and refers_to_known_goal(user_input):
+            logger.info(
+                "Skipping clarification: message refers to a known goal/profile (%r)",
+                user_input[:120],
+            )
+            return False
+
         app_cfg = get_settings().app
         orch_cfg = get_settings().orchestrator
         advisor_descriptions = ", ".join(
             f"{p.name} ({p.id})" for p in self.personas.values()
         )
         domain_keywords = ", ".join(orch_cfg.specific_keywords)
+
+        profile_rules = ""
+        if has_stated_goal_or_summary(known_context):
+            profile_rules = (
+                "The application already knows this user's profile, stated goal, "
+                "and/or knowledge summary. Treat that as established context.\n"
+                "- Messages that refer to \"my goal\", \"the situation I described\", "
+                "\"what I shared\", \"my custom security goal\", or similar are "
+                "CLEAR ENOUGH — do not ask them to restate the goal.\n"
+                "- Do not treat a first message as vague merely because it omits "
+                "details that are already in the profile.\n"
+                "- Do not ask them to pick generic enterprise domains (GDPR, HIPAA, "
+                "org architecture) when a specific goal is already known.\n"
+            )
+        else:
+            profile_rules = (
+                "No usable goal or profile is on file. Truly empty/generic messages "
+                "like \"help\" or \"advice\" NEED CLARIFICATION.\n"
+            )
 
         system_prompt = (
             "You are a routing classifier for an AI advisory application.\n\n"
@@ -171,13 +211,18 @@ class ImprovedChatOrchestrator:
             "Your task: decide whether the user's FIRST message contains enough "
             "substance to send to the advisors, or whether it is too vague and "
             "requires a clarifying follow-up before the advisors can help.\n\n"
+            f"{profile_rules}\n"
             "A message NEEDS CLARIFICATION when it:\n"
-            "- Expresses confusion or uncertainty without a concrete topic\n"
-            "- Is a single generic request like 'help' or 'advice'\n"
-            "- Contains no identifiable subject the advisors could address\n\n"
+            "- Expresses confusion or uncertainty without a concrete topic "
+            "(and no usable goal/profile is already known)\n"
+            "- Is a single generic request like 'help' or 'advice' AND there is "
+            "no usable goal/profile on file\n"
+            "- Contains no identifiable subject the advisors could address, even "
+            "after considering the known profile\n\n"
             "A message is CLEAR ENOUGH when it:\n"
             "- Mentions a specific topic, question, or problem area\n"
-            "- Provides enough context for at least one advisor to respond usefully\n"
+            "- Provides enough context for at least one advisor to respond usefully "
+            "when combined with the known profile/goal\n"
             "- Even a short message is fine if the intent is unambiguous "
             "(e.g. 'explain transformers' is clear)\n"
             "- Messages mentioning domain-relevant topics are likely clear enough "
@@ -187,6 +232,11 @@ class ImprovedChatOrchestrator:
         )
 
         user_prompt = f'User message: "{user_input}"'
+        if known_context:
+            user_prompt += (
+                "\n\n--- Already-known user profile / goals ---\n"
+                f"{known_context}"
+            )
 
         raw = None
 
@@ -224,22 +274,37 @@ class ImprovedChatOrchestrator:
         logger.warning("Falling back to rule-based clarification check")
         return self.needs_clarification(session, user_input)
 
-    async def generate_contextual_clarification(self, user_input: str) -> Dict[str, Any]:
+    async def generate_contextual_clarification(
+        self,
+        user_input: str,
+        user_context: str = "",
+    ) -> Dict[str, Any]:
         """
         Use the LLM to produce a clarification question and clickable
         suggestions that are tailored to what the user actually typed.
         Falls back to the static values in config.yaml if the LLM call fails.
         """
         orch_cfg = get_settings().orchestrator
+        known_context = (user_context or "").strip()
 
         advisor_list = ", ".join(
             f"{p.name} ({p.id})" for p in self.personas.values()
         )
 
+        profile_instruction = ""
+        if has_stated_goal_or_summary(known_context):
+            profile_instruction = (
+                "The user already has a stated goal and/or profile. The question "
+                "and all 4 suggestions MUST be specific to that goal. Never offer "
+                "generic enterprise domains (GDPR, HIPAA, SOC 2, org architecture) "
+                "unless that is actually their goal.\n\n"
+            )
+
         system_prompt = (
             "You are a helpful routing assistant. The user's message is too "
             "vague to send to the advisors. Produce a short clarifying question "
             "and exactly 4 clickable suggestion buttons the user could press.\n\n"
+            f"{profile_instruction}"
             "Reply ONLY with valid JSON — no markdown, no extra text:\n"
             '{"question": "...", "suggestions": ["...", "...", "...", "..."]}\n\n'
             "Keep the question to one sentence. Each suggestion should be a "
@@ -248,10 +313,20 @@ class ImprovedChatOrchestrator:
 
         user_prompt = (
             f"User said: \"{user_input}\"\n"
-            f"Available advisors: {advisor_list}\n\n"
-            "Generate a clarifying question and 4 suggestion buttons that "
-            "relate to what the user said and steer toward the advisors above."
+            f"Available advisors: {advisor_list}\n"
         )
+        if known_context:
+            user_prompt += (
+                "\n--- Known user profile / goals ---\n"
+                f"{known_context}\n"
+            )
+        user_prompt += (
+            "\nGenerate a clarifying question and 4 suggestion buttons that "
+            "relate to what the user said"
+        )
+        if known_context:
+            user_prompt += " and their known goal/profile — not generic compliance topics"
+        user_prompt += " and steer toward the advisors above."
 
         try:
             llm = next(iter(self.personas.values())).llm
@@ -280,6 +355,10 @@ class ImprovedChatOrchestrator:
 
         except Exception as e:
             logger.error(f"LLM clarification failed, using config fallback: {e}")
+
+        goal_fallback = goal_aware_clarification_fallback(known_context)
+        if goal_fallback:
+            return goal_fallback
 
         fallback_questions = orch_cfg.clarification_questions
         fallback_suggestions = orch_cfg.clarification_suggestions

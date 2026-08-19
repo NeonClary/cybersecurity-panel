@@ -230,8 +230,8 @@ const AdvisorStatusDropdown = ({
         }
 
         .thinking-badge {
-          background: var(--accent-primary);
-          color: white;
+          background: var(--accent-fill, var(--accent-primary));
+          color: var(--accent-on-accent, white);
           padding: 2px 6px;
           border-radius: 8px;
           font-size: 10px;

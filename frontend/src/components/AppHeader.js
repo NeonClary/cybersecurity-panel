@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Menu } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
 
 /**
@@ -53,11 +53,16 @@ const AppHeader = ({
         <button
           className="modern-home-btn"
           onClick={onNavigateToHome}
-          title="Home"
+          title={config?.app?.title || 'Cybersecurity Advisor'}
           disabled={isOnHome}
           aria-disabled={isOnHome}
+          aria-label={config?.app?.title || 'Cybersecurity Advisor'}
         >
-          <Home size={20} />
+          <img
+            src="/brand/cybersecurity-advisor-mark.png"
+            alt=""
+            className="header-brand-mark"
+          />
         </button>
         <div className="header-brand">
           <div className="brand-text">
