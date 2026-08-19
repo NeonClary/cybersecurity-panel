@@ -47,3 +47,46 @@ class TestResilientClient(unittest.TestCase):
             client.generate("sys", [{"role": "user", "content": "hi"}], 0.5, 100),
         )
         self.assertEqual(result, "fallback fast")
+
+    def test_generate_stream_uses_primary_chunks(self):
+        async def primary_stream(*_a, **_k):
+            yield "A"
+            yield "B"
+
+        primary = MagicMock()
+        primary.generate_stream = primary_stream
+        fallback = MagicMock()
+        fallback.generate_stream = AsyncMock()
+
+        client = ResilientLLMClient(primary, fallback, race_timeout_seconds=3.0)
+
+        async def collect():
+            out = []
+            async for chunk in client.generate_stream("sys", [{"role": "user", "content": "hi"}], 0.5, 100):
+                out.append(chunk)
+            return out
+
+        self.assertEqual(asyncio.run(collect()), ["A", "B"])
+        fallback.generate_stream.assert_not_called()
+
+    def test_generate_stream_falls_back_on_primary_failure_text(self):
+        async def primary_stream(*_a, **_k):
+            yield "I'm unable to connect to the AI service."
+
+        async def fallback_stream(*_a, **_k):
+            yield "ok"
+
+        primary = MagicMock()
+        primary.generate_stream = primary_stream
+        fallback = MagicMock()
+        fallback.generate_stream = fallback_stream
+
+        client = ResilientLLMClient(primary, fallback, race_timeout_seconds=3.0)
+
+        async def collect():
+            out = []
+            async for chunk in client.generate_stream("sys", [{"role": "user", "content": "hi"}], 0.5, 100):
+                out.append(chunk)
+            return out
+
+        self.assertEqual(asyncio.run(collect()), ["ok"])

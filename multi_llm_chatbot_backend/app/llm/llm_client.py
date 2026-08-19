@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 import re
 
 
@@ -66,6 +66,25 @@ class LLMClient(ABC):
             max_tokens=max_tokens,
         )
         return ToolCallResult(text=text, used_tool=False)
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        context: List[dict],
+        temperature: float,
+        max_tokens: int,
+        response_mime_type: str = None,
+    ) -> AsyncIterator[str]:
+        """Yield response text chunks. Default: one chunk from ``generate()``."""
+        text = await self.generate(
+            system_prompt=system_prompt,
+            context=context,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_mime_type=response_mime_type,
+        )
+        if text:
+            yield text
 
     def _clean_response(self, response: str) -> str:
         """Clean up response text, preserving Markdown formatting."""

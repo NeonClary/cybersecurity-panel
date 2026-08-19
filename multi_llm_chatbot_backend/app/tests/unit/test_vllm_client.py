@@ -188,6 +188,35 @@ class TestImprovedVllmClient(unittest.TestCase):
         client.client.models.list.assert_called_once()
         self.assertEqual(client.model_name, "auto-discovered")
 
+    def test_generate_stream_yields_token_chunks(self, MockAsyncOpenAI, mock_get_ctx):
+        client = ImprovedVllmClient(
+            api_url=FAKE_URL, api_key=FAKE_KEY, model_name="test-model",
+        )
+
+        async def fake_stream():
+            for part in ["Hel", "lo"]:
+                delta = MagicMock(content=part)
+                choice = MagicMock(delta=delta)
+                yield MagicMock(choices=[choice])
+
+        client.client.chat.completions.create = AsyncMock(return_value=fake_stream())
+
+        async def collect():
+            out = []
+            async for chunk in client.generate_stream(
+                system_prompt="You are helpful.",
+                context=[{"role": "user", "content": "Hello"}],
+                temperature=0.7,
+                max_tokens=100,
+            ):
+                out.append(chunk)
+            return out
+
+        result = asyncio.run(collect())
+        self.assertEqual(result, ["Hel", "lo"])
+        kwargs = client.client.chat.completions.create.await_args.kwargs
+        self.assertTrue(kwargs.get("stream"))
+
     # ------------------------------------------------------------------
     # generate – error handling
     # ------------------------------------------------------------------

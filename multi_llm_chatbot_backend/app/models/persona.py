@@ -1,5 +1,5 @@
 from app.llm.llm_client import LLMClient
-from typing import List, Dict
+from typing import AsyncIterator, Dict, List
 import re
 
 SENTINEL = "</END>"
@@ -504,12 +504,35 @@ class Persona:
             max_tokens=max_tokens,
         )
 
-        compact = _ensure_compact_shape(raw_text or "", response_length)
-
-        # Final safety: cap extreme length by trimming bullet lines further if necessary
-        # (We keep this conservative to avoid changing behavior unnecessarily)
-        if len(compact) > 4000:  # very generous; UI should stay well below this
-            # Trim bullets to even fewer words
-            compact = _ensure_compact_shape(compact, "short")
-
+        compact = _finalize_compact(raw_text or "", response_length)
         return compact
+
+    async def respond_stream(
+        self, context: List[Dict], response_length: str = "medium"
+    ) -> AsyncIterator[str]:
+        """Yield token/text chunks, then stop. Caller applies compact shape on the join."""
+        max_tokens = MAX_TOKENS_MAP.get(response_length, 600)
+        structure_hint = STRUCTURE_HINTS.get(response_length, STRUCTURE_HINTS["medium"])
+        temp_scaled = round(self.temperature / 10, 2)
+
+        full_prompt = (
+            f"{self.system_prompt}\n\n"
+            f"{COMPACT_MARKDOWN_V1}\n\n"
+            f"{structure_hint}"
+        )
+
+        async for chunk in self.llm.generate_stream(
+            system_prompt=full_prompt,
+            context=context,
+            temperature=temp_scaled,
+            max_tokens=max_tokens,
+        ):
+            if chunk:
+                yield chunk
+
+
+def _finalize_compact(raw_text: str, response_length: str) -> str:
+    compact = _ensure_compact_shape(raw_text or "", response_length)
+    if len(compact) > 4000:
+        compact = _ensure_compact_shape(compact, "short")
+    return compact

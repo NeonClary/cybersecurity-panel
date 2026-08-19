@@ -25,6 +25,10 @@ class ConversationContext:
         # Cached LLM summary when conversation history exceeds token threshold
         self.conversation_summary: Optional[str] = None
         self.conversation_summary_message_count: int = 0
+        self._summary_lock = asyncio.Lock()
+        self.datetime_context: str = ""
+        self.user_profile_context: str = ""
+        self.urgency_context: str = ""
 
     def clear_conversation_summary(self) -> None:
         self.conversation_summary = None

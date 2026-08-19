@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 from app.llm.llm_client import LLMClient, ToolCallResult
 
@@ -156,3 +156,123 @@ class ResilientLLMClient(LLMClient):
             )
 
         return await self._race_or_fallback(_call)
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        context: List[dict],
+        temperature: float,
+        max_tokens: int,
+        response_mime_type: str = None,
+    ) -> AsyncIterator[str]:
+        """Stream from primary; fallback if first token is slow or primary fails."""
+
+        def _open(client: LLMClient) -> AsyncIterator[str]:
+            return client.generate_stream(
+                system_prompt, context, temperature, max_tokens, response_mime_type,
+            )
+
+        primary_iter = _open(self.primary).__aiter__()
+        first_task = asyncio.create_task(_anext_or_stop(primary_iter))
+
+        try:
+            first = await asyncio.wait_for(
+                asyncio.shield(first_task),
+                timeout=self.race_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            logger.info(
+                "%s slower than %.1fs before first token — racing fallback stream",
+                self.primary_label,
+                self.race_timeout_seconds,
+            )
+            async for chunk in self._race_first_stream(first_task, primary_iter, _open):
+                yield chunk
+            return
+        except Exception as exc:
+            logger.warning("%s stream failed: %s — using fallback", self.primary_label, exc)
+            if not first_task.done():
+                first_task.cancel()
+            async for chunk in _open(self.fallback):
+                yield chunk
+            return
+
+        if first is _STREAM_END:
+            async for chunk in _open(self.fallback):
+                yield chunk
+            return
+
+        if isinstance(first, Exception):
+            logger.warning("%s stream failed: %s — using fallback", self.primary_label, first)
+            async for chunk in _open(self.fallback):
+                yield chunk
+            return
+
+        if _looks_like_failed_response(first):
+            logger.warning("%s stream returned failure text — using fallback", self.primary_label)
+            async for chunk in _open(self.fallback):
+                yield chunk
+            return
+
+        yield first
+        try:
+            async for chunk in primary_iter:
+                yield chunk
+        except Exception as exc:
+            logger.warning("%s stream failed after first token: %s", self.primary_label, exc)
+
+    async def _race_first_stream(self, primary_first_task, primary_iter, open_client):
+        fallback_iter = open_client(self.fallback).__aiter__()
+        fallback_first_task = asyncio.create_task(_anext_or_stop(fallback_iter))
+        pending = {primary_first_task, fallback_first_task}
+        winner_iter = None
+        first_chunk = None
+        last_exc: Exception | None = None
+
+        while pending and first_chunk is None:
+            done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                try:
+                    value = task.result()
+                except Exception as exc:
+                    last_exc = exc
+                    continue
+                if value is _STREAM_END:
+                    continue
+                if isinstance(value, Exception):
+                    last_exc = value
+                    continue
+                if _looks_like_failed_response(value):
+                    last_exc = RuntimeError(f"{self.primary_label} failure text")
+                    continue
+                first_chunk = value
+                winner_iter = primary_iter if task is primary_first_task else fallback_iter
+                break
+
+        for t in pending:
+            if not t.done():
+                t.cancel()
+
+        if first_chunk is None:
+            if last_exc is not None:
+                raise last_exc
+            return
+
+        yield first_chunk
+        try:
+            async for chunk in winner_iter:
+                yield chunk
+        except Exception as exc:
+            logger.warning("Winning stream failed after first token: %s", exc)
+
+
+_STREAM_END = object()
+
+
+async def _anext_or_stop(aiter):
+    try:
+        return await aiter.__anext__()
+    except StopAsyncIteration:
+        return _STREAM_END
+    except Exception as exc:
+        return exc

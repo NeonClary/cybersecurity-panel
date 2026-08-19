@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 from openai import AsyncOpenAI, APIConnectionError, APIStatusError
 
@@ -102,6 +102,43 @@ class OpenAIFallbackClient(LLMClient):
         except Exception as exc:
             logger.error("OpenAI generate failed: %s", exc)
             raise
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        context: List[dict],
+        temperature: float,
+        max_tokens: int,
+        response_mime_type: str = None,
+    ) -> AsyncIterator[str]:
+        context_window = self.context_manager.prepare_context_for_llm(
+            messages=context,
+            system_prompt=system_prompt,
+            llm_provider="openai",
+        )
+        normalized_messages = self._normalize_messages(context_window.messages)
+        token_kwarg = "max_completion_tokens" if self._uses_completion_tokens_param() else "max_tokens"
+        create_kwargs: Dict[str, Any] = dict(
+            model=self.model,
+            messages=normalized_messages,
+            stream=True,
+            **{token_kwarg: max_tokens},
+            **self._reasoning_kwargs(),
+        )
+        if not self._uses_completion_tokens_param():
+            create_kwargs["temperature"] = temperature
+        if response_mime_type == "application/json":
+            create_kwargs["response_format"] = {"type": "json_object"}
+
+        stream = await self.client.chat.completions.create(**create_kwargs)
+        async for chunk in stream:
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            text = getattr(delta, "content", None) if delta is not None else None
+            if text:
+                yield text
 
     _MAX_TOOL_ROUNDS = 5
 

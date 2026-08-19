@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
 from openai import AsyncOpenAI, APIConnectionError, APIStatusError
 
@@ -84,51 +84,67 @@ class ImprovedVllmClient(LLMClient):
             raise ValueError("No models available at the vLLM endpoint")
         self.model_name = models.data[0].id
 
+    async def _completion_kwargs(
+        self,
+        system_prompt: str,
+        context: List[dict],
+        temperature: float,
+        max_tokens: int,
+        response_mime_type: str = None,
+        stream: bool = False,
+    ) -> dict:
+        context_window = self.context_manager.prepare_context_for_llm(
+            messages=context,
+            system_prompt="",
+            llm_provider="vllm",
+        )
+
+        logger.debug(f"Context prepared: {len(context_window.messages)} messages, "
+                    f"~{context_window.total_tokens} tokens, truncated={context_window.truncated}")
+
+        if not self.model_name:
+            await self.refresh_model()
+
+        api_messages = self._build_messages(system_prompt, context_window.messages)
+
+        create_kwargs = dict(
+            model=self.model_name,
+            messages=api_messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+        if response_mime_type == "application/json":
+            create_kwargs["response_format"] = {"type": "json_object"}
+        if stream:
+            create_kwargs["stream"] = True
+        return create_kwargs
+
+    async def _create_with_model_retry(self, create_kwargs: dict):
+        try:
+            return await self.client.chat.completions.create(**create_kwargs)
+        except APIStatusError as e:
+            # Stale model_id in config is common after Neon revisions the
+            # loaded checkpoint — rediscover and retry once in-request.
+            if e.status_code == 404:
+                logger.info(
+                    "Model %r not found (404); rediscovering from endpoint",
+                    self.model_name,
+                )
+                await self.refresh_model()
+                create_kwargs["model"] = self.model_name
+                return await self.client.chat.completions.create(**create_kwargs)
+            raise
+
     async def generate(self, system_prompt: str, context: List[dict],
                        temperature: float, max_tokens: int,
                        response_mime_type: str = None) -> str:
         try:
-            context_window = self.context_manager.prepare_context_for_llm(
-                messages=context,
-                system_prompt="",
-                llm_provider="vllm",
+            create_kwargs = await self._completion_kwargs(
+                system_prompt, context, temperature, max_tokens, response_mime_type,
             )
-
-            logger.debug(f"Context prepared: {len(context_window.messages)} messages, "
-                        f"~{context_window.total_tokens} tokens, truncated={context_window.truncated}")
-
-            if not self.model_name:
-                await self.refresh_model()
-
-            api_messages = self._build_messages(system_prompt, context_window.messages)
-
-            create_kwargs = dict(
-                model=self.model_name,
-                messages=api_messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-
-            if response_mime_type == "application/json":
-                create_kwargs["response_format"] = {"type": "json_object"}
-
-            try:
-                response = await self.client.chat.completions.create(**create_kwargs)
-            except APIStatusError as e:
-                # Stale model_id in config is common after Neon revisions the
-                # loaded checkpoint — rediscover and retry once in-request.
-                if e.status_code == 404:
-                    logger.info(
-                        "Model %r not found (404); rediscovering from endpoint",
-                        self.model_name,
-                    )
-                    await self.refresh_model()
-                    create_kwargs["model"] = self.model_name
-                    response = await self.client.chat.completions.create(**create_kwargs)
-                else:
-                    raise
-
-            text = response.choices[0].message.content.strip()
+            response = await self._create_with_model_retry(create_kwargs)
+            text = (response.choices[0].message.content or "").strip()
             return self._clean_response(text)
 
         except APIConnectionError as e:
@@ -143,6 +159,41 @@ class ImprovedVllmClient(LLMClient):
         except Exception as e:
             logger.error(f"Unexpected error in vLLM client: {str(e)}")
             return "I encountered an unexpected error. Please try again."
+
+    async def generate_stream(
+        self,
+        system_prompt: str,
+        context: List[dict],
+        temperature: float,
+        max_tokens: int,
+        response_mime_type: str = None,
+    ) -> AsyncIterator[str]:
+        try:
+            create_kwargs = await self._completion_kwargs(
+                system_prompt, context, temperature, max_tokens,
+                response_mime_type, stream=True,
+            )
+            stream = await self._create_with_model_retry(create_kwargs)
+            async for chunk in stream:
+                choices = getattr(chunk, "choices", None) or []
+                if not choices:
+                    continue
+                delta = getattr(choices[0], "delta", None)
+                text = getattr(delta, "content", None) if delta is not None else None
+                if text:
+                    yield text
+        except APIConnectionError:
+            logger.error(f"Unable to connect to vLLM at {self.api_url}")
+            raise
+        except APIStatusError as e:
+            logger.error(f"vLLM API error: {e.status_code} - {e.message}")
+            if e.status_code == 404:
+                logger.info("Model not found after rediscovery; clearing cached name")
+                self.model_name = None
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error in vLLM stream: {str(e)}")
+            raise
 
     # ------------------------------------------------------------------
     # Tool-calling support (OpenAI-compatible format)
