@@ -9,7 +9,7 @@ These cover the deterministic post-processing applied to the LLM ranking:
 
 import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.core.improved_orchestrator import ImprovedChatOrchestrator
 
@@ -152,6 +152,87 @@ class TestSummarizedContextIncludesLatestMessage(unittest.TestCase):
         self.assertEqual(
             context[-1]["content"], "What should I do next about MFA?"
         )
+
+
+class TestPersonaContextPrefersRecentTopic(unittest.TestCase):
+    def test_profile_goal_does_not_replace_recent_dnc_turns(self):
+        orch = _make_orchestrator()
+        orch.context_manager._estimate_tokens_for_messages = (
+            lambda msgs: sum(len(m.get("content", "")) // 4 + 1 for m in msgs)
+        )
+        followup = (
+            "Was there any US political group that was involved in the 2015/2016 incident?"
+        )
+        session = MagicMock()
+        session.messages = [
+            {
+                "role": "user",
+                "content": "recover Flickr account without password to get pictures back",
+            },
+            {"role": "jerry_huaute", "content": "Use Yahoo/Flickr account recovery."},
+            {
+                "role": "user",
+                "content": (
+                    "Was there a small group of hackers that broke into the DNC "
+                    "server in 2020 or 2022 or earlier?"
+                ),
+            },
+            {
+                "role": "threat_analyst",
+                "content": (
+                    "The 2015–2016 DNC intrusion is publicly attributed to APT28 / GRU."
+                ),
+            },
+            {"role": "user", "content": followup},
+        ]
+        session.conversation_summary = None
+        session.conversation_summary_message_count = 0
+        session.uploaded_files = []
+        session.user_profile_context = (
+            "USER KNOWLEDGE SUMMARY: stated_goal: recover Flickr account photos"
+        )
+        session.urgency_context = ""
+        session.datetime_context = ""
+        persona = MagicMock()
+        persona.system_prompt = "You are Jerry."
+
+        context = asyncio.run(
+            orch._build_enhanced_context_for_persona(session, persona, followup, "")
+        )
+
+        joined = "\n".join(m["content"] for m in context)
+        self.assertIn("DNC", joined)
+        self.assertIn("GRU", joined)
+        self.assertIn(followup, joined)
+        self.assertIn("MOST RECENT", context[0]["content"])
+        self.assertEqual(context[-1]["content"], followup)
+
+
+class TestDatetimeToolSkip(unittest.TestCase):
+    def test_datetime_only_does_not_call_generate_with_tools(self):
+        orch = _make_orchestrator()
+        orch.llm_client.generate_with_tools = AsyncMock()
+        settings = MagicMock()
+        settings.tools.get_enabled_names.return_value = ["current_datetime"]
+        with patch("app.core.improved_orchestrator.get_settings", return_value=settings):
+            result = asyncio.run(orch.get_tool_response("what time is it"))
+        self.assertFalse(result.used_tool)
+        orch.llm_client.generate_with_tools.assert_not_called()
+
+    def test_datetime_context_is_included_in_persona_prompt(self):
+        orch = _make_orchestrator()
+        orch.context_manager._estimate_tokens_for_messages = lambda msgs: 10
+        session = MagicMock()
+        session.messages = [{"role": "user", "content": "hi"}]
+        session.uploaded_files = []
+        session.user_profile_context = ""
+        session.urgency_context = ""
+        session.datetime_context = "CURRENT DATETIME: Wednesday 2026-08-19"
+        persona = MagicMock()
+        context = asyncio.run(
+            orch._build_enhanced_context_for_persona(session, persona, "hi", "")
+        )
+        self.assertIn("CURRENT DATETIME: Wednesday 2026-08-19", context[0]["content"])
 
 
 if __name__ == "__main__":

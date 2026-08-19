@@ -65,26 +65,36 @@ async def load_chat_session_into_context(chat_session_id: str, user_id: str) -> 
         session_manager = get_session_manager()
         memory_session = session_manager.get_session(memory_session_id)
         
-        # Clear any existing data
-        memory_session.clear_all_data()
+        # Replace conversation messages without wiping RAG documents that
+        # may already be attached to this in-memory session.
+        memory_session.clear_messages()
         
         # Load messages into memory session
         messages = chat_session.get('messages', [])
         for msg_data in messages:
             try:
-                message = {
-                    'id': msg_data.get('id', 'unknown'),
-                    'role': 'user' if msg_data.get('type') == 'user' else 'assistant',
-                    'content': msg_data.get('content', ''),
-                    'timestamp': msg_data.get('timestamp', '')
-                }
-                memory_session.append_message(message['role'], message['content'])
+                msg_type = str(msg_data.get('type') or '').strip().lower()
+                if msg_type == 'user':
+                    role = 'user'
+                elif msg_type in ('clarification', 'system'):
+                    role = 'system'
+                else:
+                    role = msg_data.get('persona_id') or 'assistant'
+                content = msg_data.get('content', '')
+                if not str(content).strip():
+                    continue
+                memory_session.append_message(role, content)
                 
                 # Store original message for export
                 if not hasattr(memory_session, 'original_messages'):
                     memory_session.original_messages = []
                 
-                memory_session.original_messages.append(message)
+                memory_session.original_messages.append({
+                    'id': msg_data.get('id', 'unknown'),
+                    'role': role,
+                    'content': content,
+                    'timestamp': msg_data.get('timestamp', ''),
+                })
             except Exception as msg_error:
                 logger.error(f"Error loading message: {msg_error}")
                 continue

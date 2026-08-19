@@ -142,7 +142,7 @@ class TestNeedsClarificationImproved(unittest.TestCase):
         session = _make_session(user_message_count=1)
 
         result = self._run(
-            orch.needs_clarification_improved(session, "methodology")
+            orch.needs_clarification_improved(session, "something")
         )
 
         self.assertFalse(result)
@@ -327,13 +327,13 @@ class TestNeedsClarificationImproved(unittest.TestCase):
         session = _make_session(user_message_count=1)
 
         self._run(
-            orch.needs_clarification_improved(session, "How do I structure my lit review?")
+            orch.needs_clarification_improved(session, "explain transformers")
         )
 
         context = llm.generate.call_args.kwargs["context"]
         self.assertEqual(len(context), 1)
         self.assertEqual(context[0]["role"], "user")
-        self.assertIn("How do I structure my lit review?", context[0]["content"])
+        self.assertIn("explain transformers", context[0]["content"])
 
     # ------------------------------------------------------------------
     # Known goal / profile — skip clarification
@@ -400,6 +400,165 @@ class TestNeedsClarificationImproved(unittest.TestCase):
         self.assertIn("cats as hackers", user_prompt)
         system_prompt = llm.generate.call_args.kwargs["system_prompt"]
         self.assertIn("CLEAR ENOUGH", system_prompt)
+
+    def test_skips_llm_when_heuristic_says_input_is_specific(self, mock_settings):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock()
+        orch = _make_orchestrator(persona_llm=llm)
+        session = _make_session(user_message_count=1)
+
+        result = self._run(
+            orch.needs_clarification_improved(
+                session, "Please explain your research methodology in detail"
+            )
+        )
+
+        self.assertFalse(result)
+        llm.generate.assert_not_called()
+
+
+FLICKR_DNC_FOLLOWUP = (
+    "Was there any US political group that was involved in the 2015/2016 incident?"
+)
+FLICKR_GOAL_CONTEXT = (
+    "USER KNOWLEDGE SUMMARY: stated_goal: recover Flickr account photos without password"
+)
+
+
+def _flickr_dnc_session(include_followup=True):
+    """Exact multi-turn shape: Flickr recovery, then DNC 2015–16, then follow-up."""
+    session = MagicMock()
+    session.messages = [
+        {
+            "role": "user",
+            "content": "recover Flickr account without password to get pictures back",
+        },
+        {
+            "role": "jerry_huaute",
+            "content": (
+                "Use Yahoo Account recovery and Flickr help to regain access. "
+                "Do not try to bypass the password."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                "Was there a small group of hackers that broke into the DNC "
+                "server in 2020 or 2022 or earlier?"
+            ),
+        },
+        {
+            "role": "threat_analyst",
+            "content": (
+                "The 2015–2016 DNC intrusion is publicly attributed to APT28 / "
+                "Fancy Bear, a GRU unit, not a 2020/2022 campaign."
+            ),
+        },
+    ]
+    if include_followup:
+        session.messages.append({"role": "user", "content": FLICKR_DNC_FOLLOWUP})
+    session.user_profile_context = FLICKR_GOAL_CONTEXT
+    return session
+
+
+@patch("app.core.improved_orchestrator.get_settings")
+class TestRecencyOverOriginalGoal(unittest.TestCase):
+    """Follow-ups must bind 'the 2015/2016 incident' to recent DNC chat, not Flickr."""
+
+    def _run(self, coro):
+        return asyncio.run(coro)
+
+    def test_dnc_followup_does_not_need_clarification(self, mock_settings):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock()
+        orch = _make_orchestrator(persona_llm=llm)
+        session = _flickr_dnc_session(include_followup=True)
+
+        result = self._run(
+            orch.needs_clarification_improved(
+                session, FLICKR_DNC_FOLLOWUP, FLICKR_GOAL_CONTEXT
+            )
+        )
+
+        self.assertFalse(result)
+        llm.generate.assert_not_called()
+
+    def test_dnc_followup_skips_even_if_current_message_not_yet_appended(
+        self, mock_settings
+    ):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock()
+        orch = _make_orchestrator(persona_llm=llm)
+        session = _flickr_dnc_session(include_followup=False)
+
+        result = self._run(
+            orch.needs_clarification_improved(
+                session, FLICKR_DNC_FOLLOWUP, FLICKR_GOAL_CONTEXT
+            )
+        )
+
+        self.assertFalse(result)
+        llm.generate.assert_not_called()
+
+    def test_clarification_generation_stays_on_dnc_not_flickr(self, mock_settings):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock(return_value=json.dumps({
+            "question": (
+                "Are you asking whether any US political group was involved in "
+                "the 2015–2016 DNC intrusion attributed to APT28 / GRU?"
+            ),
+            "suggestions": [
+                "Was CrowdStrike's APT28 / GRU attribution of the 2016 DNC hack disputed?",
+                "Did any US political actors participate in the 2015/2016 DNC breach?",
+                "What is publicly known versus still disputed about DNC 2016 attribution?",
+                "How did US agencies describe GRU involvement in the DNC incident?",
+            ],
+        }))
+        orch = _make_orchestrator(persona_llm=llm)
+        session = _flickr_dnc_session(include_followup=True)
+
+        result = self._run(
+            orch.generate_contextual_clarification(
+                FLICKR_DNC_FOLLOWUP, FLICKR_GOAL_CONTEXT, session=session
+            )
+        )
+
+        blob = (result["question"] + " " + " ".join(result["suggestions"])).lower()
+        self.assertTrue(any(token in blob for token in ("dnc", "gru", "2016", "apt28")))
+        self.assertNotIn("flickr", blob)
+        self.assertNotIn("yahoo", blob)
+        self.assertNotIn("recover", blob)
+
+        system_prompt = llm.generate.call_args.kwargs["system_prompt"]
+        user_prompt = llm.generate.call_args.kwargs["context"][0]["content"]
+        self.assertIn("MOST RECENT", system_prompt)
+        self.assertNotIn("MUST be specific to that goal", system_prompt)
+        self.assertIn("DNC", user_prompt)
+        self.assertIn("GRU", user_prompt)
+        combined_prompt = (system_prompt + " " + user_prompt).lower()
+        self.assertNotIn("must be specific to that goal", combined_prompt)
+
+    def test_clarification_fallback_does_not_snap_back_to_flickr(self, mock_settings):
+        mock_settings.return_value = _make_mock_settings()
+        llm = MagicMock()
+        llm.generate = AsyncMock(side_effect=RuntimeError("unavailable"))
+        orch = _make_orchestrator(persona_llm=llm)
+        session = _flickr_dnc_session(include_followup=True)
+
+        result = self._run(
+            orch.generate_contextual_clarification(
+                FLICKR_DNC_FOLLOWUP, FLICKR_GOAL_CONTEXT, session=session
+            )
+        )
+
+        blob = (result["question"] + " " + " ".join(result["suggestions"])).lower()
+        self.assertTrue(any(token in blob for token in ("dnc", "gru", "2016", "apt28")))
+        self.assertNotIn("flickr", blob)
+        self.assertNotIn("yahoo", blob)
 
 
 @patch("app.core.improved_orchestrator.get_settings")

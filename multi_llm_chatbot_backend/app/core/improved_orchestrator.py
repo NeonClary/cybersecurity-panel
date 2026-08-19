@@ -1,18 +1,28 @@
 from typing import Dict, List, Optional, Any
-from app.models.persona import Persona
+from app.models.persona import Persona, _finalize_compact
 from app.core.session_manager import ConversationContext, get_session_manager
 from app.core.context_manager import get_context_manager
 from app.core.rag_manager import get_rag_manager
 from app.config import get_settings
 from app.core.user_context import (
+    RECENCY_OVER_GOAL_RULE,
+    conversation_first_clarification_fallback,
+    count_user_messages,
+    format_latest_topic,
+    format_recent_conversation,
     goal_aware_clarification_fallback,
     has_stated_goal_or_summary,
+    history_disambiguates,
+    is_truly_ambiguous_followup,
+    looks_like_anaphora,
+    recent_topic_competes_with_goal,
     refers_to_known_goal,
 )
 from app.llm.llm_client import LLMClient, ToolCallResult
 from app.tools import get_tool_definitions, get_tool_executor
 from app.utils.chat_summary import generate_conversation_context_summary
 
+import asyncio
 import json
 import logging
 import re
@@ -30,6 +40,11 @@ _TRIAGE_FALLBACK = re.compile(
 )
 
 VALID_URGENCIES = ("triage", "advisory", "program")
+
+# YAML tool keys → registered function names (see app.tools).
+_YAML_TOOL_NAME_MAP = {
+    "current_datetime": "get_current_datetime",
+}
 
 
 class ImprovedChatOrchestrator:
@@ -67,10 +82,13 @@ class ImprovedChatOrchestrator:
         if self.llm_client is None:
             return ToolCallResult(text="", used_tool=False)
 
-        settings = get_settings()
-        tools_enabled = settings.tools.get_enabled_names()
+        tools_enabled = self._resolve_enabled_tool_names()
 
         if not tools_enabled:
+            return ToolCallResult(text="", used_tool=False)
+
+        # Datetime is injected locally; do not spend an LLM round-trip on it.
+        if set(tools_enabled) <= {"get_current_datetime"}:
             return ToolCallResult(text="", used_tool=False)
 
         tool_definitions = get_tool_definitions(enabled=tools_enabled)
@@ -96,7 +114,39 @@ class ImprovedChatOrchestrator:
             tool_executor=tool_executor,
         )
 
+    def _resolve_enabled_tool_names(self) -> List[str]:
+        """Map config YAML keys to registered tool function names."""
+        from app.tools import list_registered_tools
+
+        registered = set(list_registered_tools())
+        resolved: List[str] = []
+        for raw in get_settings().tools.get_enabled_names():
+            mapped = _YAML_TOOL_NAME_MAP.get(raw, raw)
+            if mapped in registered and mapped not in resolved:
+                resolved.append(mapped)
+        return resolved
+
+    async def attach_datetime_context(self, session: ConversationContext) -> None:
+        """Stamp current date/time onto the session without an LLM call."""
+        if "get_current_datetime" not in self._resolve_enabled_tool_names():
+            return
+        try:
+            from app.tools.current_datetime import execute
+
+            info = await execute()
+            session.datetime_context = (
+                f"CURRENT DATETIME: {info.get('local_weekday')} {info.get('local_date')} "
+                f"{info.get('local_time')} {info.get('local_timezone')} "
+                f"(UTC {info.get('utc_iso')})"
+            )
+        except Exception as exc:
+            logger.warning("Could not attach datetime context: %s", exc)
+
     def needs_clarification(self, session: ConversationContext, user_input: str) -> bool:
+        """Public alias for the rule-based clarification heuristic."""
+        return self._heuristic_needs_clarification(session, user_input)
+
+    def _heuristic_needs_clarification(self, session: ConversationContext, user_input: str) -> bool:
         """
         Determine if the user input needs clarification.
         Patterns and keywords are driven by config.yaml → orchestrator section.
@@ -161,20 +211,51 @@ class ImprovedChatOrchestrator:
         to route to the advisor panel.  Falls back to the legacy rule-based
         method if the LLM call fails.
         """
-        user_messages = [msg for msg in session.messages if msg.get('role') == 'user']
-        if len(user_messages) > 1:
-            logger.info("Skipping clarification: session already has %d user message(s)", len(user_messages))
-            return False
+        session_messages = getattr(session, "messages", None) or []
+        user_msg_count = count_user_messages(session_messages)
+        is_first_user_message = user_msg_count <= 1
+        recent_block = format_recent_conversation(session_messages, current_input=user_input)
 
         session_ctx = getattr(session, "user_profile_context", "")
         if not isinstance(session_ctx, str):
             session_ctx = ""
         known_context = (user_context if isinstance(user_context, str) else "").strip() or session_ctx.strip()
+
+        # Follow-ups are not first-message-vague. Default to no clarification
+        # unless the text is empty/generic AND recent history does not already
+        # name a topic the advisors can continue.
+        if not is_first_user_message:
+            if history_disambiguates(session_messages, user_input):
+                logger.info(
+                    "Skipping clarification: later-turn history already names a topic (%d user messages)",
+                    user_msg_count,
+                )
+                return False
+            if not is_truly_ambiguous_followup(user_input):
+                logger.info("Skipping clarification: follow-up is not empty/generic")
+                return False
+            logger.info(
+                "Follow-up is generic and history does not disambiguate; continuing clarification check"
+            )
+
+        if looks_like_anaphora(user_input) and history_disambiguates(session_messages, user_input):
+            logger.info(
+                "Skipping clarification: anaphora resolves against recent conversation (%r)",
+                user_input[:120],
+            )
+            return False
+
         if has_stated_goal_or_summary(known_context) and refers_to_known_goal(user_input):
             logger.info(
                 "Skipping clarification: message refers to a known goal/profile (%r)",
                 user_input[:120],
             )
+            return False
+
+        # Cheap rule-based gate for first messages. Later-turn generic follow-ups
+        # with no usable history skip this so the LLM can still ask a question.
+        if is_first_user_message and not self._heuristic_needs_clarification(session, user_input):
+            logger.info("Skipping clarification LLM: heuristic says input is specific enough")
             return False
 
         app_cfg = get_settings().app
@@ -184,45 +265,63 @@ class ImprovedChatOrchestrator:
         )
         domain_keywords = ", ".join(orch_cfg.specific_keywords)
 
+        recency_rules = (
+            f"{RECENCY_OVER_GOAL_RULE}\n"
+            "- If recent turns already named a specific incident or topic, a "
+            "follow-up that refers to \"the incident\" / \"that\" / a year range "
+            "is CLEAR ENOUGH — do not ask whether they meant an older goal.\n"
+        )
+
         profile_rules = ""
         if has_stated_goal_or_summary(known_context):
             profile_rules = (
                 "The application already knows this user's profile, stated goal, "
-                "and/or knowledge summary. Treat that as established context.\n"
+                "and/or knowledge summary. Treat that as durable BACKGROUND, not "
+                "as the current question when recent chat has moved on.\n"
                 "- Messages that refer to \"my goal\", \"the situation I described\", "
                 "\"what I shared\", \"my custom security goal\", or similar are "
                 "CLEAR ENOUGH — do not ask them to restate the goal.\n"
                 "- Do not treat a first message as vague merely because it omits "
                 "details that are already in the profile.\n"
                 "- Do not ask them to pick generic enterprise domains (GDPR, HIPAA, "
-                "org architecture) when a specific goal is already known.\n"
+                "org architecture) when a specific goal is already known AND there "
+                "is no competing recent topic.\n"
             )
         else:
             profile_rules = (
                 "No usable goal or profile is on file. Truly empty/generic messages "
-                "like \"help\" or \"advice\" NEED CLARIFICATION.\n"
+                "like \"help\" or \"advice\" NEED CLARIFICATION when this is the "
+                "first user message and history does not already name a topic.\n"
             )
+
+        turn_scope = (
+            "latest message (this may be a follow-up, not the first message)"
+            if not is_first_user_message
+            else "FIRST message"
+        )
 
         system_prompt = (
             "You are a routing classifier for an AI advisory application.\n\n"
             f"Application: {app_cfg.title} — {app_cfg.subtitle}\n"
             f"Available advisors: {advisor_descriptions}\n"
             f"Domain-relevant topics: {domain_keywords}\n\n"
-            "Your task: decide whether the user's FIRST message contains enough "
+            f"Your task: decide whether the user's {turn_scope} contains enough "
             "substance to send to the advisors, or whether it is too vague and "
             "requires a clarifying follow-up before the advisors can help.\n\n"
+            f"{recency_rules}\n"
             f"{profile_rules}\n"
             "A message NEEDS CLARIFICATION when it:\n"
             "- Expresses confusion or uncertainty without a concrete topic "
-            "(and no usable goal/profile is already known)\n"
+            "(and neither recent chat nor a usable goal/profile can fill it in)\n"
             "- Is a single generic request like 'help' or 'advice' AND there is "
-            "no usable goal/profile on file\n"
+            "no usable goal/profile on file AND no recent topic to continue\n"
             "- Contains no identifiable subject the advisors could address, even "
-            "after considering the known profile\n\n"
+            "after considering recent conversation and the known profile\n\n"
             "A message is CLEAR ENOUGH when it:\n"
             "- Mentions a specific topic, question, or problem area\n"
+            "- Continues a topic the last assistant/user turns already named\n"
             "- Provides enough context for at least one advisor to respond usefully "
-            "when combined with the known profile/goal\n"
+            "when combined with recent conversation and/or the known profile/goal\n"
             "- Even a short message is fine if the intent is unambiguous "
             "(e.g. 'explain transformers' is clear)\n"
             "- Messages mentioning domain-relevant topics are likely clear enough "
@@ -232,9 +331,14 @@ class ImprovedChatOrchestrator:
         )
 
         user_prompt = f'User message: "{user_input}"'
+        if recent_block:
+            user_prompt += (
+                "\n\n--- Recent conversation (latest last; current message omitted) ---\n"
+                f"{recent_block}"
+            )
         if known_context:
             user_prompt += (
-                "\n\n--- Already-known user profile / goals ---\n"
+                "\n\n--- Already-known user profile / goals (background only) ---\n"
                 f"{known_context}"
             )
 
@@ -278,6 +382,7 @@ class ImprovedChatOrchestrator:
         self,
         user_input: str,
         user_context: str = "",
+        session=None,
     ) -> Dict[str, Any]:
         """
         Use the LLM to produce a clarification question and clickable
@@ -286,13 +391,28 @@ class ImprovedChatOrchestrator:
         """
         orch_cfg = get_settings().orchestrator
         known_context = (user_context or "").strip()
+        session_messages = getattr(session, "messages", None) if session is not None else None
+        recent_block = format_recent_conversation(session_messages, current_input=user_input)
+        latest_topic = format_latest_topic(session_messages, current_input=user_input)
+        prefer_recent = bool(recent_block) and (
+            looks_like_anaphora(user_input)
+            or recent_topic_competes_with_goal(session_messages, user_input, known_context)
+        )
 
         advisor_list = ", ".join(
             f"{p.name} ({p.id})" for p in self.personas.values()
         )
 
         profile_instruction = ""
-        if has_stated_goal_or_summary(known_context):
+        if prefer_recent:
+            profile_instruction = (
+                f"{RECENCY_OVER_GOAL_RULE}\n"
+                "The question and all 4 suggestions MUST stay on the current "
+                "conversation topic (the most recent named incident/event). Do "
+                "not mix in the user's original goal (e.g. account recovery) "
+                "unless they are still talking about that goal.\n\n"
+            )
+        elif has_stated_goal_or_summary(known_context):
             profile_instruction = (
                 "The user already has a stated goal and/or profile. The question "
                 "and all 4 suggestions MUST be specific to that goal. Never offer "
@@ -315,16 +435,34 @@ class ImprovedChatOrchestrator:
             f"User said: \"{user_input}\"\n"
             f"Available advisors: {advisor_list}\n"
         )
-        if known_context:
+        if recent_block:
             user_prompt += (
-                "\n--- Known user profile / goals ---\n"
-                f"{known_context}\n"
+                "\n--- Recent conversation (latest last; current message omitted) ---\n"
+                f"{recent_block}\n"
             )
+        if latest_topic:
+            user_prompt += (
+                "\n--- Current topic (resolve references against this first) ---\n"
+                f"{latest_topic}\n"
+            )
+        if known_context:
+            label = (
+                "Known user profile / goals (background only; do not hijack "
+                "the current topic)"
+                if prefer_recent
+                else "Known user profile / goals"
+            )
+            user_prompt += f"\n--- {label} ---\n{known_context}\n"
         user_prompt += (
             "\nGenerate a clarifying question and 4 suggestion buttons that "
             "relate to what the user said"
         )
-        if known_context:
+        if prefer_recent:
+            user_prompt += (
+                " and the recent conversation topic — not an older stated goal "
+                "they have moved on from"
+            )
+        elif known_context:
             user_prompt += " and their known goal/profile — not generic compliance topics"
         user_prompt += " and steer toward the advisors above."
 
@@ -356,8 +494,15 @@ class ImprovedChatOrchestrator:
         except Exception as e:
             logger.error(f"LLM clarification failed, using config fallback: {e}")
 
+        if prefer_recent:
+            recency_fallback = conversation_first_clarification_fallback(
+                user_input, latest_topic or recent_block, known_context
+            )
+            if recency_fallback:
+                return recency_fallback
+
         goal_fallback = goal_aware_clarification_fallback(known_context)
-        if goal_fallback:
+        if goal_fallback and not prefer_recent:
             return goal_fallback
 
         fallback_questions = orch_cfg.clarification_questions
@@ -389,7 +534,8 @@ class ImprovedChatOrchestrator:
                 document_context = await self._retrieve_relevant_documents(
                     user_input=user_message,
                     session_id=session.session_id,
-                    persona_id=persona.id
+                    persona_id=persona.id,
+                    session=session,
                 )
             
             # Build enhanced context for the LLM
@@ -431,11 +577,92 @@ class ImprovedChatOrchestrator:
                 "context_quality": "error"
             }
 
-    async def _retrieve_relevant_documents(self, user_input: str, session_id: str, persona_id: str = "") -> str:
+    async def iter_persona_response_stream(self, session, persona, response_length: str = "medium"):
+        """Yield ``delta`` text chunks then a final ``done`` dict with metadata."""
+        user_message = ""
+        try:
+            user_message = session.get_latest_user_message() or ""
+        except AttributeError:
+            for msg in reversed(session.messages):
+                if msg.get("role") == "user":
+                    user_message = msg.get("content", "")
+                    break
+
+        document_context = ""
+        if user_message:
+            document_context = await self._retrieve_relevant_documents(
+                user_input=user_message,
+                session_id=session.session_id,
+                persona_id=persona.id,
+                session=session,
+            )
+
+        enhanced_context = await self._build_enhanced_context_for_persona(
+            session, persona, user_message, document_context
+        )
+        used_documents = bool(document_context and len(document_context.strip()) > 100)
+        document_chunks_used = document_context.count("[Source:") if document_context else 0
+
+        pieces: List[str] = []
+        try:
+            async for chunk in persona.respond_stream(enhanced_context, response_length):
+                if not chunk:
+                    continue
+                pieces.append(chunk)
+                yield {"event": "delta", "text": chunk}
+        except Exception as e:
+            logger.error(f"Error streaming response for {persona.id}: {str(e)}")
+            response = (
+                f"I apologize, but I'm having technical difficulties. "
+                f"{self._get_persona_fallback(persona.id)}"
+            )
+            yield {
+                "event": "done",
+                "result": {
+                    "persona_id": persona.id,
+                    "persona_name": persona.name,
+                    "response": response,
+                    "used_documents": used_documents,
+                    "document_chunks_used": document_chunks_used,
+                    "response_length": response_length,
+                    "context_quality": "error",
+                },
+            }
+            return
+
+        raw = "".join(pieces)
+        response = _finalize_compact(raw, response_length)
+        if not self._is_valid_response(response, persona.id):
+            logger.warning(f"Invalid response from {persona.id}, using fallback")
+            response = self._get_persona_fallback(persona.id)
+
+        yield {
+            "event": "done",
+            "result": {
+                "persona_id": persona.id,
+                "persona_name": persona.name,
+                "response": response,
+                "used_documents": used_documents,
+                "document_chunks_used": document_chunks_used,
+                "response_length": response_length,
+                "context_quality": "high" if document_context else "conversation_only",
+            },
+        }
+
+    async def _retrieve_relevant_documents(
+        self,
+        user_input: str,
+        session_id: str,
+        persona_id: str = "",
+        session=None,
+    ) -> str:
         """
         Enhanced document retrieval with document awareness and better attribution
         """
         try:
+            if session is not None and getattr(session, "_rag_empty", False):
+                return ""
+
             # Add comprehensive logging to track session ID usage
             logger.info(f"Retrieving documents for session_id: {session_id}")
             logger.info(f"User input: {user_input[:100]}...")
@@ -469,7 +696,9 @@ class ImprovedChatOrchestrator:
                                 logger.warning(f"Found documents under alternative session ID {alt_session_id}: {alt_stats}")
                 else:
                     logger.info(f"No documents found for new session {session_id} - this is normal for new chats")
-                
+
+                if session is not None:
+                    session._rag_empty = True
                 return ""  # No documents available
             
             # Extract document hints from user query
@@ -699,11 +928,15 @@ Use this context to inform your response, and cite specific documents when refer
         if hasattr(session, "user_profile_context") and session.user_profile_context:
             system_message += (
                 f"\n\n{session.user_profile_context}\n"
-                "Use this background to calibrate technical depth, examples, and priorities."
+                "Use this background to calibrate technical depth, examples, and priorities. "
+                f"{RECENCY_OVER_GOAL_RULE}"
             )
 
         if getattr(session, "urgency_context", ""):
             system_message += f"\n\n{session.urgency_context}"
+
+        if getattr(session, "datetime_context", ""):
+            system_message += f"\n\n{session.datetime_context}"
 
         enhanced_context.append({
             "role": "system",
@@ -718,47 +951,62 @@ Use this context to inform your response, and cite specific documents when refer
                 })
         else:
             msg_count = len(conversation_messages)
-            if (
-                session.conversation_summary
-                and session.conversation_summary_message_count == msg_count
-            ):
-                summary = session.conversation_summary
-            else:
+            summary_lock = getattr(session, "_summary_lock", None)
+
+            async def _load_or_build_summary() -> str:
+                if (
+                    session.conversation_summary
+                    and session.conversation_summary_message_count == msg_count
+                ):
+                    return session.conversation_summary
                 llm = self.llm_client
                 if llm is None and self.personas:
                     llm = next(iter(self.personas.values())).llm
                 persona_names = {p.id: p.name for p in self.personas.values()}
-                summary = ""
+                built = ""
                 if llm is not None:
-                    summary = await generate_conversation_context_summary(
+                    built = await generate_conversation_context_summary(
                         conversation_messages,
                         llm,
                         persona_names=persona_names,
                     )
-                if summary:
-                    session.conversation_summary = summary
+                if built:
+                    session.conversation_summary = built
                     session.conversation_summary_message_count = msg_count
+                return built
+
+            if isinstance(summary_lock, asyncio.Lock):
+                async with summary_lock:
+                    summary = await _load_or_build_summary()
+            else:
+                summary = await _load_or_build_summary()
 
             if summary:
                 system_message += f"\n\nSummary of earlier conversation:\n{summary}"
                 enhanced_context[0]["content"] = system_message
-                # Keep the most recent turns verbatim within a slice of the
-                # budget so the persona always sees the actual latest message,
-                # not just the summary.
-                recent_budget = max(512, threshold // 4)
+                # Keep the most recent turns verbatim so anaphora ("the
+                # incident") still binds to the last named topic, not a
+                # summarized original goal. Always retain at least the current
+                # user turn plus the previous user turn and intervening replies.
+                recent_budget = max(1536, threshold // 2)
+                min_user_turns = 2
                 tail = []
                 used = 0
+                user_turns = 0
                 for message in reversed(conversation_messages):
                     tokens = self.context_manager._estimate_tokens_for_messages(
                         [message]
                     )
-                    if tail and used + tokens > recent_budget:
+                    is_user = str(message.get("role") or "").lower() == "user"
+                    if tail and used + tokens > recent_budget and user_turns >= min_user_turns:
                         break
                     tail.insert(0, {
                         "role": message["role"],
                         "content": message["content"],
                     })
                     used += tokens
+                    if is_user:
+                        user_turns += 1
                 enhanced_context.extend(tail)
             else:
                 logger.warning(
@@ -999,10 +1247,10 @@ Use this context to inform your response, and cite specific documents when refer
             profile_block = (
                 getattr(session, "user_profile_context", "") or "(nothing known yet)"
             )
-            recent = session.get_recent_messages(5)
-            convo = "\n".join(
-                f"{m.get('role', 'user')}: {str(m.get('content', ''))[:300]}"
-                for m in recent
+            convo = format_recent_conversation(
+                getattr(session, "messages", None),
+                current_input="",
+                max_turns=8,
             )
             advisor_cards = "\n".join(
                 f"- {p.id}: {p.name} — {p.role}. {p.summary}"
@@ -1015,14 +1263,17 @@ Use this context to inform your response, and cite specific documents when refer
                 "1. Classify urgency: 'triage' (active incident happening now, e.g. "
                 "\"I think I've been hacked\"), 'advisory' (needs a recommendation), "
                 "or 'program' (long-term improvement, audits, maturity).\n"
-                f"2. Choose the {k} most relevant advisors for the latest message, "
+                f"2. Choose the {k} most relevant advisors for the LATEST message, "
                 "in order of relevance, considering who the user is (role, "
-                "knowledge level, organization) — not just the topic.\n\n"
+                "knowledge level, organization) — not just the original goal.\n"
+                f"{RECENCY_OVER_GOAL_RULE}\n"
+                "Do not route as if they were still asking about the stated goal "
+                "when recent turns named a different topic.\n\n"
                 "Respond ONLY with valid JSON:\n"
                 '{"urgency": "triage|advisory|program", "advisors": ["id1", "id2", ...]}'
             )
             user_prompt = (
-                f"--- User context ---\n{profile_block}\n\n"
+                f"--- User context (background) ---\n{profile_block}\n\n"
                 f"--- Conversation (latest last) ---\n{convo}\n\n"
                 f"--- Advisors ---\n{advisor_cards}"
             )
@@ -1086,17 +1337,19 @@ Use this context to inform your response, and cite specific documents when refer
                 return []
 
             profile_block = getattr(session, "user_profile_context", "") or ""
-            recent = session.get_recent_messages(6)
-            convo = "\n".join(
-                f"{m.get('role', 'user')}: {str(m.get('content', ''))[:400]}"
-                for m in recent
+            convo = format_recent_conversation(
+                getattr(session, "messages", None),
+                current_input="",
+                max_turns=8,
             )
 
             system_prompt = (
                 "You suggest the user's next message to a cybersecurity advisor "
                 "panel. Write in the user's voice (first person), specific to "
-                "this conversation — natural next questions or actions, never "
-                "generic. Each suggestion is one sentence, at most 12 words.\n"
+                "the most recent topic in this conversation — natural next "
+                "questions or actions, never generic, and not a snap-back to an "
+                "older stated goal unless that is still the current topic. "
+                "Each suggestion is one sentence, at most 12 words.\n"
                 f"Respond ONLY with valid JSON: {{\"followups\": [{n} strings]}}"
             )
             user_prompt = (
