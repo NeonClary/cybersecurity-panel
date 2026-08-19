@@ -720,7 +720,7 @@ const DeliverablesView = ({ allStates, authToken }) => {
 
   const InsertPanel = (
     <div className="deliverable-insertables">
-      <SourceSearch onPick={insertIntoActive}/>
+      <SourceSearch onPick={insertIntoActive} authToken={authToken}/>
       {localInsertables.length > 0 && (
         <>
           <div style={{ fontSize: 11, color: 'var(--canvas-text-4)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginTop: 14, marginBottom: 6 }}>
@@ -1357,7 +1357,7 @@ function dbgSearch(hypothesisId, message, data) {
   // #endregion
 }
 
-function SourceSearch({ onPick }) {
+function SourceSearch({ onPick, authToken }) {
   const [q, setQ] = useState('');
   const [source, setSource] = useState('arxiv');
   const [busy, setBusy] = useState(false);
@@ -1388,36 +1388,26 @@ function SourceSearch({ onPick }) {
         window.open(url, '_blank', 'noopener,noreferrer');
         return;
       }
-      const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent('all:' + query)}&max_results=5`;
-      dbgSearch('H1', 'arxiv fetch begin', { url: url.slice(0, 180) });
-      const res = await fetch(url);
-      const xml = await res.text();
-      dbgSearch('H2', 'arxiv fetch done', {
+      const apiBase = process.env.REACT_APP_API_URL || '';
+      const url = `${apiBase}/api/reference-search/arxiv?q=${encodeURIComponent(query)}`;
+      dbgSearch('H1', 'arxiv proxy begin', { url: url.replace(/q=.*/, 'q=*') });
+      const headers = {};
+      if (authToken) headers.Authorization = `Bearer ${authToken}`;
+      const res = await fetch(url, { headers });
+      const body = await res.json().catch(() => ({}));
+      dbgSearch('H2', 'arxiv proxy done', {
         status: res.status,
         ok: res.ok,
-        contentType: res.headers.get('content-type'),
-        xmlLen: xml.length,
-        xmlHead: xml.slice(0, 160),
+        resultCount: Array.isArray(body.results) ? body.results.length : -1,
       });
       if (!res.ok) {
-        dbgSearch('H3', 'arxiv http not ok', { status: res.status });
+        dbgSearch('H3', 'arxiv proxy not ok', { status: res.status });
         fireToast('arXiv search failed', 'danger');
         return;
       }
-      const doc = new DOMParser().parseFromString(xml, 'text/xml');
-      const parseErr = doc.querySelector('parsererror')?.textContent?.slice(0, 120) || null;
-      const tagged = doc.getElementsByTagName('entry');
-      const nsTagged = doc.getElementsByTagNameNS('http://www.w3.org/2005/Atom', 'entry');
-      dbgSearch('H4', 'arxiv parse', { tagged: tagged.length, nsTagged: nsTagged.length, parseErr });
-      const entryNodes = tagged.length ? tagged : nsTagged;
-      const entries = Array.from(entryNodes).map(e => {
-        const id = e.getElementsByTagName('id')[0]?.textContent?.split('/').pop() || '';
-        const title = e.getElementsByTagName('title')[0]?.textContent?.trim() || '';
-        const authors = Array.from(e.getElementsByTagName('author')).map(a => a.getElementsByTagName('name')[0]?.textContent?.trim()).filter(Boolean);
-        const year = (e.getElementsByTagName('published')[0]?.textContent || '').slice(0, 4);
-        return { id, title, authors, year };
-      });
+      const entries = Array.isArray(body.results) ? body.results : [];
       setResults(entries);
+      dbgSearch('H4', 'arxiv proxy parsed', { tagged: entries.length });
       if (!entries.length) fireToast('No arXiv results', 'danger');
     } catch (e) {
       dbgSearch('H1', 'arxiv fetch throw', { name: e?.name, message: String(e?.message || e).slice(0, 180) });

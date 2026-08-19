@@ -1,8 +1,12 @@
-from fastapi import APIRouter, HTTPException, Depends, status, BackgroundTasks
-from typing import Dict, Optional
+from fastapi import APIRouter, HTTPException, Depends, Query, status, BackgroundTasks
+from typing import Dict, List, Optional
 from datetime import datetime
 import logging
+from urllib.parse import quote
+from xml.etree import ElementTree as ET
 from bson import ObjectId
+
+import httpx
 
 from app.models.user import User
 from app.models.phd_canvas import (
@@ -58,6 +62,52 @@ def _to_canvas_response(canvas: PhdCanvas) -> CanvasResponse:
         auto_update=canvas.auto_update,
         print_optimized=canvas.print_optimized,
     )
+
+_ATOM = "{http://www.w3.org/2005/Atom}"
+
+
+def _parse_arxiv_feed(xml: str) -> List[Dict]:
+    root = ET.fromstring(xml)
+    entries: List[Dict] = []
+    for entry in root.findall(f"{_ATOM}entry"):
+        ident = (entry.findtext(f"{_ATOM}id") or "").rstrip("/").split("/")[-1]
+        title = " ".join((entry.findtext(f"{_ATOM}title") or "").split())
+        authors = []
+        for author in entry.findall(f"{_ATOM}author"):
+            name = (author.findtext(f"{_ATOM}name") or "").strip()
+            if name:
+                authors.append(name)
+        published = entry.findtext(f"{_ATOM}published") or ""
+        entries.append({
+            "id": ident,
+            "title": title,
+            "authors": authors,
+            "year": published[:4],
+        })
+    return entries
+
+
+@router.get("/reference-search/arxiv")
+async def reference_search_arxiv(
+    q: str = Query(..., min_length=1, max_length=200),
+    current_user: User = Depends(get_current_active_user),
+):
+    """Proxy arXiv Atom search. export.arxiv.org does not send CORS headers."""
+    phrase = q.strip()
+    search_query = phrase if phrase.startswith("all:") else f'all:"{phrase}"'
+    url = f"https://export.arxiv.org/api/query?search_query={quote(search_query)}&max_results=5"
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(url, headers={"User-Agent": "cybersecurity-panel/arxiv-proxy"})
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"arXiv returned {resp.status_code}")
+        return {"results": _parse_arxiv_feed(resp.text)}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("arXiv proxy failed: %s", exc)
+        raise HTTPException(status_code=502, detail="arXiv search failed") from exc
+
 
 @router.get("/phd-canvas", response_model=CanvasResponse)
 async def get_phd_canvas(
