@@ -5,20 +5,23 @@ import re
 SENTINEL = "</END>"
 
 # Shared compact formatting contract applied to all personas.
+# Headings are a product format; content inside them must still be role-specific.
 COMPACT_MARKDOWN_V1 = (
     "You must format your answer using GitHub-Flavored Markdown and exactly these three sections in this order:\n"
     "### Thought\n"
-    "- 1–2 complete sentences of reasoning/context only. Do not put actions here.\n"
+    "- 1–2 complete sentences of YOUR specialist reasoning only. Do not put actions here.\n"
     "- Finish each sentence; never cut a sentence short mid-phrase.\n"
+    "- Do not open by restating the user question as 'To [verb] …' or 'Here's a step-by-step approach…'.\n"
     "\n"
     "### What to do\n"
     "- Exactly 3 bullet points, one concrete action each. Use '-' as the bullet. Do not use unicode bullets.\n"
     "- Write each bullet as a complete imperative sentence (plain text, no bold title prefixes).\n"
-    "- Bullets must be actionable steps, not leftover reasoning from Thought.\n"
+    "- Bullets must be artifacts of YOUR specialty, not leftover reasoning and not a shared curriculum "
+    "(not Purpose/Scope/Basics, not Research/Plan/Write) unless that is truly your job.\n"
     "- If you would use an ordered list, keep text on the same line as the number (e.g., '1. Do X').\n"
     "\n"
     "### Next step\n"
-    "- One imperative sentence only.\n"
+    "- One imperative sentence only — the next action YOUR role would assign.\n"
     "- Must be distinct from every What-to-do bullet (do not copy or lightly rephrase the first bullet).\n"
     "- Prefer: the single most important action to start with right now, optionally with when/how.\n"
     "\n"
@@ -26,8 +29,119 @@ COMPACT_MARKDOWN_V1 = (
     "Do not include tables or code blocks unless explicitly requested. "
     "Do not include preambles or conclusions outside the three sections. "
     "Never truncate with ellipsis (... or …); always finish the sentence or bullet. "
+    "Stay short and sharp; do not pad to match other advisors. "
     f"Finish your response with the sentinel token {SENTINEL}."
 )
+
+# Applied at generation time so parallel advisors do not echo one outline.
+ANTI_ECHO_CONTRACT = (
+    "You are one specialist on a panel. Other advisors answer the SAME question in parallel.\n"
+    "Answer from YOUR role only. Do not write a generic training syllabus, course outline, "
+    "or purpose/scope/steps plan unless that is genuinely your specialty.\n"
+    "Do not copy a shared opener. Start Thought with what YOU notice from your domain.\n"
+    "If the ask is fiction, a novel, worldbuilding, or a creative project, still apply YOUR "
+    "professional lens (coaching vs threat model vs architecture vs IR vs compliance vs career "
+    "mechanics) — do not all invent the same training program.\n"
+    "What-to-do and Next step must be the kinds of actions YOUR specialty produces."
+)
+
+# Recency-winning fill hints (appended last). Keys match persona YAML ids.
+PERSONA_SLOT_HINTS = {
+    "jerry_huaute": (
+        "Fill slots as intake lead: Thought names their real need in a mentoring voice; "
+        "What-to-do is clarify the ask + one lived-experience insight + encouragement with a "
+        "constraint; Next step is one grounding or clarifying action. Never dump a training curriculum."
+    ),
+    "threat_modeler": (
+        "Fill slots as threat modeler: Thought names assets, adversary, and an assumption; "
+        "What-to-do is STRIDE, abuse cases, attack surfaces, or a tabletop inject; "
+        "Next step is one threat-model artifact. Never a training-program outline."
+    ),
+    "security_architect": (
+        "Fill slots as architect: Thought names trust boundaries, controls, or layers of the "
+        "system (including an in-world fictional system); What-to-do is design moves "
+        "(zones, identity, logging, sequencing); Next step is one design artifact. "
+        "Never Purpose/Scope/Basics or a writing/training syllabus."
+    ),
+    "incident_responder": (
+        "Fill slots as IR: Thought is severity and containment posture; What-to-do is ordered "
+        "first-hour actions; Next step is the single stop-the-bleeding move. Not a training syllabus."
+    ),
+    "security_mentor": (
+        "Fill slots as career mentor: certs, labs, interviews, or weekly effort for this person "
+        "or character; Next step is one study or portfolio action. Not a corporate awareness syllabus "
+        "unless they asked for that job."
+    ),
+    "compliance_officer": (
+        "Fill slots as compliance: framework mapping, evidence, or questionnaires; Next step is "
+        "one control or evidence artifact. Not a training syllabus."
+    ),
+    "smb_advisor": (
+        "Fill slots as SMB advisor: ranked cheap controls in priority order; Next step is the "
+        "highest-ROI action this week. Not a training syllabus."
+    ),
+    "ai_security_strategist": (
+        "Fill slots as AI strategist: Secure / Defend / Thwart in business language; Next step is "
+        "one decision a sponsor can make. Not a training syllabus."
+    ),
+}
+
+
+def _as_text(value) -> str:
+    return value.strip() if isinstance(value, str) else ""
+
+
+def panel_lens_reminder(name: str = "", role: str = "") -> str:
+    """Per-turn overlay so parallel advisors keep distinct voices."""
+    name = _as_text(name)
+    role = _as_text(role)
+    if not name:
+        return ""
+    role_bit = role or "your specialty"
+    return (
+        f"PANEL ROLE: You are {name} ({role_bit}). Other advisors are answering "
+        "this same question in parallel. Do not write the same outline they would. "
+        "Lead with your specialty. If the ask is fiction or worldbuilding, still "
+        "apply your professional lens — do not all produce a training syllabus."
+    )
+
+
+def compose_response_system_prompt(
+    system_prompt: str,
+    response_length: str = "medium",
+    *,
+    name: str = "",
+    role: str = "",
+    persona_id: str = "",
+) -> str:
+    """Assemble the generation-time system prompt.
+
+    Shared format instructions come first; identity and slot hints are last so
+    recency favors the persona lens over the common template.
+    """
+    structure_hint = STRUCTURE_HINTS.get(response_length, STRUCTURE_HINTS["medium"])
+    name = _as_text(name)
+    role = _as_text(role)
+    persona_id = _as_text(persona_id)
+    identity_lines = []
+    if name or role:
+        who = name or "this advisor"
+        identity_lines.append(
+            f"You are answering as {who}" + (f" ({role})" if role else "") + "."
+        )
+    slot_hint = PERSONA_SLOT_HINTS.get(persona_id, "")
+    if slot_hint:
+        identity_lines.append(slot_hint)
+    identity_block = "\n".join(identity_lines)
+    parts = [
+        (system_prompt or "").strip(),
+        COMPACT_MARKDOWN_V1,
+        structure_hint,
+        ANTI_ECHO_CONTRACT,
+    ]
+    if identity_block:
+        parts.append(identity_block)
+    return "\n\n".join(p for p in parts if p).strip()
 
 # Soft structure guidance per response_length
 STRUCTURE_HINTS = {
@@ -488,13 +602,14 @@ class Persona:
         Returns the compact Markdown string (backward compatible with previous callers).
         """
         max_tokens = MAX_TOKENS_MAP.get(response_length, 600)
-        structure_hint = STRUCTURE_HINTS.get(response_length, STRUCTURE_HINTS["medium"])
         temp_scaled = round(self.temperature / 10, 2)
 
-        full_prompt = (
-            f"{self.system_prompt}\n\n"
-            f"{COMPACT_MARKDOWN_V1}\n\n"
-            f"{structure_hint}"
+        full_prompt = compose_response_system_prompt(
+            self.system_prompt,
+            response_length,
+            name=self.name,
+            role=self.role,
+            persona_id=self.id,
         )
 
         raw_text = await self.llm.generate(
@@ -512,13 +627,14 @@ class Persona:
     ) -> AsyncIterator[str]:
         """Yield token/text chunks, then stop. Caller applies compact shape on the join."""
         max_tokens = MAX_TOKENS_MAP.get(response_length, 600)
-        structure_hint = STRUCTURE_HINTS.get(response_length, STRUCTURE_HINTS["medium"])
         temp_scaled = round(self.temperature / 10, 2)
 
-        full_prompt = (
-            f"{self.system_prompt}\n\n"
-            f"{COMPACT_MARKDOWN_V1}\n\n"
-            f"{structure_hint}"
+        full_prompt = compose_response_system_prompt(
+            self.system_prompt,
+            response_length,
+            name=self.name,
+            role=self.role,
+            persona_id=self.id,
         )
 
         async for chunk in self.llm.generate_stream(

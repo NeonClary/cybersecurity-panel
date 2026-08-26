@@ -227,6 +227,7 @@ function App() {
               onNavigateToHome={navigateToHome}
               onNavigateToCanvas={navigateToCanvas}
               onNavigateToJourney={navigateToJourney}
+              onNavigateToSignup={navigateToAuth}
               onSignOut={handleSignOut}
               onUserUpdate={setUser}
               chatNavView={chatNavView}

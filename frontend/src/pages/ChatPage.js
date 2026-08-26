@@ -33,6 +33,13 @@ import {
   putPrefetchedStream,
   readNdjsonLines,
 } from '../utils/starterPrefetchCache';
+import {
+  loadPathProgress,
+  loadVisits,
+  markStepComplete,
+  recordVisit,
+  savePathProgress,
+} from '../utils/advisorPathProgress';
 
 const ACTIVE_ADVISORS_STORAGE_KEY = 'cybersecurityActiveAdvisorIds';
 
@@ -55,6 +62,7 @@ const ChatPage = ({
   onNavigateToHome,
   onNavigateToCanvas,
   onNavigateToJourney,
+  onNavigateToSignup,
   onSignOut,
   chatNavView = null,
   chatStarterNonce = 0,
@@ -122,6 +130,42 @@ const ChatPage = ({
   const prefetchBusyRef = useRef(false);
   const prefetchAbortRef = useRef(null);
   const prefetchUserKey = user?.id || user?._id || user?.email || (user?.is_guest ? 'guest' : 'user');
+  const pathUserKey = prefetchUserKey;
+
+  const pathSignals = useMemo(() => {
+    const visits = loadVisits(pathUserKey);
+    const profileFields = ['cyber_role', 'organization_type', 'current_goals', 'knowledge_level', 'compliance_focus'];
+    const hasProfileFacts = Boolean(
+      userProfile && profileFields.some((field) => {
+        const val = userProfile[field];
+        return Array.isArray(val) ? val.length > 0 : Boolean(String(val || '').trim());
+      }),
+    );
+    return {
+      hasChats: messages.some((m) => m.type === 'user' && !m.isReferenceSnippet),
+      hasProfileFacts,
+      hasStatedGoal: Boolean((statedGoal || '').trim()),
+      visitedJourney: Boolean(visits.journey),
+      visitedWorkspace: Boolean(visits.workspace),
+    };
+  }, [messages, pathUserKey, statedGoal, userProfile]);
+
+  const markPathStep = useCallback((stepId) => {
+    const prev = loadPathProgress(pathUserKey);
+    const completed = markStepComplete(prev.completed, stepId);
+    if (completed.length === prev.completed.length) return;
+    savePathProgress(pathUserKey, { ...prev, completed });
+  }, [pathUserKey]);
+
+  const handleNavigateToJourney = useCallback(() => {
+    recordVisit(pathUserKey, 'journey');
+    onNavigateToJourney?.();
+  }, [onNavigateToJourney, pathUserKey]);
+
+  const handleNavigateToCanvas = useCallback(() => {
+    recordVisit(pathUserKey, 'workspace');
+    onNavigateToCanvas?.();
+  }, [onNavigateToCanvas, pathUserKey]);
 
   const loadProfile = async () => {
     try {
@@ -722,6 +766,10 @@ const handleNewChat = async (sessionId = null) => {
   const handleSendMessage = async (inputMessage) => {
     if (!inputMessage.trim()) return;
 
+    if (messages.length === 0) {
+      markPathStep('first-question');
+    }
+
     // Create user message
     const userMessage = {
       id: generateMessageId(),
@@ -1144,7 +1192,7 @@ const handleNewChat = async (sessionId = null) => {
         onSidebarToggle={handleSidebarToggle}
         isMobileOpen={isMobileMenuOpen}
         onMobileToggle={setIsMobileMenuOpen}
-        onNavigateToCanvas={onNavigateToCanvas}
+        onNavigateToCanvas={handleNavigateToCanvas}
         refreshTrigger={sidebarRefreshTrigger}
         userAvatarId={userAvatarId}
         onAvatarChange={handleAvatarChange}
@@ -1161,7 +1209,7 @@ const handleNewChat = async (sessionId = null) => {
           setSettingsInitialTab('model-status');
           setShowSettings(true);
         }}
-        onNavigateToJourney={onNavigateToJourney}
+        onNavigateToJourney={handleNavigateToJourney}
         statedGoal={statedGoal}
         onRemoveSampleData={user?.is_guest ? async () => {
           if (!window.confirm('Remove all sample demo data? You stay in guest mode with a clean slate.')) return;
@@ -1185,8 +1233,8 @@ const handleNewChat = async (sessionId = null) => {
             currentPage="chat"
             onNavigateToHome={onNavigateToHome}
             onNavigateToChat={() => {}}
-            onNavigateToCanvas={onNavigateToCanvas}
-            onNavigateToJourney={onNavigateToJourney}
+            onNavigateToCanvas={handleNavigateToCanvas}
+            onNavigateToJourney={handleNavigateToJourney}
             onMobileMenu={handleMobileMenuToggle}
           >
             <AdvisorStatusDropdown
@@ -1213,11 +1261,23 @@ const handleNewChat = async (sessionId = null) => {
             {!hasMessages ? (
               <div className="welcome-state">
                 <IntakePanel
-                  onSubmit={handleSendMessage}
                   guestPersona={guestPersona}
                   authToken={authToken}
                   user={user}
                   statedGoal={statedGoal}
+                  pathSignals={pathSignals}
+                  onOpenProfile={() => {
+                    setAboutYouInitialTab('about');
+                    setShowAboutYou(true);
+                  }}
+                  onNavigateToJourney={handleNavigateToJourney}
+                  onNavigateToCanvas={handleNavigateToCanvas}
+                  onOpenModelStatus={() => {
+                    setSettingsInitialTab('model-status');
+                    setShowSettings(true);
+                  }}
+                  onNavigateToSignup={onNavigateToSignup}
+                  onPathStepComplete={markPathStep}
                 />
                 <SuggestionsPanel
                   onSuggestionClick={handleSendMessage}

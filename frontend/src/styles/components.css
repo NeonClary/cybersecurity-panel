@@ -474,7 +474,7 @@ body {
 /* Suggestions Panel */
 .suggestions-panel {
   padding: 8px 0 0;
-  max-width: 900px;
+  max-width: 980px;
   margin: 0 auto;
 }
 
@@ -500,6 +500,121 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 8px;
+}
+
+.suggestions-flat-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .suggestions-flat-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+  }
+}
+
+.suggestion-chip-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+  height: 100%;
+  display: flex;
+}
+
+.suggestion-chip-wrap .suggestion-button {
+  display: block;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  /* Reserve the lower-right corner so copy never sits under the refresh icon */
+  padding: 10px 40px 32px 12px;
+  box-sizing: border-box;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.suggestion-chip-text {
+  display: block;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  max-height: none;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  line-height: 1.5;
+  padding: 0;
+}
+
+.suggestion-chip-question {
+  font-weight: 700;
+  white-space: normal;
+  overflow: visible;
+  display: inline;
+  line-height: inherit;
+}
+
+.suggestion-refresh-btn {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary, var(--text-secondary));
+  cursor: pointer;
+  opacity: 0.75;
+  z-index: 2;
+  flex-shrink: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.suggestion-chip-wrap:hover .suggestion-refresh-btn,
+.suggestion-refresh-btn:focus-visible {
+  opacity: 1;
+}
+
+.suggestion-refresh-btn:hover:not(:disabled) {
+  opacity: 1;
+  color: var(--accent-primary, var(--text-primary));
+  background-color: var(--bg-secondary, rgba(0, 0, 0, 0.04));
+}
+
+.suggestion-refresh-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.suggestion-refresh-spin {
+  animation: suggestion-refresh-spin 0.8s linear infinite;
+}
+
+@keyframes suggestion-refresh-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .suggestion-category {
@@ -561,6 +676,15 @@ body {
   line-height: 1.35;
   cursor: pointer;
   transition: all 0.2s ease;
+  width: 100%;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  word-break: break-word;
+}
+
+.suggestion-button.suggestion-refreshing {
+  opacity: 0.85;
 }
 
 .suggestion-button:hover {

@@ -1,5 +1,6 @@
 // src/components/SuggestionsPanel.js
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { RotateCw } from 'lucide-react';
 import { useAppConfig } from '../contexts/AppConfigContext';
 import { goalCacheKey } from '../utils/statedGoal';
 import { loadStarterSuggestions, saveStarterSuggestions } from '../utils/starterCache';
@@ -8,8 +9,14 @@ import {
   applyFallbackIfTimedOut,
   applySlotDelta,
   applySlotDone,
+  applySlotRefreshing,
   buildStarterSlots,
-  slotsToCategories,
+  collectExcludeKeys,
+  nextPromptVariation,
+  normalizeSuggestion,
+  slotsToFlatList,
+  suggestionChatPrompt,
+  suggestionDisplayText,
   visiblePrompts,
 } from '../utils/starterSuggestionsUi';
 
@@ -18,6 +25,8 @@ async function fetchStarterSuggestions({
   count,
   exclude,
   categoryTitles,
+  slotIndex,
+  promptVariation,
   signal,
 }) {
   if (!authToken) return [];
@@ -34,6 +43,8 @@ async function fetchStarterSuggestions({
           count,
           exclude,
           category_titles: categoryTitles,
+          slot_index: slotIndex,
+          prompt_variation: promptVariation,
         }),
         signal,
       }
@@ -42,8 +53,8 @@ async function fetchStarterSuggestions({
     const data = await response.json();
     if (!Array.isArray(data.suggestions)) return [];
     return data.suggestions
-      .map((item) => (typeof item === 'string' ? item.trim() : ''))
-      .filter(Boolean);
+      .map((item) => normalizeSuggestion(item))
+      .filter((item) => suggestionChatPrompt(item));
   } catch (err) {
     if (err?.name === 'AbortError') return [];
     return [];
@@ -56,16 +67,75 @@ function restoreSlotsFromCache(examples, cached) {
   if (!Array.isArray(saved) || saved.length === 0) return null;
   saved.forEach((item) => {
     const idx = typeof item.slot === 'number' ? item.slot : -1;
-    if (idx < 0 || idx >= slots.length || !item.text) return;
+    if (idx < 0 || idx >= slots.length) return;
+    const suggestion = normalizeSuggestion(item.suggestion || item.text, slots[idx].fallback);
     slots[idx] = {
       ...slots[idx],
-      text: item.text,
+      suggestion,
+      text: suggestionDisplayText(suggestion),
       pending: false,
       generated: item.generated !== false,
+      promptVariation: typeof item.promptVariation === 'number'
+        ? item.promptVariation
+        : slots[idx].promptVariation,
     };
   });
   if (!slots.some((s) => s.text)) return null;
   return slots;
+}
+
+function SuggestionChip({
+  slotItem,
+  onSelect,
+  onRefresh,
+}) {
+  const {
+    slot,
+    suggestion,
+    displayText,
+    isPending,
+    refreshing,
+  } = slotItem;
+  const question = (suggestion?.question || '').trim();
+  const disabled = !displayText && !refreshing;
+  const label = displayText || (isPending ? 'Writing a question…' : '');
+
+  return (
+    <div className="suggestion-chip-wrap">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => onSelect(slotItem)}
+        className={[
+          'suggestion-button',
+          isPending ? 'suggestion-pending' : '',
+          refreshing ? 'suggestion-refreshing' : '',
+        ].filter(Boolean).join(' ')}
+        aria-label={displayText || 'Suggested question'}
+      >
+        <span className="suggestion-chip-text">
+          {question && !isPending ? (
+            <strong className="suggestion-chip-question">{question}</strong>
+          ) : (
+            label
+          )}
+        </span>
+      </button>
+      <button
+        type="button"
+        className="suggestion-refresh-btn"
+        aria-label="Refresh this suggestion"
+        title="Refresh suggestion"
+        disabled={refreshing || isPending}
+        onClick={(event) => {
+          event.stopPropagation();
+          onRefresh(slot);
+        }}
+      >
+        <RotateCw size={14} className={refreshing ? 'suggestion-refresh-spin' : ''} />
+      </button>
+    </div>
+  );
 }
 
 const SuggestionsPanel = ({
@@ -76,7 +146,7 @@ const SuggestionsPanel = ({
   statedGoal = '',
   onSuggestionsReady = null,
 }) => {
-  const { config, resolveIcon } = useAppConfig();
+  const { config } = useAppConfig();
 
   const examples = useMemo(() => {
     const chatPage = config?.chat_page || {};
@@ -99,11 +169,9 @@ const SuggestionsPanel = ({
   const usedRef = useRef(new Set());
   slotsRef.current = slots;
   const readyNotified = useRef('');
+  const refreshAbortRef = useRef(null);
 
-  const categories = useMemo(
-    () => slotsToCategories(examples, slots),
-    [examples, slots],
-  );
+  const flatSlots = useMemo(() => slotsToFlatList(slots), [slots]);
 
   useEffect(() => {
     const current = slotsRef.current || [];
@@ -184,7 +252,7 @@ const SuggestionsPanel = ({
             if (payload.type === 'delta') {
               setSlots((prev) => applySlotDelta(prev, payload.slot, payload.text || ''));
             } else if (payload.type === 'done') {
-              setSlots((prev) => applySlotDone(prev, payload.slot, payload.text || ''));
+              setSlots((prev) => applySlotDone(prev, payload.slot, payload));
             }
           }
         }
@@ -208,95 +276,88 @@ const SuggestionsPanel = ({
       slots: slots.map((s) => ({
         slot: s.slot,
         text: s.text,
+        suggestion: s.suggestion,
         generated: s.generated,
+        promptVariation: s.promptVariation,
       })),
     });
   }, [slots, cacheKey]);
 
-  const handleChipClick = (categoryIndex, suggestionIndex, text) => {
-    if (!text) return;
-    onSuggestionClick(text);
-    usedRef.current.add(text);
+  const regenerateSlot = useCallback(async (slotIndex, { markUsed = null } = {}) => {
     if (!authToken) return;
+    const slot = slotsRef.current.find((s) => s.slot === slotIndex);
+    if (!slot) return;
 
-    const visible = visiblePrompts(slotsRef.current);
-    const exclude = [...new Set([...usedRef.current, ...visible])];
-    const title = examples[categoryIndex]?.title;
-    const slot = slotsRef.current.find(
-      (s) => s.categoryIndex === categoryIndex && s.suggestionIndex === suggestionIndex,
+    refreshAbortRef.current?.abort();
+    const controller = new AbortController();
+    refreshAbortRef.current = controller;
+
+    const variation = nextPromptVariation(slot.promptVariation);
+    setSlots((prev) => applySlotRefreshing(prev, slotIndex, true));
+
+    const exclude = collectExcludeKeys(
+      slotsRef.current.filter((s) => s.slot !== slotIndex),
+      markUsed ? [markUsed] : [...usedRef.current],
     );
 
-    fetchStarterSuggestions({
+    const generated = await fetchStarterSuggestions({
       authToken,
       count: 1,
       exclude,
-      categoryTitles: title ? [title] : [],
-    }).then((generated) => {
-      const replacement = generated[0];
-      if (!replacement || slot == null) return;
-      setSlots((prev) => applySlotDone(prev, slot.slot, replacement));
+      categoryTitles: slot.categoryTitle ? [slot.categoryTitle] : [],
+      slotIndex,
+      promptVariation: variation,
+      signal: controller.signal,
     });
+
+    const replacement = generated[0];
+    if (!replacement) {
+      setSlots((prev) => applySlotRefreshing(prev, slotIndex, false));
+      return;
+    }
+
+    setSlots((prev) => {
+      const next = applySlotDone(prev, slotIndex, { suggestion: replacement });
+      const updated = next[slotIndex];
+      if (updated) {
+        next[slotIndex] = {
+          ...updated,
+          promptVariation: variation,
+        };
+      }
+      return next;
+    });
+  }, [authToken]);
+
+  const handleChipClick = (slotItem) => {
+    const chatPrompt = suggestionChatPrompt(slotItem.suggestion);
+    if (!chatPrompt) return;
+    onSuggestionClick(chatPrompt);
+    usedRef.current.add(chatPrompt);
+    regenerateSlot(slotItem.slot, { markUsed: chatPrompt });
   };
+
+  const handleRefreshClick = (slotIndex) => {
+    regenerateSlot(slotIndex);
+  };
+
+  useEffect(() => () => refreshAbortRef.current?.abort(), []);
 
   return (
     <div className="suggestions-panel">
       <div className="suggestions-header">
-        <h2 className="suggestions-title">Getting Started</h2>
+        <h2 className="suggestions-title">Practical Next Steps</h2>
       </div>
-      
-      <div className="suggestions-grid">
-        {categories.map((category, categoryIndex) => {
-          const Icon = resolveIcon(category.icon);
-          return (
-            <div key={categoryIndex} className="suggestion-category">
-              <div className="category-header">
-                <div 
-                  className="category-icon"
-                  style={{ 
-                    backgroundColor: category.bg_color || '#F3F4F6',
-                    color: category.color || '#6B7280'
-                  }}
-                >
-                  <Icon size={16} />
-                </div>
-                <h3 
-                  className="category-title"
-                  style={{ color: category.color || '#6B7280' }}
-                >
-                  {category.title}
-                </h3>
-              </div>
-              
-              <div className="suggestion-buttons">
-                {(category.suggestions || []).map((suggestion, suggestionIndex) => {
-                  const pending = category.pending?.[suggestionIndex];
-                  const label = suggestion || (pending ? 'Writing a question…' : '');
-                  return (
-                    <button
-                      key={`${categoryIndex}-${suggestionIndex}`}
-                      type="button"
-                      disabled={!suggestion}
-                      onClick={() => handleChipClick(categoryIndex, suggestionIndex, suggestion)}
-                      className={
-                        pending
-                          ? 'suggestion-button suggestion-pending'
-                          : 'suggestion-button'
-                      }
-                      style={{
-                        borderColor: (category.color || '#6B7280') + '20',
-                        '--hover-bg': category.bg_color || '#F3F4F6',
-                        '--hover-border': category.color || '#6B7280',
-                        '--hover-text': category.color || '#6B7280',
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })}
+
+      <div className="suggestions-flat-list">
+        {flatSlots.map((slotItem) => (
+          <SuggestionChip
+            key={slotItem.slot}
+            slotItem={slotItem}
+            onSelect={handleChipClick}
+            onRefresh={handleRefreshClick}
+          />
+        ))}
       </div>
     </div>
   );

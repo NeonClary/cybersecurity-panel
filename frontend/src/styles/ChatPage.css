@@ -226,9 +226,28 @@
 }
 
 .welcome-state .suggestions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.welcome-state .suggestions-flat-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+@media (min-width: 768px) {
+  .welcome-state .suggestions-flat-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+  }
 }
 
 .welcome-state .suggestion-category {
@@ -260,6 +279,24 @@
   padding: 8px 12px;
   font-size: 13px;
   border-radius: 8px;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.welcome-state .suggestion-chip-wrap .suggestion-button {
+  padding: 10px 40px 32px 12px;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: unset;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .welcome-state .suggestion-button.suggestion-pending {
@@ -287,6 +324,11 @@
   .welcome-state .suggestion-button {
     padding: 6px 10px;
     font-size: 12px;
+  }
+
+  .welcome-state .suggestion-chip-wrap .suggestion-button {
+    padding: 10px 40px 32px 12px;
+    font-size: 13px;
   }
 }
 
@@ -1372,7 +1414,10 @@
   font-weight: 500;
   transition: all 0.2s ease;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
+  white-space: normal;
+  text-overflow: unset;
+  word-break: break-word;
 }
 
 .suggestion-button::before {

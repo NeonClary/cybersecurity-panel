@@ -138,13 +138,22 @@ class SwitchChatRequest(BaseModel):
 class NewChatRequest(BaseModel):
     title: Optional[str] = "New Chat"
 
+class StarterSuggestionItem(BaseModel):
+    lead: str = ""
+    question: str = ""
+    chat_prompt: str = ""
+
+
 class StarterSuggestionsRequest(BaseModel):
     count: int = Field(2, ge=1, le=12)
     exclude: List[str] = Field(default_factory=list)
     category_titles: List[str] = Field(default_factory=list)
+    slot_index: Optional[int] = Field(None, ge=0, le=11)
+    prompt_variation: Optional[int] = Field(None, ge=0, le=11)
+
 
 class StarterSuggestionsResponse(BaseModel):
-    suggestions: List[str]
+    suggestions: List[StarterSuggestionItem] = Field(default_factory=list)
 
 
 class StarterGreetingResponse(BaseModel):
@@ -547,14 +556,20 @@ async def starter_suggestions(
         titles = [t.strip() for t in (body.category_titles or []) if isinstance(t, str) and t.strip()]
         n = len(titles) if titles else body.count
         n = max(1, min(int(n), 12))
+        variation = body.prompt_variation
+        if variation is None and body.slot_index is not None:
+            variation = int(body.slot_index)
         suggestions = await generate_starter_suggestions(
             llm,
             user_context,
             count=n,
             exclude=body.exclude or [],
             category_titles=titles,
+            prompt_variation=variation,
         )
-        return StarterSuggestionsResponse(suggestions=suggestions)
+        return StarterSuggestionsResponse(
+            suggestions=[StarterSuggestionItem(**item) for item in suggestions],
+        )
     except Exception as exc:
         logger.warning("Starter suggestion endpoint failed: %s", exc)
         return StarterSuggestionsResponse(suggestions=[])

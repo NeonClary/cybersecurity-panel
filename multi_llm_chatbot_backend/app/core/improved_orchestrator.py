@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, Any
-from app.models.persona import Persona, _finalize_compact
+from app.models.persona import Persona, _finalize_compact, panel_lens_reminder
 from app.core.session_manager import ConversationContext, get_session_manager
 from app.core.context_manager import get_context_manager
 from app.core.rag_manager import get_rag_manager
@@ -937,6 +937,13 @@ Use this context to inform your response, and cite specific documents when refer
 
         if getattr(session, "datetime_context", ""):
             system_message += f"\n\n{session.datetime_context}"
+
+        lens = panel_lens_reminder(
+            getattr(persona, "name", ""),
+            getattr(persona, "role", ""),
+        )
+        if lens:
+            system_message += f"\n\n{lens}"
 
         enhanced_context.append({
             "role": "system",

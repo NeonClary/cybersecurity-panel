@@ -117,7 +117,7 @@ if (await chatSessionBtn.isVisible({ timeout: 2500 }).catch(() => false)) {
   await page.waitForTimeout(2000);
   await dismissOverlays(page);
 } else {
-  const intakeChip = page.locator('.intake-chip').first();
+  const intakeChip = page.locator('.advisor-path-step-btn, .intake-chip').first();
   if (await intakeChip.isVisible({ timeout: 2000 }).catch(() => false)) {
     await intakeChip.click({ force: true });
     engagedVia = 'intake-chip';
