@@ -143,6 +143,7 @@ def compose_response_system_prompt(
         parts.append(identity_block)
     return "\n\n".join(p for p in parts if p).strip()
 
+
 # Soft structure guidance per response_length
 STRUCTURE_HINTS = {
     "short": "Keep it concise: Thought ≤ 2 short complete sentences; bullets complete and ≤ ~16 words; next step one short distinct sentence. No ellipsis.",
