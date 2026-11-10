@@ -12,6 +12,21 @@ from app.core.context_manager import get_context_manager
 logger = logging.getLogger(__name__)
 
 
+def _message_text(message: Any) -> str:
+    """Assistant text from a message or stream delta.
+
+    Some vLLM reasoning-parser configs (e.g. BrainForge/Security@2026.09.30)
+    leave ``content`` null and put the whole answer in ``reasoning``.
+    """
+    if message is None:
+        return ""
+    for field in ("content", "reasoning_content", "reasoning"):
+        value = getattr(message, field, None)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 class ImprovedVllmClient(LLMClient):
     def __init__(
         self,
@@ -144,7 +159,7 @@ class ImprovedVllmClient(LLMClient):
                 system_prompt, context, temperature, max_tokens, response_mime_type,
             )
             response = await self._create_with_model_retry(create_kwargs)
-            text = (response.choices[0].message.content or "").strip()
+            text = _message_text(response.choices[0].message).strip()
             return self._clean_response(text)
 
         except APIConnectionError as e:
@@ -179,7 +194,7 @@ class ImprovedVllmClient(LLMClient):
                 if not choices:
                     continue
                 delta = getattr(choices[0], "delta", None)
-                text = getattr(delta, "content", None) if delta is not None else None
+                text = _message_text(delta)
                 if text:
                     yield text
         except APIConnectionError:
@@ -249,7 +264,7 @@ class ImprovedVllmClient(LLMClient):
 
                 if not choice.tool_calls:
                     return ToolCallResult(
-                        text=choice.content or "",
+                        text=_message_text(choice),
                         used_tool=bool(all_tool_calls),
                         tool_name=all_tool_calls[0].name if all_tool_calls else None,
                         tool_args=all_tool_calls[0].args if all_tool_calls else {},
@@ -279,7 +294,7 @@ class ImprovedVllmClient(LLMClient):
             logger.warning(
                 "Tool-calling loop exhausted after %d rounds", self._MAX_TOOL_ROUNDS,
             )
-            last_content = response.choices[0].message.content or ""
+            last_content = _message_text(response.choices[0].message)
             return ToolCallResult(
                 text=last_content or "I was unable to finish looking that up. Please try again.",
                 used_tool=bool(all_tool_calls),

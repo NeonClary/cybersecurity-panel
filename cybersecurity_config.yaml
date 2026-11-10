@@ -303,7 +303,7 @@ llm:
     # Leave empty for Bearer VLLM_API_KEY auth (current Neon 4090). Set only
     # when the endpoint requires HTTP Basic (VLLM_API_USERNAME / HANA_*).
     api_username: ""
-    model_id: "BrainForge/Security@2026.05.13"
+    model_id: "BrainForge/Security@2026.09.30"
     neon_persona_orchestrator: "vanilla"
     neon_persona_advisors: "CybersecurityExpert"
   openai:

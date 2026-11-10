@@ -217,6 +217,45 @@ class TestImprovedVllmClient(unittest.TestCase):
         kwargs = client.client.chat.completions.create.await_args.kwargs
         self.assertTrue(kwargs.get("stream"))
 
+    def test_generate_reads_reasoning_when_content_null(self, MockAsyncOpenAI, mock_get_ctx):
+        client = ImprovedVllmClient(
+            api_url=FAKE_URL, api_key=FAKE_KEY, model_name="test-model",
+        )
+        message = MagicMock(content=None, reasoning_content=None, reasoning="Answer in reasoning.")
+        client.client.chat.completions.create = AsyncMock(
+            return_value=MagicMock(choices=[MagicMock(message=message)])
+        )
+
+        result = asyncio.run(client.generate(
+            system_prompt="",
+            context=[{"role": "user", "content": "Hi"}],
+            temperature=0.0,
+            max_tokens=50,
+        ))
+        self.assertEqual(result, "Answer in reasoning.")
+
+    def test_generate_stream_reads_reasoning_deltas(self, MockAsyncOpenAI, mock_get_ctx):
+        client = ImprovedVllmClient(
+            api_url=FAKE_URL, api_key=FAKE_KEY, model_name="test-model",
+        )
+
+        async def fake_stream():
+            for part in ["A S", "QL"]:
+                delta = MagicMock(content=None, reasoning_content=None, reasoning=part)
+                yield MagicMock(choices=[MagicMock(delta=delta)])
+
+        client.client.chat.completions.create = AsyncMock(return_value=fake_stream())
+
+        async def collect():
+            return [c async for c in client.generate_stream(
+                system_prompt="",
+                context=[{"role": "user", "content": "Hi"}],
+                temperature=0.0,
+                max_tokens=50,
+            )]
+
+        self.assertEqual(asyncio.run(collect()), ["A S", "QL"])
+
     # ------------------------------------------------------------------
     # generate – error handling
     # ------------------------------------------------------------------
