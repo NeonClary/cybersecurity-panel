@@ -39,6 +39,11 @@ ANTI_ECHO_CONTRACT = (
     "Answer from YOUR role only. Do not write a generic training syllabus, course outline, "
     "or purpose/scope/steps plan unless that is genuinely your specialty.\n"
     "Do not copy a shared opener. Start Thought with what YOU notice from your domain.\n"
+    "Vary your wording like a person would: never start with the same words as your earlier "
+    "replies in this conversation, and in a follow-up respond to what they just said instead of "
+    "restating your lens.\n"
+    "Thought talks TO the person: its first words are never 'The user', 'The person', 'This "
+    "user', or 'I', and never describe what they are asking; jump straight to your insight.\n"
     "If the ask is fiction, a novel, worldbuilding, or a creative project, still apply YOUR "
     "professional lens (coaching vs threat model vs architecture vs IR vs compliance vs career "
     "mechanics) — do not all invent the same training program.\n"
@@ -53,50 +58,49 @@ PERSONA_SLOT_HINTS = {
         "constraint; Next step is one grounding or clarifying action. Never dump a training curriculum."
     ),
     "threat_modeler": (
-        "Fill slots as threat modeler, speaking to 'you' (never 'the user'): Thought starts "
-        "'If I were the attacker,' and names the asset you would go after; What-to-do bullets each start with a STRIDE "
+        "Fill slots as threat modeler, speaking to 'you' (never 'the user'): Thought leads, in "
+        "fresh wording, with the asset an attacker would go after and why; What-to-do bullets each start with a STRIDE "
         "category or attacker move, then the counter that breaks it (three different abuse cases); "
         "Next step is one threat-model artifact. No generic hygiene lists, never a training-program outline."
     ),
     "security_architect": (
-        "Fill slots as architect, speaking to 'you' (never 'the user'): Thought starts 'The weak "
-        "boundary here is' or 'The missing boundary here is' and names a trust boundary in their "
-        "system (including an in-world fictional system); "
+        "Fill slots as architect, speaking to 'you' (never 'the user'): Thought leads, in fresh "
+        "wording, with the weak or missing trust boundary in their system (including an in-world fictional system); "
         "What-to-do bullets each start with a layer — Identity:, Device:, Network:, Data:, or "
         "Logging: — and give one design move (zones, identity, logging, sequencing); Next step is "
         "one design artifact. Never Purpose/Scope/Basics, incident steps, or a writing/training syllabus."
     ),
     "incident_responder": (
-        "Fill slots as IR, speaking to 'you' (never 'the user'): Thought starts 'Treat this as a "
-        "live incident until proven otherwise' only if something may already be compromised; for "
-        "career, audit, planning, or learning questions it starts 'Nothing is burning yet, so this "
-        "is readiness work'; What-to-do bullets start with Now:, Within the hour:, and Today: "
+        "Fill slots as IR, speaking to 'you' (never 'the user'): Thought leads, in fresh "
+        "wording, with a severity call: treat it as live only if something may already be "
+        "compromised, otherwise (always for career, audit, planning, or learning) frame it as "
+        "readiness work; What-to-do bullets start with Now:, Within the hour:, and Today: "
         "in that order, each a first-hour action with why it cannot wait; Next step is the single "
         "stop-the-bleeding or call-this-person move. No long-term programs, not a training syllabus."
     ),
     "security_mentor": (
-        "Fill slots as career mentor, speaking to 'you' (never 'the user'): Thought starts 'The "
-        "skill this builds is' and names the role that uses it; What-to-do bullets start with Week 1:, Week 2:, Week 3: and "
+        "Fill slots as career mentor, speaking to 'you' (never 'the user'): Thought leads, in fresh "
+        "wording, with the skill this builds and the role that uses it; What-to-do bullets start with Week 1:, Week 2:, Week 3: and "
         "give one lab, study, or portfolio exercise with hours; Next step is one study or portfolio "
         "action for today. Give the practice, not the security fix; do not default everyone to Security+."
     ),
     "compliance_officer": (
-        "Fill slots as compliance, speaking to 'you' (never 'the user'): Thought starts 'What you "
-        "will need to prove is' and names who will ask; What-to-do bullets start with the obligation or control ID, then "
+        "Fill slots as compliance, speaking to 'you' (never 'the user'): Thought leads, in fresh "
+        "wording, with what they will have to prove and who will ask; What-to-do bullets start with the obligation or control ID, then "
         "the record or evidence to keep; Next step is one control or evidence artifact with an "
         "owner. No containment steps or tool shopping, not a training syllabus."
     ),
     "smb_advisor": (
-        "Fill slots as SMB advisor, speaking to 'you' (never 'the user'): Thought starts 'For a "
-        "small team, the cheapest' and gives a money-and-time judgment; What-to-do is ranked cheap controls, every bullet ending with a cost/effort "
+        "Fill slots as SMB advisor, speaking to 'you' (never 'the user'): Thought leads, in fresh "
+        "wording, with a money-and-time judgment for a team their size; What-to-do is ranked cheap controls, every bullet ending with a cost/effort "
         "band in parentheses like '(free, 20 minutes)' or '(about $3 per user per month)'; if they "
         "think they were hacked, skip containment steps (Incident Response covers them) and say who "
         "to call, what it costs, and the cheap control that prevents a repeat; Next step is the highest-ROI action this week and who does it. "
         "Plain language, not a training syllabus."
     ),
     "ai_security_strategist": (
-        "Fill slots as AI strategist, speaking to 'you' (never 'the user'): Thought starts 'The AI "
-        "angle here is'; What-to-do bullets start with Secure:, Defend:, Thwart: in that order, "
+        "Fill slots as AI strategist, speaking to 'you' (never 'the user'): Thought leads, in fresh "
+        "wording, with where AI changes the risk or the defense; What-to-do bullets start with Secure:, Defend:, Thwart: in that order, "
         "in business language; Next step is one decision a leader can make. No generic hygiene "
         "(MFA, backups, patching), not a training syllabus."
     ),
@@ -348,6 +352,57 @@ def _first_n_sentences(text: str, n: int, max_words: int) -> str:
     return " ".join(chosen) if chosen else parts[0]
 
 
+_USER_REF = r"(?:the|this) (?:user|person)"
+_POSSESSIVE = r"[’']s"
+_RESTATEMENT = re.compile(
+    rf"^{_USER_REF}(?:{_POSSESSIVE}| is| has| wants| needs| asks| likely| may| seems)\b.*?"
+    r"\b(?:asking|asked|asks|question|wants|looking for|seeking|requesting|preparing|reporting|"
+    r"concern(?:ed)?|guidance|help)\b",
+    re.IGNORECASE,
+)
+_SELF_NARRATION = re.compile(
+    r"^(?:my (?:role|job|task|goal) (?:is|as)|as (?:a|an|the|your) [^.,]{0,50}?,? i\b|"
+    r"(?:first,? )?i (?:need|should|must|will|want) to|(?:first,? )?i[’']ll|"
+    r"they (?:are asking|have asked|asked))\b",
+    re.IGNORECASE,
+)
+_USER_VERB_FIXES = {"is": "are", "was": "were", "has": "have", "does": "do"}
+
+
+def _to_second_person(sentence: str) -> str:
+    if not re.search(rf"\b{_USER_REF}\b", sentence, re.IGNORECASE):
+        return sentence
+
+    def verb(m: re.Match) -> str:
+        adverb = m.group(1) or ""
+        word = m.group(2)
+        low = word.lower()
+        if low in _USER_VERB_FIXES:
+            word = _USER_VERB_FIXES[low]
+        elif low.endswith("s") and not low.endswith("ss") and len(low) > 3:
+            word = word[:-1]
+        return f"you {adverb}{word}"
+
+    s = re.sub(rf"\b{_USER_REF}{_POSSESSIVE}\b", "your", sentence, flags=re.IGNORECASE)
+    s = re.sub(rf"\b{_USER_REF} ((?:likely|probably|also|still|only|just|already|really) )?([a-z]+)\b", verb, s, flags=re.IGNORECASE)
+    s = re.sub(rf"\b{_USER_REF}\b", "you", s, flags=re.IGNORECASE)
+    for old, new in (("they're", "you're"), ("they are", "you are"), ("they have", "you have"),
+                     ("their", "your"), ("they", "you"), ("them", "you")):
+        s = re.sub(rf"\b{old}\b", new, s, flags=re.IGNORECASE)
+    return s[:1].upper() + s[1:]
+
+
+def _address_person(text: str) -> str:
+    """Turn third-person narration about 'the user' into direct address."""
+    parts = [p.strip() for p in re.split(r"(?<=[\.!?])\s+", (text or "").strip()) if p.strip()]
+    if not parts:
+        return text
+    kept = [p for p in parts if not (_RESTATEMENT.match(p) or _SELF_NARRATION.match(p))]
+    if not kept:
+        kept = parts
+    return " ".join(_to_second_person(p) for p in kept)
+
+
 def _looks_incomplete(s: str) -> bool:
     t = (s or "").strip()
     if not t:
@@ -540,6 +595,7 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
 
     sections = _extract_heading_blocks(lines)
     thought_text, thought_actions = _split_thought_and_actions(sections["Thought"])
+    thought_text = _address_person(thought_text)
     bullets = [_strip_md_noise(b) for b in _extract_bullets(sections["What to do"])]
     bullets = [_strip_md_noise(b) for b in (thought_actions + bullets)]
     next_body = " ".join([_strip_md_noise(l) for l in sections["Next step"] if l.strip()])
@@ -562,7 +618,7 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
         # Build compact output from scratch using best-effort extraction
         raw_plain = " ".join([l for l in lines if not l.strip().startswith("#")]).strip()
         if not thought_text:
-            thought_text = _first_n_sentences(raw_plain, 2, sentence_words) if raw_plain else ""
+            thought_text = _address_person(_first_n_sentences(raw_plain, 2, sentence_words)) if raw_plain else ""
         if len(bullets) < 3:
             extra = [_strip_md_noise(b) for b in _extract_bullets(lines)]
             for b in extra:

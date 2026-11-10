@@ -2,7 +2,64 @@
 
 import unittest
 
-from app.models.persona import _ensure_compact_shape, _distinct_next_step
+from app.models.persona import _address_person, _ensure_compact_shape, _distinct_next_step
+
+
+class TestAddressPerson(unittest.TestCase):
+    def test_drops_restatement_when_insight_follows(self):
+        text = (
+            "The user is asking for practical help securing their small business. "
+            "Email is where most small-business breaches start."
+        )
+        self.assertEqual(_address_person(text), "Email is where most small-business breaches start.")
+
+    def test_keeps_lone_sentence_but_addresses_person(self):
+        out = _address_person("The user has limited time, about an hour, to fix their accounts.")
+        self.assertEqual(out, "You have limited time, about an hour, to fix your accounts.")
+
+    def test_rewrites_possessive_and_verbs(self):
+        out = _address_person(
+            "Email is the soft spot. The user's exposure is highest where the user likely needs MFA."
+        )
+        self.assertEqual(out, "Email is the soft spot. Your exposure is highest where you likely need MFA.")
+
+    def test_handles_curly_apostrophe(self):
+        out = _address_person("The user’s inbox is the likeliest way in.")
+        self.assertEqual(out, "Your inbox is the likeliest way in.")
+
+    def test_drops_self_narration_when_insight_follows(self):
+        text = "My role is to help them understand obligations. Your insurer must hear within 72 hours."
+        self.assertEqual(_address_person(text), "Your insurer must hear within 72 hours.")
+
+    def test_drops_role_framing_openers(self):
+        for meta in (
+            "My role as a compliance advisor means I map duties.",
+            "As a security architect, I need to focus on boundaries.",
+            "First I'll identify the key audit areas.",
+        ):
+            self.assertEqual(_address_person(f"{meta} Payroll is the prize."), "Payroll is the prize.")
+
+    def test_adverb_keeps_verb_agreement(self):
+        self.assertEqual(_address_person("The user only has an hour."), "You only have an hour.")
+
+    def test_keeps_attacker_they_sentences(self):
+        text = "They want your payroll login. Payroll is the prize."
+        self.assertEqual(_address_person(text), text)
+
+    def test_leaves_direct_address_alone(self):
+        text = "An attacker would want your credentials. They would start with email."
+        self.assertEqual(_address_person(text), text)
+
+    def test_thought_section_is_rewritten_in_compact_shape(self):
+        raw = (
+            "### Thought\nThe user wants to grow their cybersecurity career. "
+            "Blue-team roles hire fastest right now.\n\n"
+            "### What to do\n- Week 1: Build a log lab (3 hours).\n- Week 2: Write it up (2 hours).\n"
+            "- Week 3: Share it (1 hour).\n\n### Next step\nInstall Sysmon tonight.\n"
+        )
+        out = _ensure_compact_shape(raw, "medium")
+        self.assertNotIn("The user", out)
+        self.assertIn("Blue-team roles hire fastest right now.", out)
 
 
 class TestEnsureCompactShape(unittest.TestCase):
