@@ -1,7 +1,15 @@
 /** Bound in-memory + sessionStorage cache of prefetch NDJSON chat streams. */
 
-const STORE_KEY = 'csa.starterPrefetch.v1';
+const STORE_KEY = 'csa.starterPrefetch.v2';
 export const MAX_PREFETCH_PROMPTS = 8;
+export const PREFETCH_TTL_MS = 6 * 60 * 60 * 1000;
+const FAILED_STREAM = /"type"\s*:\s*"error"|"context_quality"\s*:\s*"error"|technical difficulties|ran into a technical issue|advisor is unavailable/i;
+
+const isFresh = (entry) => Boolean(entry?.lines?.length) && Date.now() - (entry.ts || 0) < PREFETCH_TTL_MS;
+
+export function isFailedStream(lines) {
+  return (lines || []).some((line) => FAILED_STREAM.test(String(line)));
+}
 
 const memory = new Map();
 
@@ -41,9 +49,9 @@ export function getPrefetchedStream(userKey, prompt) {
   const p = normalizePrompt(prompt);
   if (!p) return null;
   const mem = memory.get(`${userKey}::${p}`);
-  if (mem?.lines?.length) return mem;
+  if (isFresh(mem)) return mem;
   const stored = readStore(userKey)[p];
-  if (stored?.lines?.length) {
+  if (isFresh(stored)) {
     touchMemory(userKey, p, stored);
     return stored;
   }
@@ -52,7 +60,7 @@ export function getPrefetchedStream(userKey, prompt) {
 
 export function putPrefetchedStream(userKey, prompt, lines) {
   const p = normalizePrompt(prompt);
-  if (!p || !Array.isArray(lines) || lines.length === 0) return;
+  if (!p || !Array.isArray(lines) || lines.length === 0 || isFailedStream(lines)) return;
   const entry = { lines, ts: Date.now() };
   touchMemory(userKey, p, entry);
   const stored = readStore(userKey);

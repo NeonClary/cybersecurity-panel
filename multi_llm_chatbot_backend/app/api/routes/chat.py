@@ -4,6 +4,7 @@ import logging
 import re
 import time
 import traceback
+import uuid
 from typing import Any, Dict, List, Literal, Optional
 
 from bson import ObjectId
@@ -113,7 +114,8 @@ class ChatMessage(BaseModel):
 
 
 def prefetch_session_id(user_id: Any) -> str:
-    return f"prefetch_{user_id}"
+    """One throwaway session per prefetch so overlapping prefetches never share history."""
+    return f"prefetch_{user_id}_{uuid.uuid4().hex[:12]}"
 
 
 def _orchestrator_llm():
@@ -177,6 +179,23 @@ class ChatStreamLine(BaseModel):
         return json.dumps(self.model_dump(mode="json"), ensure_ascii=False) + "\n"
 
 
+async def _chat_session_with_history(request: Request, chat_session_id: str, user_id: Any) -> str:
+    """Return the in-memory session id for a saved chat, loading its history if memory has none."""
+    sid = f"chat_{chat_session_id}"
+    existing = session_manager.sessions.get(sid)
+    needs_history = existing is None or not any(
+        (m.get("role") == "user" and str(m.get("content") or "").strip())
+        for m in (getattr(existing, "messages", None) or [])
+    )
+    if needs_history:
+        sid = await get_or_create_session_for_request_async(
+            request,
+            chat_session_id=chat_session_id,
+            user_id=str(user_id),
+        )
+    return sid
+
+
 @router.post("/chat-stream")
 async def chat_stream(
     message: ChatMessage,
@@ -192,26 +211,17 @@ async def chat_stream(
     """
 
     async def _event_generator():
+        prefetch = bool(message.prefetch)
+        sid = None
         try:
-            prefetch = bool(message.prefetch)
             # Load or create the in-memory session
             if prefetch:
                 sid = prefetch_session_id(current_user.id)
                 session = session_manager.get_session(sid)
-                session.clear_messages()
             elif message.chat_session_id:
-                sid = f"chat_{message.chat_session_id}"
-                existing = session_manager.sessions.get(sid)
-                needs_history = existing is None or not any(
-                    (m.get("role") == "user" and str(m.get("content") or "").strip())
-                    for m in (getattr(existing, "messages", None) or [])
+                sid = await _chat_session_with_history(
+                    request, message.chat_session_id, current_user.id
                 )
-                if needs_history:
-                    sid = await get_or_create_session_for_request_async(
-                        request,
-                        chat_session_id=message.chat_session_id,
-                        user_id=str(current_user.id),
-                    )
                 session = session_manager.get_session(sid)
             else:
                 sid = await get_or_create_session_for_request_async(request)
@@ -423,6 +433,9 @@ async def chat_stream(
                 type="error",
                 data={"detail": str(exc)},
             ).to_ndjson()
+        finally:
+            if prefetch and sid:
+                session_manager.delete_session(sid)
 
     return StreamingResponse(
         _event_generator(),
@@ -688,7 +701,11 @@ async def chat_with_specific_advisor(persona_id: str, input: UserInput, request:
         }
 
 @router.post("/reply-to-advisor")
-async def reply_to_advisor(reply: ReplyToAdvisor, request: Request):
+async def reply_to_advisor(
+    reply: ReplyToAdvisor,
+    request: Request,
+    current_user: User = Depends(get_current_active_user),
+):
     """Reply to a specific advisor with proper context - UPDATED"""
     try:
         if reply.advisor_id not in chat_orchestrator.personas:
@@ -696,7 +713,9 @@ async def reply_to_advisor(reply: ReplyToAdvisor, request: Request):
 
         # Handle session management for existing chats
         if reply.chat_session_id:
-            session_id = f"chat_{reply.chat_session_id}"
+            session_id = await _chat_session_with_history(
+                request, reply.chat_session_id, current_user.id
+            )
         else:
             session_id = await get_or_create_session_for_request_async(request)
         

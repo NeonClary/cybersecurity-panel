@@ -129,8 +129,9 @@ const ChatPage = ({
   const prefetchQueueRef = useRef([]);
   const prefetchBusyRef = useRef(false);
   const prefetchAbortRef = useRef(null);
-  const prefetchUserKey = user?.id || user?._id || user?.email || (user?.is_guest ? 'guest' : 'user');
-  const pathUserKey = prefetchUserKey;
+  const userKey = user?.id || user?._id || user?.email || (user?.is_guest ? 'guest' : 'user');
+  const prefetchUserKey = `${userKey}@${config?.content_version || 'unversioned'}`;
+  const pathUserKey = userKey;
 
   const pathSignals = useMemo(() => {
     const visits = loadVisits(pathUserKey);

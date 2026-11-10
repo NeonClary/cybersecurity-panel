@@ -234,17 +234,50 @@ async def _close() -> None:
 # Filter matching (only the Mongo operators the routers actually use)
 # ---------------------------------------------------------------------------
 
+_MISSING = object()
+_COMPARE = {
+    "$gt": lambda a, b: a > b,
+    "$gte": lambda a, b: a >= b,
+    "$lt": lambda a, b: a < b,
+    "$lte": lambda a, b: a <= b,
+}
+
+
 def _match_value(actual: Any, want: Any) -> bool:
-    if isinstance(want, dict) and len(want) == 1:
-        op, arg = next(iter(want.items()))
-        if op == "$in":
-            return actual in arg
-    return actual == want
+    if isinstance(want, dict) and want and all(str(k).startswith("$") for k in want):
+        present = actual is not _MISSING
+        value = actual if present else None
+        for op, arg in want.items():
+            if op == "$in":
+                ok = value in arg
+            elif op == "$nin":
+                ok = value not in arg
+            elif op == "$ne":
+                ok = value != arg
+            elif op == "$exists":
+                ok = present == bool(arg)
+            elif op in _COMPARE:
+                try:
+                    ok = value is not None and _COMPARE[op](value, arg)
+                except TypeError:
+                    ok = False
+            else:
+                raise ValueError(f"Unsupported query operator: {op}")
+            if not ok:
+                return False
+        return True
+    return (None if actual is _MISSING else actual) == want
 
 
 def _matches(doc: Mapping, query: Mapping) -> bool:
     for k, v in query.items():
-        if not _match_value(doc.get(k), v):
+        if k == "$or":
+            if not any(_matches(doc, sub) for sub in v):
+                return False
+        elif k == "$and":
+            if not all(_matches(doc, sub) for sub in v):
+                return False
+        elif not _match_value(doc.get(k, _MISSING), v):
             return False
     return True
 

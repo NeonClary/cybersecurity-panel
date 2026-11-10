@@ -10,6 +10,8 @@ working.
 import os
 import logging
 import colorsys
+import hashlib
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from colorhash import ColorHash
@@ -394,10 +396,21 @@ class AppSettings(BaseModel):
     # Convenience helpers
     # ------------------------------------------------------------------
 
+    def content_version(self) -> str:
+        """Short hash of persona config and response-shaping code; changes whenever answers would."""
+        digest = hashlib.sha256(
+            json.dumps(self.personas.dict(), sort_keys=True, default=str).encode("utf-8")
+        )
+        shaping_code = Path(__file__).resolve().parent / "models" / "persona.py"
+        if shaping_code.is_file():
+            digest.update(shaping_code.read_bytes())
+        return digest.hexdigest()[:12]
+
     def get_frontend_config(self) -> dict:
         """Return the subset of configuration safe to expose to the frontend
         via ``GET /api/config``.  Secrets are excluded."""
         return {
+            "content_version": self.content_version(),
             "app": self.app.dict(),
             "homepage": self.homepage.dict(),
             "login": self.login.dict(),
