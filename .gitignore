@@ -25,3 +25,7 @@ phd-advisor-frontend/firebase.json
 # Python virtual environments
 **/venv/
 .venv/
+
+# Cursor debug-session logs and local UI verification output
+.cursor/
+.dev-tools/verify-out/
