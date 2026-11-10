@@ -42,6 +42,23 @@ class TestAddressPerson(unittest.TestCase):
     def test_adverb_keeps_verb_agreement(self):
         self.assertEqual(_address_person("The user only has an hour."), "You only have an hour.")
 
+    def test_multiple_adverbs_keep_verb_agreement(self):
+        self.assertEqual(_address_person("The user likely only has an hour."), "You likely only have an hour.")
+
+    def test_cuts_inline_bullet_from_thought(self):
+        out = _address_person("Time is short, so triage first. - Check your devices for odd processes.")
+        self.assertEqual(out, "Time is short, so triage first.")
+
+    def test_strips_echoed_speaker_tag(self):
+        raw = (
+            "### Thought\n[Incident_Responder Advisor]: ### Thought Contain the laptop first.\n\n"
+            "### What to do\n- Unplug it.\n- Reset email.\n- Call your bank.\n\n### Next step\nUnplug it now.\n"
+        )
+        out = _ensure_compact_shape(raw, "medium")
+        self.assertNotIn("Advisor]", out)
+        self.assertEqual(out.count("### Thought"), 1)
+        self.assertIn("Contain the laptop first.", out)
+
     def test_keeps_attacker_they_sentences(self):
         text = "They want your payroll login. Payroll is the prize."
         self.assertEqual(_address_person(text), text)

@@ -166,6 +166,20 @@ def panel_lens_reminder(name: str = "", role: str = "", persona_id: str = "") ->
     )
 
 
+FOLLOW_UP_FORMAT_HINT = (
+    "FOLLOW-UP TURN: you already answered earlier in this conversation. Keep the three section "
+    "headings, but drop your first-answer bullet labels (timed steps, STRIDE names, layer names, "
+    "control IDs, cost bands, week numbers, Secure/Defend/Thwart) unless one genuinely helps. "
+    "Write plain action bullets that answer their latest message directly, still from your "
+    "specialty, and do not repeat advice you already gave."
+)
+FOLLOW_UP_USER_NOTE = (
+    "\n\n(Format for this reply: keep the three sections and three '- ' bullets under What to do, "
+    "each a new action with no label or prefix before it; do not repeat the Thought or your "
+    "earlier advice.)"
+)
+
+
 def compose_response_system_prompt(
     system_prompt: str,
     response_length: str = "medium",
@@ -173,6 +187,7 @@ def compose_response_system_prompt(
     name: str = "",
     role: str = "",
     persona_id: str = "",
+    follow_up: bool = False,
 ) -> str:
     """Assemble the generation-time system prompt.
 
@@ -192,6 +207,8 @@ def compose_response_system_prompt(
     slot_hint = PERSONA_SLOT_HINTS.get(persona_id, "")
     if slot_hint:
         identity_lines.append(slot_hint)
+    if follow_up:
+        identity_lines.append(FOLLOW_UP_FORMAT_HINT)
     identity_block = "\n".join(identity_lines)
     parts = [
         (system_prompt or "").strip(),
@@ -366,6 +383,8 @@ _SELF_NARRATION = re.compile(
     r"they (?:are asking|have asked|asked))\b",
     re.IGNORECASE,
 )
+# Context history tags other advisors' turns as "[Name Advisor]: ..."; models sometimes echo it.
+_SPEAKER_TAG = re.compile(r"\[[A-Za-z][\w &-]{0,60} Advisor\]:\s*(?:#{1,6}\s*Thought\b[:\s]*)?")
 _USER_VERB_FIXES = {"is": "are", "was": "were", "has": "have", "does": "do"}
 
 
@@ -384,7 +403,7 @@ def _to_second_person(sentence: str) -> str:
         return f"you {adverb}{word}"
 
     s = re.sub(rf"\b{_USER_REF}{_POSSESSIVE}\b", "your", sentence, flags=re.IGNORECASE)
-    s = re.sub(rf"\b{_USER_REF} ((?:likely|probably|also|still|only|just|already|really) )?([a-z]+)\b", verb, s, flags=re.IGNORECASE)
+    s = re.sub(rf"\b{_USER_REF} ((?:(?:likely|probably|also|still|only|just|already|really) )*)([a-z]+)\b", verb, s, flags=re.IGNORECASE)
     s = re.sub(rf"\b{_USER_REF}\b", "you", s, flags=re.IGNORECASE)
     for old, new in (("they're", "you're"), ("they are", "you are"), ("they have", "you have"),
                      ("their", "your"), ("they", "you"), ("them", "you")):
@@ -394,7 +413,8 @@ def _to_second_person(sentence: str) -> str:
 
 def _address_person(text: str) -> str:
     """Turn third-person narration about 'the user' into direct address."""
-    parts = [p.strip() for p in re.split(r"(?<=[\.!?])\s+", (text or "").strip()) if p.strip()]
+    text = re.split(r"(?<=[\.!?])\s+-\s+(?=[A-Z])", (text or "").strip(), maxsplit=1)[0]
+    parts = [p.strip() for p in re.split(r"(?<=[\.!?])\s+", text) if p.strip()]
     if not parts:
         return text
     kept = [p for p in parts if not (_RESTATEMENT.match(p) or _SELF_NARRATION.match(p))]
@@ -586,6 +606,7 @@ def _ensure_compact_shape(text: str, response_length: str) -> str:
     sentence_words = 40 if response_length == "short" else 60 if response_length == "medium" else 80
 
     t = _cut_at_sentinel(_rstrip_lines(_normalize_eols(text)))
+    t = _SPEAKER_TAG.sub("", t)
     lines = t.split("\n")
     lines = _convert_bold_headers_to_atx(lines)
     lines = _convert_unicode_bullets(lines)
@@ -710,12 +731,29 @@ class Persona:
         self.role = role
         self.summary = summary
 
+    def _has_answered(self, context: List[Dict]) -> bool:
+        """Session history stores each advisor's replies under its persona id as the role."""
+        return any(isinstance(m, dict) and m.get("role") == self.id for m in context or [])
+
+    def _prepare_context(self, context: List[Dict]) -> tuple:
+        """Return (context, follow_up); on follow-ups the latest user turn carries the format note."""
+        if not self._has_answered(context):
+            return context, False
+        prepared = list(context)
+        for i in range(len(prepared) - 1, -1, -1):
+            msg = prepared[i]
+            if isinstance(msg, dict) and msg.get("role") == "user":
+                prepared[i] = {**msg, "content": f"{msg.get('content', '')}{FOLLOW_UP_USER_NOTE}"}
+                break
+        return prepared, True
+
     async def respond(self, context: List[Dict], response_length: str = "medium") -> str:
         """Generate a compact, well-formed Markdown response suitable for the UI.
         Returns the compact Markdown string (backward compatible with previous callers).
         """
         max_tokens = MAX_TOKENS_MAP.get(response_length, 600)
         temp_scaled = round(self.temperature / 10, 2)
+        context, follow_up = self._prepare_context(context)
 
         full_prompt = compose_response_system_prompt(
             self.system_prompt,
@@ -723,6 +761,7 @@ class Persona:
             name=self.name,
             role=self.role,
             persona_id=self.id,
+            follow_up=follow_up,
         )
 
         raw_text = await self.llm.generate(
@@ -741,6 +780,7 @@ class Persona:
         """Yield token/text chunks, then stop. Caller applies compact shape on the join."""
         max_tokens = MAX_TOKENS_MAP.get(response_length, 600)
         temp_scaled = round(self.temperature / 10, 2)
+        context, follow_up = self._prepare_context(context)
 
         full_prompt = compose_response_system_prompt(
             self.system_prompt,
@@ -748,6 +788,7 @@ class Persona:
             name=self.name,
             role=self.role,
             persona_id=self.id,
+            follow_up=follow_up,
         )
 
         async for chunk in self.llm.generate_stream(

@@ -150,6 +150,45 @@ class TestPersonaRespondUsesComposedPrompt(unittest.TestCase):
         )
 
 
+class TestFollowUpRelaxesFormat(unittest.TestCase):
+    def _call(self, context):
+        llm = MagicMock()
+        llm.generate = AsyncMock(return_value="### Thought\nOk.\n\n### What to do\n- a\n- b\n- c\n\n### Next step\nGo.")
+        persona = Persona(id="incident_responder", name="Incident Response Lead",
+                          system_prompt="You are IR.", llm=llm, role="IR")
+        asyncio.run(persona.respond(context))
+        return llm.generate.call_args.kwargs
+
+    def _prompt_for(self, context):
+        return self._call(context)["system_prompt"]
+
+    def test_follow_up_note_goes_on_latest_user_turn_only(self):
+        ctx = [{"role": "user", "content": "I was hacked"},
+               {"role": "incident_responder", "content": "Live incident."},
+               {"role": "user", "content": "What if I only have an hour?"}]
+        sent = self._call(ctx)["context"]
+        self.assertIn("no label or prefix", sent[-1]["content"])
+        self.assertNotIn("no label or prefix", sent[0]["content"])
+        self.assertEqual(ctx[-1]["content"], "What if I only have an hour?")
+
+    def test_first_answer_context_is_unchanged(self):
+        ctx = [{"role": "user", "content": "I was hacked"}]
+        self.assertEqual(self._call(ctx)["context"], ctx)
+
+    def test_first_answer_has_no_follow_up_hint(self):
+        ctx = [{"role": "user", "content": "I was hacked"},
+               {"role": "threat_modeler", "content": "Another advisor replied."}]
+        self.assertNotIn("FOLLOW-UP TURN", self._prompt_for(ctx))
+
+    def test_own_earlier_reply_triggers_follow_up_hint(self):
+        ctx = [{"role": "user", "content": "I was hacked"},
+               {"role": "incident_responder", "content": "### Thought\nLive incident."},
+               {"role": "user", "content": "What if I only have an hour?"}]
+        prompt = self._prompt_for(ctx)
+        self.assertIn("FOLLOW-UP TURN", prompt)
+        self.assertGreater(prompt.find("FOLLOW-UP TURN"), prompt.find("Fill slots as IR"))
+
+
 class TestPersonaYamlDistinctness(unittest.TestCase):
     def test_persona_files_exist(self):
         self.assertTrue(PERSONAS_DIR.is_dir(), PERSONAS_DIR)
