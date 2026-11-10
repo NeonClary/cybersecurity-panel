@@ -59,6 +59,10 @@ class TestAddressPerson(unittest.TestCase):
         self.assertEqual(out.count("### Thought"), 1)
         self.assertIn("Contain the laptop first.", out)
 
+    def test_drops_they_want_a_list_narration(self):
+        text = "Time is short. They likely want a concise, actionable list that fits their time."
+        self.assertEqual(_address_person(text), "Time is short.")
+
     def test_keeps_attacker_they_sentences(self):
         text = "They want your payroll login. Payroll is the prize."
         self.assertEqual(_address_person(text), text)

@@ -380,7 +380,9 @@ _RESTATEMENT = re.compile(
 _SELF_NARRATION = re.compile(
     r"^(?:my (?:role|job|task|goal) (?:is|as)|as (?:a|an|the|your) [^.,]{0,50}?,? i\b|"
     r"(?:first,? )?i (?:need|should|must|will|want) to|(?:first,? )?i[’']ll|"
-    r"they (?:are asking|have asked|asked))\b",
+    r"they (?:are asking|have asked|asked))\b"
+    r"|^they (?:likely |probably |just )?(?:want|need|are looking for)\b.*\b(?:list|plan|guidance|"
+    r"answer|advice|response|overview|summary)\b",
     re.IGNORECASE,
 )
 # Context history tags other advisors' turns as "[Name Advisor]: ..."; models sometimes echo it.
