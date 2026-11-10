@@ -941,6 +941,7 @@ Use this context to inform your response, and cite specific documents when refer
         lens = panel_lens_reminder(
             getattr(persona, "name", ""),
             getattr(persona, "role", ""),
+            getattr(persona, "id", ""),
         )
         if lens:
             system_message += f"\n\n{lens}"

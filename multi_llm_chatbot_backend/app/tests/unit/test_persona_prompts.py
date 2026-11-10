@@ -110,6 +110,14 @@ class TestPanelLensReminder(unittest.TestCase):
         self.assertIn("Threat Modeling Analyst", a)
         self.assertIn("Security Architect", b)
 
+    def test_persona_id_adds_signature_lens(self):
+        smb = panel_lens_reminder("Small Business Security Advisor", "MVS", "smb_advisor")
+        plain = panel_lens_reminder("Small Business Security Advisor", "MVS")
+        self.assertIn("per dollar", smb)
+        self.assertNotIn("per dollar", plain)
+        jerry = panel_lens_reminder("Jerry Huaute", "Lead", "jerry_huaute")
+        self.assertEqual(jerry, panel_lens_reminder("Jerry Huaute", "Lead"))
+
 
 class TestPersonaRespondUsesComposedPrompt(unittest.TestCase):
     def test_respond_passes_anti_echo_and_slot_hint(self):
